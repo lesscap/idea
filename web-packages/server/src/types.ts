@@ -1,7 +1,11 @@
 import type { PrismaClient } from '@idea/core'
 import type { Hono } from 'hono'
 import type { Config } from './config.ts'
+import type { AppService } from './services/app.ts'
+import type { AuthService } from './services/auth.ts'
 import type { HealthService } from './services/health.ts'
+import type { UserService } from './services/user.ts'
+import type { WorkspaceService } from './services/workspace.ts'
 
 // Everything a service factory can reach: the config, the resources, and its
 // sibling services. Assembled once at boot by createContext.
@@ -9,6 +13,10 @@ export type ServiceApplication = {
   readonly config: Config
   readonly prisma: PrismaClient
   readonly health: HealthService
+  readonly user: UserService
+  readonly auth: AuthService
+  readonly workspace: WorkspaceService
+  readonly app: AppService
 }
 
 // A service is `(app) => api`: a factory closing over the application, handing
@@ -17,7 +25,7 @@ export type ServiceApplication = {
 export type Service<T> = (app: ServiceApplication) => T
 
 // What a controller receives: a Hono instance with the services merged onto it,
-// so `app.get(...)` and `app.health.check()` read off the same object. Each
+// so `app.get(...)` and `app.user.currentUser()` read off the same object. Each
 // controller gets its own sub-instance, so middleware it registers stays scoped
 // to that controller's prefix.
 export type WebApplication = Hono & ServiceApplication

@@ -1,0 +1,78 @@
+import { normalizePhone, normalizeUsername } from '@idea/shared'
+import { z } from 'zod'
+
+// Request schemas for the web surface. Normalization happens here, at the edge,
+// so everything downstream works with canonical values — a username that
+// reached a service still mixed-case would defeat the unique constraint.
+
+// Zod refinements that run the shared normalizers, so the browser and the server
+// enforce one set of rules rather than two that drift.
+const username = z.string().transform((raw, ctx) => {
+  const result = normalizeUsername(raw)
+  if (!result.ok) {
+    ctx.addIssue({ code: 'custom', message: `invalid username: ${result.error}` })
+    return z.NEVER
+  }
+  return result.value
+})
+
+const phone = z.string().transform((raw, ctx) => {
+  const result = normalizePhone(raw)
+  if (!result.ok) {
+    ctx.addIssue({ code: 'custom', message: `invalid phone: ${result.error}` })
+    return z.NEVER
+  }
+  return result.value
+})
+
+// Long enough to be worth hashing, capped because scrypt cost scales with input
+// and an unbounded password field is a cheap way to burn server CPU.
+const password = z.string().min(8).max(200)
+
+export const LoginBody = z.object({
+  // Not normalized: an unknown username must fail identically to a wrong
+  // password, and rejecting malformed input here would leak the difference.
+  username: z.string().min(1).max(64),
+  password: z.string().min(1).max(200),
+})
+
+export const SelectWorkspaceBody = z.object({
+  workspaceId: z.coerce.number().int().positive(),
+})
+
+export const AcceptInviteBody = z.object({
+  username,
+  password,
+  name: z.string().trim().min(1).max(64),
+  phone: phone.nullish(),
+})
+
+export const CreateWorkspaceBody = z.object({
+  name: z.string().trim().min(1).max(64),
+})
+
+export const CreateInviteBody = z.object({
+  role: z.enum(['admin', 'member']).default('member'),
+})
+
+export const SetRoleBody = z.object({
+  role: z.enum(['admin', 'member']),
+})
+
+export const CreateAppBody = z.object({
+  name: z.string().trim().min(1).max(64),
+  description: z.string().trim().max(2000).nullish(),
+})
+
+export const UpdateAppBody = z
+  .object({
+    name: z.string().trim().min(1).max(64).optional(),
+    description: z.string().trim().max(2000).nullish(),
+    status: z.enum(['draft', 'active', 'archived']).optional(),
+  })
+  // An empty PATCH is a caller mistake, not a no-op worth pretending succeeded.
+  .refine(v => Object.keys(v).length > 0, { message: 'no fields to update' })
+
+export const IdParam = z.object({
+  id: z.coerce.number().int().positive(),
+})

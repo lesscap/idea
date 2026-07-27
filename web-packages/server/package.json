@@ -14,10 +14,13 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.4",
+    "@hono/session": "^0.2.1",
+    "@hono/zod-validator": "^0.9.0",
     "@idea/core": "workspace:*",
     "@idea/shared": "workspace:*",
     "dotenv": "^17.4.2",
-    "hono": "^4.12.32"
+    "hono": "^4.12.32",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

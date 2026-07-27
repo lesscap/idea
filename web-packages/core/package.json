@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "seed:admin": "tsx src/seed.ts"
   },
   "dependencies": {
     "@idea/shared": "workspace:*",

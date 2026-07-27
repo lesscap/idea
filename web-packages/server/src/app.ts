@@ -1,10 +1,12 @@
 import { Hono } from 'hono'
+import { sessionMiddleware } from './apps/web/middleware/session.ts'
+import { BASE, Routes } from './apps/web/routes.ts'
+import { registerHealth } from './health.ts'
 import { internal, notFound } from './http.ts'
-import { Routes } from './routes.ts'
 import type { Controller, ServiceApplication, WebApplication } from './types.ts'
 
 // Merge the services onto a fresh Hono instance so the controller sees one
-// object — `app.get(...)` next to `app.health.check()`. A sub-instance per
+// object — `app.get(...)` next to `app.workspace.roleOf()`. A sub-instance per
 // prefix is what keeps controller-registered middleware from leaking sideways.
 const mount = (
   root: Hono,
@@ -19,9 +21,19 @@ const mount = (
 
 export const createApp = (services: ServiceApplication): Hono => {
   const root = new Hono()
+
+  registerHealth(root, services)
+
+  // The session cookie is decoded for the whole web surface, including the
+  // public routes: logging in has to be able to *write* a session, and accepting
+  // an invitation has to be able to read one to tell "already has an account"
+  // from "brand new person".
+  const web = new Hono()
+  web.use('*', sessionMiddleware(services.config))
   for (const [prefix, controller] of Object.entries(Routes)) {
-    mount(root, prefix, controller, services)
+    mount(web, prefix, controller, services)
   }
+  root.route(BASE, web)
 
   // Without these two, the framework's own plain-text "404 Not Found" and
   // "Internal Server Error" escape as the only responses that are not the

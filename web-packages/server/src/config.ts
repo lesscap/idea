@@ -1,6 +1,7 @@
 export type Config = {
   readonly port: number
   readonly databaseUrl: string
+  readonly authSecret: string
   readonly isProduction: boolean
 }
 
@@ -26,6 +27,15 @@ export const loadConfig = (env: Env = process.env): Config => {
       env,
       'DATABASE_URL',
       'postgresql://idea:idea@localhost:5432/idea?schema=public',
+      isProduction,
+    ),
+    // Encrypts the session cookie. The dev fallback is a fixed, obviously-fake
+    // value so a fresh clone boots; in production a missing secret stops the
+    // process at startup rather than silently issuing forgeable sessions.
+    authSecret: required(
+      env,
+      'AUTH_SECRET',
+      '0000000000000000000000000000000000000000000000000000000000000000',
       isProduction,
     ),
     isProduction,

@@ -1,6 +1,7 @@
-// Persistence schema. Intentionally empty of models — the skeleton establishes
-// where the schema lives and proves the generate/migrate/connect chain works;
-// domain models arrive with the first real feature.
+// Identity and containers: who is acting, in which workspace, on which app.
+//
+// Table names are mapped explicitly to snake_case plural; column names stay
+// camelCase as written here.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,4 +9,144 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  admin
+  member
+
+  @@map("role")
+}
+
+enum AppStatus {
+  draft
+  active
+  archived
+
+  @@map("app_status")
+}
+
+// Identity only. Authorization lives in separate tables so this one does not
+// grow a new boolean column every time a permission is added.
+model User {
+  id           Int      @id @default(autoincrement())
+  // Login identifier, chosen by the invitee. Stored lowercase — otherwise
+  // "Zhang" and "zhang" are two accounts and the unique constraint stops being
+  // an impersonation defence.
+  username     String   @unique
+  // scrypt, per-user salt, parameters recorded inline. See src/crypto.ts.
+  passwordHash String
+  // Display name. Not unique — two people may both be 张三.
+  name         String
+  // Optional, E.164-normalised. Reserved for SMS password recovery, and
+  // unusable for that until a verification flow exists.
+  phone        String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspaces      UserWorkspace[]
+  platformAdmin   PlatformAdmin?
+  invitesSent     Invite[]        @relation("InvitedBy")
+  invitesAccepted Invite[]        @relation("AcceptedBy")
+  appsCreated     App[]
+
+  @@map("users")
+}
+
+// Platform-level authorization, deliberately its own table rather than a flag on
+// User: authorization keeps evolving and User should not accumulate a boolean
+// per capability. Presence of the row is the grant, which also gives a natural
+// "when", and makes revocation a delete rather than a silent field flip.
+//
+// Grants only the ability to CREATE workspaces. It grants no visibility — a
+// platform admin reads data through exactly the same membership filter as
+// everyone else.
+model PlatformAdmin {
+  userId    Int      @id
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("platform_admins")
+}
+
+// The tenant boundary. Every query for anything below it filters by membership.
+model Workspace {
+  id        Int      @id @default(autoincrement())
+  // Not globally unique: two different customers may both have a "设计部".
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users   UserWorkspace[]
+  apps    App[]
+  invites Invite[]
+
+  @@map("workspaces")
+}
+
+// Named structurally rather than as a domain concept: "Membership" is left
+// unclaimed for something that may later carry business meaning.
+//
+// The row's existence answers visibility; `role` answers only whether the user
+// may administer other members. Role never gates reading data.
+model UserWorkspace {
+  userId      Int
+  workspaceId Int
+  role        Role     @default(member)
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("user_workspaces")
+}
+
+// A piece of software being created. Requirements will hang off this later;
+// nothing is reserved for them here.
+model App {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  name        String
+  description String?
+  status      AppStatus @default(draft)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("apps")
+}
+
+// A bearer capability, not a letter addressed to someone: the admin generating
+// it does not know who will use it, so it carries no identity. Whoever holds the
+// link picks their own username on the way in.
+//
+// Single-use. `acceptedAt` set means spent; `acceptedById` records who spent it,
+// so "who let this person in" stays answerable afterwards.
+model Invite {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  role         Role      @default(member)
+  // SHA-256 of the token. The link itself is shown once, at creation, and never
+  // stored — a database leak yields no usable invitations.
+  tokenHash    String    @unique
+  invitedById  Int
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  acceptedById Int?
+  createdAt    DateTime  @default(now())
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy  User      @relation("InvitedBy",  fields: [invitedById],  references: [id])
+  acceptedBy User?     @relation("AcceptedBy", fields: [acceptedById], references: [id])
+
+  @@index([workspaceId])
+  @@map("invites")
 }

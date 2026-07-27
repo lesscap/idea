@@ -3,6 +3,15 @@
 // depending on @prisma/client directly, so the ORM stays swappable behind one
 // package boundary.
 
-export type { PrismaClient } from '@prisma/client'
+export type {
+  App,
+  Invite,
+  PlatformAdmin,
+  Prisma,
+  PrismaClient,
+  User,
+  Workspace,
+} from '@prisma/client'
+export { hashPassword, needsRehash, randomToken, sha256, verifyPassword } from './crypto.ts'
 export { createPrisma } from './db.ts'
 export { createScope, type Dispose, type Resource, type Scope } from './scope.ts'
