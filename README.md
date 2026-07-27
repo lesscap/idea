@@ -1,25 +1,39 @@
 # idea
 
-面向业务同学的软件创作平台。不懂技术的人把需求讲清楚，在 agent 引导下产出正确的需求，进而构建企业内使用的软件。
+A software-creation platform for business people. Someone who does not write code
+describes what they need, an agent helps them get the requirement right, and the
+result is software their company actually uses.
 
-当前状态：**骨架**。目录结构、工具链、运行链路已搭通并验证，尚无业务功能。
+Current state: **identity and containers are done.** Sign-in, invite-based
+onboarding, workspaces, and app CRUD all work. Requirement elicitation and the
+agent have not been started.
 
-## 起步
+## Getting started
 
 ```bash
-pnpm install                      # 装依赖，并自动跑 prisma generate
+pnpm install                      # installs, and runs prisma generate
 
-cp .env.example web-packages/core/.env      # prisma CLI 读它
-cp .env.example web-packages/server/.env    # server 运行时读它
-cp .env.example web-packages/worker/.env    # worker 读它
-# 三个 .env 里的 DATABASE_URL 换成真实开发库地址（不在仓库里，问团队要）
+cp .env.example web-packages/core/.env      # prisma CLI reads this
+cp .env.example web-packages/server/.env    # server runtime reads this
+cp .env.example web-packages/worker/.env    # worker reads this
+# Set DATABASE_URL to the real dev database (not in the repo — ask the team).
+# Generate the server's AUTH_SECRET:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
-pnpm dev                          # 并行起 server 与 web
+pnpm db:migrate                   # create the tables
+
+# Bootstrap the first user. Access is invite-only, and invites can only be sent
+# by an admin of an existing workspace — so without this there is no workspace
+# and nobody who can send the first invite.
+pnpm --filter @idea/core seed:admin \
+  --username admin01 --password 'your-password' --workspace 'Default'
+
+pnpm dev                          # server and web in parallel
 ```
 
-打开 http://localhost:5300 ，页面显示服务与数据库状态即为正常。
+Open http://localhost:5300 and sign in with the account you just created.
 
-单独启动：
+Running one package at a time:
 
 ```bash
 pnpm --filter @idea/server dev
@@ -27,98 +41,227 @@ pnpm --filter @idea/web    dev
 pnpm --filter @idea/worker dev
 ```
 
-常用命令：
+Common commands:
 
 ```bash
-pnpm typecheck        # 各包 tsc --noEmit
-pnpm test             # 各包 vitest
+pnpm typecheck        # tsc --noEmit in every package
+pnpm test             # vitest in every package
 pnpm lint             # biome lint
-pnpm check            # 格式化 + typecheck + test，提交前跑这个
-pnpm db:generate      # 重新生成 prisma client
-pnpm db:migrate       # 建 migration
+pnpm check            # format + typecheck + test; run before committing
+pnpm db:generate      # regenerate the prisma client
+pnpm db:migrate       # create a migration
 ```
 
-| 服务 | 端口 |
+| Service | Port |
 |---|---|
-| server（Hono API） | 3300 |
-| web（Vite dev） | 5300 |
+| server (Hono API) | 3300 |
+| web (Vite dev) | 5300 |
 
-前端通过 `/api` 前缀访问后端，Vite 代理时会把前缀去掉——后端路由挂在根上（`/health`，不是 `/api/health`）。生产环境由反向代理承担同样的角色。
+The backend namespaces its surface **by client type**: `/api/web/*` for browsers
+(session cookie), and later `/api/worker/*` for the worker daemon (bearer token).
+Their middleware stacks have nothing in common, and mounting them separately is
+what makes "which auth applies to this route" a structural fact rather than
+something to remember. The directory layout mirrors it: `server/src/apps/web/`.
 
-> **本地坑**：如果你的 shell 设了 `http_proxy` / `https_proxy`，curl 打 localhost 会被代理劫持成 502。验证时加 `--noproxy '*'`：
+`/health` has no prefix and stays at the root — it is for load balancers and
+deployment probes, not for any client.
+
+The Vite proxy passes `/api` through **unchanged** (the backend listens on
+`/api/web/*` itself). A reverse proxy plays the same role in production.
+
+> **Local gotcha**: if your shell sets `http_proxy` / `https_proxy`, curl to
+> localhost gets hijacked and returns 502. Add `--noproxy '*'`:
 > ```bash
 > curl -s --noproxy '*' http://localhost:3300/health
 > ```
 
-数据库默认用团队共享的远端开发库。想完全离线开发，仓库里有 `docker-compose.yml` 起本地 Postgres 17，把 `DATABASE_URL` 换成 `.env.example` 里的 localhost 那条即可。
+The database defaults to the shared remote dev instance. To work fully offline,
+`docker-compose.yml` starts a local Postgres 17 — point `DATABASE_URL` at the
+localhost value in `.env.example`.
 
-## 包结构
+## Packages
 
-按**运行目标**分组，不按层分组。
+Grouped by **runtime target**, not by layer.
 
 ```
-packages/shared/        @idea/shared   跨运行时契约：ApiResponse 信封、Id
-web-packages/core/      @idea/core     后端内核：Prisma schema/client、资源接线原语
+packages/shared/        @idea/shared   cross-runtime contracts: envelope, paging, domain types
+web-packages/core/      @idea/core     backend kernel: prisma schema/client, crypto, resource scope
 web-packages/server/    @idea/server   Hono API
-web-packages/worker/    @idea/worker   agent worker 常驻进程
-ui-packages/design/     @idea/design   纯 UI：design token + 基础组件
+web-packages/worker/    @idea/worker   agent worker daemon
+ui-packages/design/     @idea/design   pure UI: shadcn components + design tokens
 ui-packages/web/        @idea/web      React SPA
 ```
 
-依赖方向是单向的，靠约定维持（没有工具强制，但下面两条边是有意为之，改动前先读理由）：
+Dependencies run one way. Nothing enforces this, but the two marked edges are
+deliberate — read the reason before changing them.
 
 ```
 shared ← core ← server
-shared ← core ← (未来的 tasks / 定时任务)
-shared ← worker              ← 不依赖 core
-design ← web                 ← 只依赖 react
+shared ← core ← (future task runner)
+shared ← worker              ← does NOT depend on core
+design ← web                 ← depends on react only
 shared ← web
 ```
 
-**worker 不依赖 core，拿不到数据库凭据。** 这不是遗漏。worker 未来可能跑在机房外的机器上，把库凭据发出去是错的。它只通过 HTTP 跟 server 对话。要加数据访问时，先问为什么不能走 API。
+**The worker does not depend on core and holds no database credentials.** Not an
+oversight: it may run on a machine outside the network perimeter, and shipping
+database credentials there would be wrong. It talks to the server over HTTP only.
+Before adding data access, ask why it cannot go through the API.
 
-**design 不依赖 shared，不认识任何领域类型。** 组件层一旦沾上传输契约，后端契约一变就震到组件层，而且这个包立刻失去复用可能。需要结构化数据的组件，由调用方把数据拆成基础 props 传进来。
+**The design package does not depend on shared and knows no domain types.** Once
+a component layer touches transport contracts, every backend change ripples into
+it and the package stops being reusable anywhere else. Components that need
+structured data take primitive props from the caller.
 
-## 接口规范
+## Frontend structure
 
-契约定义在 `@idea/shared`（纯数据形状，与传输无关），HTTP 状态码定义在 `server/src/http.ts`（状态码是 HTTP 的事，不该污染契约包）。
+```
+ui-packages/web/src/
+├── core/            application-level infrastructure
+│   └── session/     the session store (state + provider + hooks) and its API
+├── features/        leaf features — they consume core, never declare shared state
+│   ├── auth/        login page, invite acceptance
+│   ├── workspace/   workspace picker, invite dialog
+│   └── app/         app list, create dialog
+├── shell/           routing, auth guards, layout, cross-feature composition
+└── lib/             non-React utilities (the fetch wrapper)
+```
 
-**成功**
+Feature-first rather than layer-first: with layers, adding one feature means
+touching five directories and no single place shows what that feature contains.
+
+`features/` are **leaves**. Shared state lives in `core/`, cross-feature
+composition happens in `shell/`, and features never import each other's internals.
+
+The shell directory is called `shell/`, not `app/`, because `App` is a domain
+entity here — two meanings of "app" in import paths would be a permanent tax.
+
+## State (zustand)
+
+One store: the current session (`user` + `workspaceId`). It qualifies because it
+is read on most screens **and** has definite moments at which it goes stale —
+sign in, sign out, switch workspace. That pairing is the bar for anything else
+proposed for a store. An app list has no such moment, so it lives in the page
+that shows it.
+
+Rules, each protecting against a specific failure:
+
+- **Built per provider, not at module scope.** `createStore` from
+  `zustand/vanilla` behind a React Context, instantiated in a `useRef`. A
+  module-level `create()` is a process-wide singleton: state survives between
+  tests, and two roots on a page silently share it.
+- **The base hook always takes a selector.** Subscribing to the whole store
+  re-renders every consumer on any field change. It never errors — it just gets
+  slower — so it has to be impossible rather than caught in review.
+- **Named accessor hooks** (`useCurrentUser`) over inline selectors at call
+  sites. A typo in an inline selector yields `undefined` silently; a wrong hook
+  name does not compile.
+- **State file holds state only.** `core/session/store.tsx` has the shape, the
+  store, the provider, and the base hook. Accessors and actions live in
+  `use-session.ts`.
+- **Dependencies run store → api → request**, never backwards.
+- **The session is not persisted.** The httpOnly cookie is the source of truth
+  for being signed in; mirroring it into localStorage lets the two disagree once
+  the cookie expires, and puts identity where page scripts can read it.
+
+No TanStack Query yet. It earns its place once several interrelated views start
+needing "changing A must refresh B"; today that problem does not exist.
+
+## Authorization
+
+Three layers, each answering exactly one question, with no overlap:
+
+| Layer | Carrier | Answers |
+|---|---|---|
+| Platform | a row in `platform_admins` | may you **create** a workspace |
+| Workspace | `UserWorkspace.role` | may you **administer members** here |
+| Visibility | a row in `UserWorkspace` | may you **see** this workspace at all |
+
+The third layer is the important one: **visibility depends only on membership**,
+never on role and never on platform admin. Roles gate administrative actions and
+nothing else. That keeps tenant isolation to one thing to audit instead of a role
+check scattered through every handler.
+
+None of the three is a column on `users`. That table answers "who are you", and
+permission requirements can grow without ever pushing into it.
+
+| Action | Requires |
+|---|---|
+| Create a workspace | a `platform_admins` row |
+| See a workspace and everything in it | membership |
+| Create / edit / archive an app | membership |
+| Create an invite link | workspace `admin` |
+| Change a role / remove a member | workspace `admin` |
+
+Two invariants worth stating:
+
+- **The last admin cannot be removed or demoted.** Otherwise the workspace keeps
+  its data and members but nobody can invite, promote, or delete — recoverable
+  only by editing the database by hand.
+- **A platform admin sees no workspace they are not a member of.** The capability
+  to create is not the right to read. Checked by a test, because this is the
+  distinction that keeps a single field from defeating tenant isolation.
+
+Apps are not role-gated: the workspace is the trust boundary, and everyone inside
+it is a colleague.
+
+### Invites
+
+An invite is a **bearer link with no addressee** — the admin generating it does
+not know who will use it, which is precisely why the login identifier is a
+username the invitee chooses rather than an email the inviter must know.
+
+Single use. Only the SHA-256 digest is stored, so the link is shown exactly once
+and the UI says so. Someone who already has an account joins as themselves rather
+than being pushed into a duplicate account.
+
+## API conventions
+
+Contracts live in `@idea/shared` (pure data shapes, transport-agnostic). HTTP
+status codes live in `server/src/http.ts` — status is HTTP's business and does
+not belong in a contract package.
+
+**Success**
 
 ```json
 { "success": true, "data": { } }
 ```
 
-**失败**——扁平结构，不套 `error` 对象：
+**Failure** — flat, with no nested `error` object:
 
 ```json
-{ "success": false, "code": "not_found", "message": "requirement 12 不存在" }
+{ "success": false, "code": "not_found", "message": "app 12 does not exist" }
 ```
 
-判别式联合，`success` 一个字段就能让编译器确定哪一半存在，调用方不需要到处 `data?.`：
+A discriminated union, so `success` alone tells the compiler which half exists
+and callers never write `data?.`:
 
 ```ts
-const res = await fetch(...).then(r => r.json()) as ApiResponse<Foo>
-if (!isOk(res)) return handle(res.code)   // 这里 res.code 有类型
-use(res.data)                              // 这里 res.data 有类型
+const res = (await fetch(...).then(r => r.json())) as ApiResponse<Foo>
+if (!isOk(res)) return handle(res.code)   // res.code is typed here
+use(res.data)                             // res.data is typed here
 ```
 
-`code` 是给程序分支用的稳定标识，`message` 是给人看的、可以随便改。
+`code` is a stable string to branch on; `message` is human-facing and free to
+change.
 
-**分页**——分页信息在 `data` 里面，不在旁边另开 `meta`：
+**Paging** lives inside `data`, not in a sibling `meta`:
 
 ```json
-{
-  "success": true,
-  "data": { "items": [], "total": 128, "page": 2, "pageSize": 20 }
-}
+{ "success": true, "data": { "items": [], "total": 128, "page": 2, "pageSize": 20 } }
 ```
 
-这样分页响应就是普通的 `ApiResponse<Paged<T>>`，`ok()` / `isOk()` / 前端请求封装全部不用改。另开 `meta` 会逼每个消费方为了一组字段去认识第二种信封形状。
+That keeps a paged response an ordinary `ApiResponse<Paged<T>>`, so `ok()`,
+`isOk()`, and the browser request wrapper all work on it unchanged. A `meta` key
+would force every consumer to learn a second envelope shape.
 
-`totalPages` 是**派生**的（`totalPages(paged)`），不落字段——落了就多一个会跟 `total`、`pageSize` 打架的东西。
+`totalPages` is derived via a helper, never stored — a stored copy can disagree
+with `total` and `pageSize`.
 
-查询参数用 `parsePageQuery(c.req.query())`：**越界钳制而不报错**。`?pageSize=999999` 返回上限 100 而不是 400，`?page=0` 返回第 1 页。理由是列表接口因为要多了就报错很不友好；响应里回显实际生效的 `pageSize`，客户端能看出被钳过。这同时是安全边界——不钳的话 `pageSize` 直接变成 SQL 的 LIMIT。
+`parsePageQuery` **clamps rather than rejects**: `?pageSize=999999` returns the
+maximum of 100, `?page=0` returns page 1. Partly usability, mainly safety —
+`pageSize` becomes a SQL `LIMIT`, so unclamped it is a free full-table read. The
+response echoes the effective `pageSize` so a clamped client can tell.
 
 ```ts
 const query = parsePageQuery(c.req.query())
@@ -130,9 +273,10 @@ const [items, total] = await Promise.all([
 return sendOk(c, paged(items, total, query))
 ```
 
-**错误 code 与状态码**——一个 code 对应一个状态码，成对定义在工厂函数里，避免同一个 `not_found` 在这个 controller 是 404、在那个是 400：
+**Error codes pair with statuses** in one factory each, so `not_found` cannot go
+out as 400 from one controller and 404 from another:
 
-| 工厂 | HTTP | code |
+| Factory | HTTP | code |
 |---|---|---|
 | `badRequest(c, msg)` | 400 | `bad_request` |
 | `unauthorized(c)` | 401 | `unauthorized` |
@@ -142,55 +286,97 @@ return sendOk(c, paged(items, total, query))
 | `unprocessable(c, msg)` | 422 | `unprocessable` |
 | `internal(c)` | 500 | `internal` |
 
-领域专有的失败用 `failWith(c, status, code, message)`，客户端可以按自定义 code 分支，但仍然走同一个信封。
+Domain-specific failures use `failWith(c, status, code, message)` — a custom code
+to branch on, same envelope.
 
-**没有例外出口**：`createApp` 注册了 `notFound` 与 `onError`，未匹配路由和未捕获异常也返回信封，不会漏出框架的纯文本 `404 Not Found`。`onError` 只把堆栈写日志、给客户端通用消息——未捕获异常经常来自数据库驱动，那些消息里带连接串。
+**No exits from the envelope**: `createApp` registers `notFound` and `onError`,
+so unmatched routes and uncaught exceptions return it too. Without them the
+framework's plain-text `404 Not Found` would be the one response the browser
+wrapper cannot parse, and it would surface as a misleading `bad_response`.
+`onError` logs the stack and returns a generic message — uncaught errors here are
+often driver failures whose text carries connection details.
 
-controller 一律走 `http.ts` 的 helper，不直接 `c.json`。
+Controllers go through `http.ts` helpers, never raw `c.json`.
 
-## worker 进程模型
+**Cross-tenant access answers 404, not 403.** A 403 confirms the id exists, which
+is enough to enumerate resources by walking ids.
 
-**一台机器一个守护进程**，按能力注册、跨项目复用。
+## Worker process model
 
-worker 注册的是它**能做什么**（`WORKER_CAPABILITIES`），不是它属于哪个项目。服务端按能力匹配在线 worker 并推送任务，项目标识随每条命令传递。连接是**只出不进**的长连接——worker 不需要入站端口，可以跑在 NAT 后面的任意机器上。
+**One daemon per machine**, registering capabilities and serving every project.
 
-并发靠**槽位**，不靠进程：一个守护进程内并发多个会话，有上限计数。
+A worker registers what it can *do* (`WORKER_CAPABILITIES`), not which project it
+belongs to. The server matches work against connected workers by capability, and
+the project travels on each command. The connection is **outbound-only** — no
+inbound port, so it runs behind NAT on any machine.
 
-> 参考实现 baton 是一个项目一个守护进程，因为它的 agent 要在 git worktree 里改代码，项目↔仓库 1:1 逼出了 worker↔项目 1:1。我们的 agent 做需求澄清、不 checkout 代码，这个约束不存在，所以不继承那个进程模型。
+Concurrency comes from slots inside one process, not from one process per task.
+
+> baton, the reference implementation, runs one daemon per project because its
+> agent works inside a git worktree and project↔repo is 1:1. Our agent elicits
+> requirements and checks out no code, so that constraint is absent and the
+> per-project process it forced is not worth inheriting.
 >
-> **代价**：单进程同时持有多个项目的上下文，崩溃或串号会跨项目边界，多进程模型天然没这个问题。企业内部平台可接受。真需要隔离时，在同一台机器上跑多个 worker、各自声明不相交的能力集即可，模型本身支持。
+> **The cost**: one process holds several projects' context, so a crash or a leak
+> crosses project boundaries in a way per-project processes would not. Acceptable
+> for an internal platform. If real isolation is ever needed, run several workers
+> on the machine with disjoint capability sets — the model already allows it.
 
-## 约定
+## Conventions
 
-- **内部包源码直出，不打包**：`exports` 指向 `src/index.ts`，没有 `dist`。Node 侧 dev 和 prod 都用 `tsx` 直接跑 `.ts`
-- **全 ESM**，相对 import 带 `.ts` 后缀
-- **只用具名导出**。必须 default 的配置文件（vite/prisma config）写 inline `biome-ignore`
-- **函数式，无 class**
-- **Controller / Service 统一 arity-1 签名**：
-  - `Service<T> = (app: ServiceApplication) => T` —— 纯函数工厂，闭包持有 app
-  - `Controller = (app: WebApplication) => void` —— `WebApplication = Hono & ServiceApplication`
-  - 每个 prefix 挂一个子 Hono 实例并把 services 合并上去，所以 `app.get(...)` 和 `app.health.check()` 在同一个对象上，controller 内注册的中间件天然限定在该 prefix
-  - 横切关注点就是普通函数包装，见 `server/src/routes.ts` 里注释掉的 `guarded` 模板
-  - 接线在 `server/src/context.ts` 按名字写死，不做字符串 key 遍历——依赖图可读、编译器能查
-  - 持资源的用 `@idea/core` 的 `Resource` 元组返回 `[value, dispose]`，由 scope 倒序释放
-- **测试测公开行为**，不测实现细节。controller 用 stub service 测，不碰数据库
-- 代码、注释、commit 用英文；UI 文案用中文
+- **Internal packages export source, no build step**: `exports` points at
+  `src/index.ts`, there is no `dist`. Node runs `.ts` via `tsx` in both dev and
+  production.
+- **ESM throughout**, relative imports carry the `.ts` / `.tsx` extension.
+- **Named exports only.** Config files that must default-export (vite, prisma)
+  carry an inline `biome-ignore`.
+- **Functional, no classes.**
+- **Controllers and services share an arity-1 signature**:
+  - `Service<T> = (app: ServiceApplication) => T` — a factory closing over the app
+  - `Controller = (app: WebApplication) => void`, where
+    `WebApplication = Hono & ServiceApplication`
+  - Each prefix gets its own sub-instance with the services merged onto it, so
+    `app.get(...)` and `app.workspace.roleOf()` read off one object and
+    controller-registered middleware stays scoped to that prefix
+  - Cross-cutting concerns are ordinary function wrappers — see `guarded` in
+    `server/src/apps/web/routes.ts`
+  - Wiring in `server/src/context.ts` is written out by name, not iterated over a
+    registry, so the dependency graph is readable and compiler-checked
+  - Resource-owning factories return `[value, dispose]` and the scope releases in
+    reverse
+- **No Store/Repository layer over Prisma.** Prisma is already the data-access
+  abstraction; wrapping it would forward `findMany` and duplicate every type. The
+  one rule: **Prisma appears only in `services/`, never in a controller** — a
+  controller that queries directly binds the HTTP shape to the data shape and
+  forces a database into every test.
+- **Tests cover observable behaviour**, not implementation. Controllers are
+  tested with stub services and no database.
+- Code, comments, commit messages, and documentation in English; UI copy in
+  Chinese.
 
-## 凭据
+## Credentials
 
-真实凭据只进 gitignored 的 `.env`，**不进任何被提交的文件**。`src/config.ts` 与 `prisma.config.ts` 里的兜底值一律是本地无害值，不要改成真实地址。
+Real credentials only go in gitignored `.env` files, **never in a committed
+file**. The fallbacks in `src/config.ts` and `prisma.config.ts` are deliberately
+harmless localhost values — do not change them to real addresses.
 
-`.gitignore` 用 `.env*` + `!.env.example`，新增 `.env.production` 这类文件默认被忽略。
+`.gitignore` uses `.env*` plus `!.env.example`, so a new `.env.production` is
+ignored by default rather than by someone remembering to add it.
 
-生产库地址以**注释形态**记录在 `.env` 里，不要在本地取消注释——migration 和 seed 会打到当前生效的那个库上。部署时由环境注入。
+The production database URL is recorded in `.env` **as a comment**. Do not
+uncomment it locally: migrations and seeds hit whichever URL is active.
+Deployments inject it from the environment.
 
-对象存储（腾讯云 COS）凭据已记录但**尚未接入**，没有上传功能之前不写实现。注意 `COS_UPLOAD_PATH` 与 `ASSET_URL_SIGNING_SECRET` 必须与其他产品区分开，否则对象前缀会撞、签名 URL 会跨产品通用。
+Object storage (Tencent COS) credentials are recorded but **not wired up** — no
+upload feature exists yet. When one arrives, note that `COS_UPLOAD_PATH` and
+`ASSET_URL_SIGNING_SECRET` must differ from other products, or object prefixes
+collide and signed URLs become valid across products.
 
-## 下一期
+## Not built yet
 
-- 领域模型（User / Requirement / Worker / Session），`schema.prisma` 目前是零 model
-- 登录、鉴权中间件、多租户 scope
-- worker 注册协议、能力匹配派发、SSE 命令流、Claude Agent SDK 接入
-- 需求澄清 agent 的 prompt 与工具
-- 对象存储 service
-- Docker 生产镜像、CI
+- Requirement entity and the elicitation agent
+- Worker registration protocol, capability matching, command stream
+- SMS verification and password recovery (the phone column is stored, but a
+  number must be verified before it can be used to recover an account)
+- Email delivery — invite links are handed over manually for now
+- Session revocation (`@hono/session` supports a storage adapter when needed)

@@ -13,9 +13,11 @@
   "dependencies": {
     "@idea/design": "workspace:*",
     "@idea/shared": "workspace:*",
+    "lucide-react": "^1.27.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.5"
+    "react-router-dom": "^7.9.5",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.16",

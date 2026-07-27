@@ -36,7 +36,7 @@ model User {
   username     String   @unique
   // scrypt, per-user salt, parameters recorded inline. See src/crypto.ts.
   passwordHash String
-  // Display name. Not unique — two people may both be 张三.
+  // Display name. Not unique — two colleagues may share a common name.
   name         String
   // Optional, E.164-normalised. Reserved for SMS password recovery, and
   // unusable for that until a verification flow exists.
@@ -73,7 +73,7 @@ model PlatformAdmin {
 // The tenant boundary. Every query for anything below it filters by membership.
 model Workspace {
   id        Int      @id @default(autoincrement())
-  // Not globally unique: two different customers may both have a "设计部".
+  // Not globally unique: two different customers may both have a "Design" team.
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

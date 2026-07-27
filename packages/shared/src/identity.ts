@@ -39,9 +39,9 @@ export type Normalized<T, E> = { ok: true; value: T } | { ok: false; error: E }
 export const normalizeUsername = (raw: string): Normalized<string, UsernameError> => {
   const value = raw.trim().toLowerCase()
 
-  // Character set is checked before length, so `张三` is told what is actually
-  // wrong. Reporting "too short" there would send the user off to add more
-  // characters, which fails again for the same unstated reason.
+  // Character set is checked before length, so a short non-ASCII name is told
+  // what is actually wrong. Reporting "too short" there would send the user off
+  // to add more characters, which fails again for the same unstated reason.
   if (value.length === 0) return { ok: false, error: 'too_short' }
   if (!/^[a-z0-9._-]+$/.test(value)) return { ok: false, error: 'invalid_chars' }
   if (/^[._-]|[._-]$/.test(value)) return { ok: false, error: 'edge_symbol' }

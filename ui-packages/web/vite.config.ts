@@ -2,8 +2,10 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
-// The server owns routes at the root (`/health`, not `/api/health`), so the dev
-// proxy strips the prefix. Production puts a reverse proxy in the same role.
+// The server listens on /api/web/* itself, so the proxy passes the path through
+// unchanged. It used to strip the /api prefix, back when routes were mounted at
+// the root — one less mapping to get wrong. Production puts a reverse proxy in
+// the same role.
 const BACKEND = process.env.IDEA_BACKEND ?? 'http://localhost:3300'
 
 // biome-ignore lint/style/noDefaultExport: vite config requires a default export
@@ -12,7 +14,7 @@ export default defineConfig({
   server: {
     port: 5300,
     proxy: {
-      '/api': { target: BACKEND, changeOrigin: true, rewrite: p => p.replace(/^\/api/, '') },
+      '/api': { target: BACKEND, changeOrigin: true },
     },
   },
   test: {

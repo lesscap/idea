@@ -1,33 +1,67 @@
 /*
- * Design tokens as CSS custom properties, not as Tailwind config. Components in
- * this package reference them by name, so the whole product re-themes by
- * overriding this one block — and a token is inspectable in devtools, which a
- * compiled-away config value is not.
+ * shadcn/ui's token vocabulary, so any component copied in from upstream works
+ * without rewriting its class names. Values are ours; the names are theirs.
+ *
+ * Tailwind v4 reads these through @theme inline in the consuming app's stylesheet.
  */
 :root {
-  --idea-color-bg: #ffffff;
-  --idea-color-surface: #f6f7f9;
-  --idea-color-border: #e3e6ea;
-  --idea-color-text: #14171a;
-  --idea-color-text-muted: #6b7280;
-  --idea-color-accent: #2563eb;
-  --idea-color-accent-hover: #1d4ed8;
-  --idea-color-accent-text: #ffffff;
-  --idea-color-danger: #dc2626;
+  --radius: 0.5rem;
 
-  --idea-radius-sm: 4px;
-  --idea-radius-md: 8px;
-  --idea-radius-lg: 12px;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.21 0.006 285.9);
 
-  --idea-space-1: 4px;
-  --idea-space-2: 8px;
-  --idea-space-3: 12px;
-  --idea-space-4: 16px;
-  --idea-space-6: 24px;
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.006 285.9);
 
-  --idea-font-sans:
-    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --idea-text-sm: 13px;
-  --idea-text-base: 14px;
-  --idea-text-lg: 16px;
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.006 285.9);
+
+  --primary: oklch(0.55 0.22 264);
+  --primary-foreground: oklch(0.98 0.003 247.9);
+
+  --secondary: oklch(0.967 0.002 286.4);
+  --secondary-foreground: oklch(0.21 0.006 285.9);
+
+  --muted: oklch(0.967 0.002 286.4);
+  --muted-foreground: oklch(0.552 0.014 285.9);
+
+  --accent: oklch(0.967 0.002 286.4);
+  --accent-foreground: oklch(0.21 0.006 285.9);
+
+  --destructive: oklch(0.577 0.245 27.3);
+  --destructive-foreground: oklch(0.98 0.003 247.9);
+
+  --border: oklch(0.92 0.004 286.3);
+  --input: oklch(0.92 0.004 286.3);
+  --ring: oklch(0.55 0.22 264);
+}
+
+.dark {
+  --background: oklch(0.21 0.006 285.9);
+  --foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.21 0.006 285.9);
+  --card-foreground: oklch(0.985 0 0);
+
+  --popover: oklch(0.21 0.006 285.9);
+  --popover-foreground: oklch(0.985 0 0);
+
+  --primary: oklch(0.62 0.19 260);
+  --primary-foreground: oklch(0.21 0.006 285.9);
+
+  --secondary: oklch(0.274 0.006 286);
+  --secondary-foreground: oklch(0.985 0 0);
+
+  --muted: oklch(0.274 0.006 286);
+  --muted-foreground: oklch(0.705 0.015 286.1);
+
+  --accent: oklch(0.274 0.006 286);
+  --accent-foreground: oklch(0.985 0 0);
+
+  --destructive: oklch(0.704 0.191 22.2);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.62 0.19 260);
 }

@@ -8,7 +8,7 @@ import { createPrisma } from './db.ts'
 // first workspace, no first admin, and no way in at all.
 //
 //   pnpm --filter @idea/core seed:admin \
-//     --username admin01 --password '...' --workspace '默认空间'
+//     --username admin01 --password '...' --workspace 'Default'
 
 const { values } = parseArgs({
   options: {
