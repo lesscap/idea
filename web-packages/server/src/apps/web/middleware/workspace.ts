@@ -22,7 +22,7 @@ export const requireMember = async (
   c: Context,
   workspaceId: Id,
 ): Promise<WorkspaceAccess | Response> => {
-  const role = await app.workspace.roleOf(session(c).userId, workspaceId)
+  const role = await app.$workspace.roleOf(session(c).userId, workspaceId)
   return role === null ? notFound(c, 'workspace not found') : { workspaceId, role }
 }
 

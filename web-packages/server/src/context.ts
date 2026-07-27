@@ -18,13 +18,13 @@ export const createContext = (config: Config): [ServiceApplication, Dispose] => 
   const scope = createScope()
   const prisma = scope.use(createPrisma(config.databaseUrl))
 
-  const app = { config, prisma } as ServiceApplication
+  const app = { $config: config, $prisma: prisma } as ServiceApplication
   Object.assign(app, {
-    health: createHealthService(app),
-    user: createUserService(app),
-    auth: createAuthService(app),
-    workspace: createWorkspaceService(app),
-    app: createAppService(app),
+    $health: createHealthService(app),
+    $user: createUserService(app),
+    $auth: createAuthService(app),
+    $workspace: createWorkspaceService(app),
+    $app: createAppService(app),
   })
 
   return [app, scope.dispose]

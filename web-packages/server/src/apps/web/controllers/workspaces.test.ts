@@ -16,15 +16,17 @@ const services = ({
   setRoleOk = true,
   removeOk = true,
 }: Over = {}): Partial<ServiceApplication> => ({
-  user: {
+  $user: {
     isPlatformAdmin: async () => isPlatformAdmin,
     currentUser: async () => null,
     findByUsername: async () => null,
     updatePasswordHash: async () => {},
   },
-  workspace: {
+  $workspace: {
     listForUser: async () => [],
     roleOf: async () => roleOf,
+    resolveEntryWorkspace: async () => null,
+    rememberWorkspace: async () => {},
     create: async name => ({ id: 9, name, createdAt: '', role: 'admin' }),
     members: async () => [],
     setRole: async () => setRoleOk,

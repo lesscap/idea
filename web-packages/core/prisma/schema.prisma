@@ -46,11 +46,34 @@ model User {
 
   workspaces      UserWorkspace[]
   platformAdmin   PlatformAdmin?
+  preference      UserPreference?
   invitesSent     Invite[]        @relation("InvitedBy")
   invitesAccepted Invite[]        @relation("AcceptedBy")
   appsCreated     App[]
 
   @@map("users")
+}
+
+// Per-user preferences, kept out of `users` for the same reason platform_admins
+// is: that table answers "who are you", while preferences keep accumulating
+// (theme, language, default view later) and would turn it into a junk drawer.
+model UserPreference {
+  userId          Int      @id
+  // Where to drop the user on their next sign-in.
+  //
+  // The foreign key guarantees the workspace still EXISTS. It does not
+  // guarantee the user is still a member of it — removing someone from a
+  // workspace leaves the workspace intact, so this can point somewhere they can
+  // no longer enter. Membership is rechecked on read; see resolveEntryWorkspace.
+  lastWorkspaceId Int?
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SetNull, not Cascade: deleting a workspace should clear this pointer, not
+  // delete the user's whole preference row along with it.
+  lastWorkspace Workspace? @relation(fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
+
+  @@map("user_preferences")
 }
 
 // Platform-level authorization, deliberately its own table rather than a flag on
@@ -78,9 +101,10 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users   UserWorkspace[]
-  apps    App[]
-  invites Invite[]
+  users       UserWorkspace[]
+  apps        App[]
+  invites     Invite[]
+  preferredBy UserPreference[]
 
   @@map("workspaces")
 }

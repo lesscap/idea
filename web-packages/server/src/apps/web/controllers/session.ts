@@ -19,23 +19,22 @@ export const SessionController: Controller = app => {
   app.post('/', zValidator('json', LoginBody), async c => {
     const { username, password } = c.req.valid('json')
 
-    const userId = await app.auth.authenticate(username.trim().toLowerCase(), password)
+    const userId = await app.$auth.authenticate(username.trim().toLowerCase(), password)
     if (userId === null) return unauthorized(c, 'username or password is incorrect')
 
-    // Pre-select the workspace when there is only one — the common case, and it
-    // saves a pointless "choose one" screen.
-    const workspaces = await app.workspace.listForUser(userId)
-    const workspaceId = workspaces.length === 1 ? (workspaces[0]?.id ?? null) : null
+    // Always land somewhere: the workspace they used last, or their first if
+    // there is no usable memory of one. Null only when they belong to none.
+    const workspaceId = await app.$workspace.resolveEntryWorkspace(userId)
 
     await startSession(c, { userId, workspaceId })
 
-    const user = await app.user.currentUser(userId)
+    const user = await app.$user.currentUser(userId)
     return sendOk(c, { user, workspaceId })
   })
 
   app.get('/', requireSession, async c => {
     const { userId, workspaceId } = session(c)
-    const user = await app.user.currentUser(userId)
+    const user = await app.$user.currentUser(userId)
     // The session outlived the user row (deleted account, restored database).
     if (!user) {
       endSession(c)
@@ -53,10 +52,13 @@ export const SessionController: Controller = app => {
     // Membership is verified before it goes into the session, and verified again
     // on every subsequent request. The session records a selection, never a
     // grant.
-    const role = await app.workspace.roleOf(userId, workspaceId)
+    const role = await app.$workspace.roleOf(userId, workspaceId)
     if (role === null) return notFound(c, 'workspace not found')
 
     await startSession(c, { userId, workspaceId })
+    // Only after membership checks out — remembering a workspace the user
+    // cannot enter would just produce a fallback on every future sign-in.
+    await app.$workspace.rememberWorkspace(userId, workspaceId)
     return sendOk(c, { workspaceId })
   })
 

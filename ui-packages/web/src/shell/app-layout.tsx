@@ -32,7 +32,7 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-muted/20">
       <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="flex h-14 items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-3">
             <span className="font-semibold">idea</span>
             <WorkspaceSwitcher />
@@ -66,7 +66,7 @@ export const AppLayout = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="px-6 py-8">
         <Outlet />
       </main>
 

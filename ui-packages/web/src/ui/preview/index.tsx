@@ -37,6 +37,53 @@ import { Label } from '../label/index.tsx'
 const VARIANTS = ['default', 'secondary', 'outline', 'ghost', 'link', 'destructive'] as const
 const SIZES = ['sm', 'default', 'lg', 'icon'] as const
 
+// Ratios are measured, not estimated — recompute them if a token changes rather
+// than leaving a number here that used to be true.
+const SWATCHES = [
+  {
+    name: 'primary',
+    value: 'oklch(0.50 0.10 196)',
+    contrast: '前景 5.43:1',
+    bg: 'bg-primary',
+    fg: 'text-primary-foreground',
+  },
+  {
+    name: 'destructive',
+    value: 'oklch(0.52 0.19 27)',
+    contrast: '前景 5.89:1',
+    bg: 'bg-destructive',
+    fg: 'text-destructive-foreground',
+  },
+  {
+    name: 'success（暂无组件使用）',
+    value: 'oklch(0.52 0.12 150)',
+    contrast: '前景 5.07:1',
+    bg: 'bg-success',
+    fg: 'text-success-foreground',
+  },
+  {
+    name: 'warning（暂无组件使用）',
+    value: 'oklch(0.68 0.14 75)',
+    contrast: '前景 5.88:1',
+    bg: 'bg-warning',
+    fg: 'text-warning-foreground',
+  },
+  {
+    name: 'muted',
+    value: 'oklch(0.968 0.003 80)',
+    contrast: 'muted-foreground 5.47:1',
+    bg: 'bg-muted',
+    fg: 'text-muted-foreground',
+  },
+  {
+    name: 'background',
+    value: 'oklch(1 0 0)',
+    contrast: 'foreground 17.32:1',
+    bg: 'bg-background',
+    fg: 'text-foreground',
+  },
+] as const
+
 const Section = ({
   title,
   note,
@@ -66,6 +113,24 @@ export const UiPreview = () => {
           改动 src/ui 下的组件后，先在这里看一眼各状态。
         </p>
       </header>
+
+      <Section
+        title="Colour tokens"
+        note="每个色块上的文字就是它配对的前景色 —— 看不清就是对比度不够。比值为实测 WCAG，AA 正文要求 4.5:1"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {SWATCHES.map(s => (
+            <div
+              key={s.name}
+              className={`flex flex-col gap-1 rounded-md border border-border p-3 ${s.bg} ${s.fg}`}
+            >
+              <span className="text-sm font-medium">{s.name}</span>
+              <span className="font-mono text-xs opacity-80">{s.value}</span>
+              <span className="text-xs opacity-80">{s.contrast}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
 
       <Section title="Button" note="6 variants × 4 sizes, plus disabled">
         <div className="flex flex-col gap-4">

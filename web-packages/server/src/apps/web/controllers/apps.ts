@@ -20,7 +20,7 @@ export const AppsController: Controller = app => {
     if (isResponse(access)) return access
 
     const query = parsePageQuery(c.req.query())
-    return sendOk(c, await app.app.listInWorkspace(access.workspaceId, query))
+    return sendOk(c, await app.$app.listInWorkspace(access.workspaceId, query))
   })
 
   app.post('/', zValidator('json', CreateAppBody), async c => {
@@ -28,7 +28,7 @@ export const AppsController: Controller = app => {
     if (isResponse(access)) return access
 
     const { name, description } = c.req.valid('json')
-    const created = await app.app.create({
+    const created = await app.$app.create({
       workspaceId: access.workspaceId,
       name,
       description: description ?? null,
@@ -46,7 +46,7 @@ export const AppsController: Controller = app => {
     const id = Number(c.req.param('id'))
     if (!Number.isFinite(id)) return badRequest(c, 'invalid app id')
 
-    const found = await app.app.getInWorkspace(access.workspaceId, id)
+    const found = await app.$app.getInWorkspace(access.workspaceId, id)
     // An app in someone else's workspace is reported as missing, not forbidden.
     return found ? sendOk(c, found) : notFound(c, 'app not found')
   })
@@ -59,7 +59,7 @@ export const AppsController: Controller = app => {
     if (!Number.isFinite(id)) return badRequest(c, 'invalid app id')
 
     const patch = c.req.valid('json')
-    const updated = await app.app.update(access.workspaceId, id, {
+    const updated = await app.$app.update(access.workspaceId, id, {
       ...patch,
       description: patch.description === undefined ? undefined : (patch.description ?? null),
     })

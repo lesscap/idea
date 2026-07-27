@@ -6,7 +6,7 @@ import { internal, notFound } from './http.ts'
 import type { Controller, ServiceApplication, WebApplication } from './types.ts'
 
 // Merge the services onto a fresh Hono instance so the controller sees one
-// object — `app.get(...)` next to `app.workspace.roleOf()`. A sub-instance per
+// object — `app.get(...)` next to `app.$workspace.roleOf()`. A sub-instance per
 // prefix is what keeps controller-registered middleware from leaking sideways.
 const mount = (
   root: Hono,
@@ -29,7 +29,7 @@ export const createApp = (services: ServiceApplication): Hono => {
   // an invitation has to be able to read one to tell "already has an account"
   // from "brand new person".
   const web = new Hono()
-  web.use('*', sessionMiddleware(services.config))
+  web.use('*', sessionMiddleware(services.$config))
   for (const [prefix, controller] of Object.entries(Routes)) {
     mount(web, prefix, controller, services)
   }

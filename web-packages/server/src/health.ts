@@ -6,5 +6,5 @@ import type { ServiceApplication } from './types.ts'
 // deployment probes, not for any client application. One route, so it gets a
 // function rather than a controller directory of its own.
 export const registerHealth = (root: Hono, services: ServiceApplication): void => {
-  root.get('/health', async c => sendOk(c, await services.health.check()))
+  root.get('/health', async c => sendOk(c, await services.$health.check()))
 }

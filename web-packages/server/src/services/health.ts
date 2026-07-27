@@ -25,5 +25,5 @@ const pingDb = async (prisma: PrismaClient): Promise<'up' | 'down'> => {
 // with a dead database is a distinct state from one that is down, and load
 // balancers need to tell them apart.
 export const createHealthService: Service<HealthService> = app => ({
-  check: async () => ({ ok: true, db: await pingDb(app.prisma) }),
+  check: async () => ({ ok: true, db: await pingDb(app.$prisma) }),
 })

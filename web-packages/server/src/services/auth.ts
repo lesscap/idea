@@ -19,7 +19,7 @@ export const createAuthService: Service<AuthService> = app => ({
   // this endpoint into a username enumerator — the caller learns who has an
   // account without ever guessing a password.
   authenticate: async (username, password) => {
-    const user = await app.user.findByUsername(username)
+    const user = await app.$user.findByUsername(username)
 
     if (!user) {
       verifyPassword(password, DECOY_HASH)
@@ -32,7 +32,7 @@ export const createAuthService: Service<AuthService> = app => ({
     // only chance to migrate a hash written under weaker parameters. Silent,
     // one user at a time, no password reset.
     if (needsRehash(user.passwordHash)) {
-      await app.user.updatePasswordHash(user.id, hashPassword(password))
+      await app.$user.updatePasswordHash(user.id, hashPassword(password))
     }
 
     return user.id

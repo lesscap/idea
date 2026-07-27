@@ -53,25 +53,25 @@ export const createAppService: Service<AppService> = app => ({
   listInWorkspace: async (workspaceId, query) => {
     const { offset, limit } = toOffset(query)
     const [rows, total] = await Promise.all([
-      app.prisma.app.findMany({
+      app.$prisma.app.findMany({
         where: { workspaceId },
         orderBy: { updatedAt: 'desc' },
         skip: offset,
         take: limit,
       }),
-      app.prisma.app.count({ where: { workspaceId } }),
+      app.$prisma.app.count({ where: { workspaceId } }),
     ])
     return paged(rows.map(toApp), total, query)
   },
 
   getInWorkspace: async (workspaceId, id) => {
-    const row = await app.prisma.app.findFirst({ where: { id, workspaceId } })
+    const row = await app.$prisma.app.findFirst({ where: { id, workspaceId } })
     return row ? toApp(row) : null
   },
 
   create: async input => {
     try {
-      return toApp(await app.prisma.app.create({ data: input }))
+      return toApp(await app.$prisma.app.create({ data: input }))
     } catch (err) {
       if (isUniqueViolation(err)) return 'name_taken'
       throw err
@@ -83,9 +83,12 @@ export const createAppService: Service<AppService> = app => ({
     // statement: update() keys on id alone and would happily edit another
     // tenant's row.
     try {
-      const { count } = await app.prisma.app.updateMany({ where: { id, workspaceId }, data: patch })
+      const { count } = await app.$prisma.app.updateMany({
+        where: { id, workspaceId },
+        data: patch,
+      })
       if (count === 0) return null
-      const row = await app.prisma.app.findFirst({ where: { id, workspaceId } })
+      const row = await app.$prisma.app.findFirst({ where: { id, workspaceId } })
       return row ? toApp(row) : null
     } catch (err) {
       if (isUniqueViolation(err)) return 'name_taken'

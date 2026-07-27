@@ -17,10 +17,10 @@ const anApp = {
 
 const services = (
   roleOf: 'admin' | 'member' | null,
-  appOver: Partial<ServiceApplication['app']> = {},
+  appOver: Partial<ServiceApplication['$app']> = {},
 ): Partial<ServiceApplication> => ({
-  workspace: { roleOf: async () => roleOf, listForUser: async () => [] } as never,
-  app: {
+  $workspace: { roleOf: async () => roleOf, listForUser: async () => [] } as never,
+  $app: {
     listInWorkspace: async (_ws, q) => paged([anApp], 1, q),
     getInWorkspace: async () => anApp,
     create: async () => anApp,

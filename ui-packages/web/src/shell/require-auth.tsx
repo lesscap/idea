@@ -5,8 +5,9 @@ import {
   useCurrentWorkspaceId,
   useSessionStatus,
 } from '../core/session/use-session.ts'
+import { Card, CardDescription, CardHeader, CardTitle } from '../ui/index.ts'
 
-// Guards everything that needs a signed-in user with a workspace selected.
+// Guards everything behind sign-in.
 //
 // Rendering nothing while `loading` matters: without it, the first paint after a
 // refresh sees `user === null` and bounces an authenticated user to the login
@@ -24,19 +25,22 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  // Signed in but belonging to several workspaces, none chosen yet.
-  if (workspaceId === null) return <Navigate to="/workspaces" replace />
+  // Signing in always resolves a workspace, so reaching here without one means
+  // exactly one thing: this person belongs to no workspace at all. There is
+  // nothing for them to pick, so say what happened instead of showing an empty
+  // chooser.
+  if (workspaceId === null) return <NoWorkspace />
 
   return <>{children}</>
 }
 
-// Same, minus the workspace requirement — the workspace picker itself must be
-// reachable before one is selected.
-export const RequireUser = ({ children }: { children: ReactNode }) => {
-  const status = useSessionStatus()
-  const user = useCurrentUser()
-
-  if (status === 'loading') return null
-  if (!user) return <Navigate to="/login" replace />
-  return <>{children}</>
-}
+const NoWorkspace = () => (
+  <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>你还不属于任何工作空间</CardTitle>
+        <CardDescription>请联系管理员邀请你加入。收到邀请链接后打开即可进入。</CardDescription>
+      </CardHeader>
+    </Card>
+  </div>
+)

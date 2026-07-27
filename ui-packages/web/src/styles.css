@@ -11,67 +11,108 @@
  * No @source directive is needed — the primitives moved into src/ui, which
  * Tailwind's default content detection already covers.
  */
+/*
+ * Palette: teal primary on warm neutrals.
+ *
+ * Teal (hue ~196) rather than green: green is bound tightly to "success /
+ * approved" in business software, so a green primary makes every main button
+ * read as a confirmation and leaves real success messages with nothing
+ * distinctive left. Teal steps out of that semantic zone while still avoiding
+ * the default blue every admin template ships with.
+ *
+ * Neutrals carry a faint warm cast (hue ~80) instead of the usual cool grey.
+ * Cool grey next to teal collapses the whole interface into one cold register;
+ * a warm neutral makes the teal read as a deliberate accent.
+ *
+ * Every foreground/background pair here was measured against WCAG, not eyeballed.
+ * Ratios in the comments are computed, and the primary sits at L=0.50 because
+ * L=0.55 only reaches 4.46:1 — just under AA, which is what made the old buttons
+ * look bright with weak-looking text on them.
+ */
 :root {
-  --radius: 0.5rem;
+  /* 6px, not 8px: at button scale 8px starts reading consumer-app rather than tool. */
+  --radius: 0.375rem;
 
   --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.006 285.9);
+  --foreground: oklch(0.22 0.008 80); /* 17.32:1 on background */
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.006 285.9);
+  --card-foreground: oklch(0.22 0.008 80);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.006 285.9);
+  --popover-foreground: oklch(0.22 0.008 80);
 
-  --primary: oklch(0.55 0.22 264);
-  --primary-foreground: oklch(0.98 0.003 247.9);
+  --primary: oklch(0.5 0.1 196); /* white text: 5.43:1 */
+  --primary-foreground: oklch(0.99 0.005 196);
 
-  --secondary: oklch(0.967 0.002 286.4);
-  --secondary-foreground: oklch(0.21 0.006 285.9);
+  --secondary: oklch(0.968 0.003 80);
+  --secondary-foreground: oklch(0.22 0.008 80);
 
-  --muted: oklch(0.967 0.002 286.4);
-  --muted-foreground: oklch(0.552 0.014 285.9);
+  --muted: oklch(0.968 0.003 80);
+  --muted-foreground: oklch(0.5 0.012 80); /* 6.00:1 on background, 5.47:1 on muted */
 
-  --accent: oklch(0.967 0.002 286.4);
-  --accent-foreground: oklch(0.21 0.006 285.9);
+  --accent: oklch(0.968 0.003 80);
+  --accent-foreground: oklch(0.22 0.008 80);
 
-  --destructive: oklch(0.577 0.245 27.3);
-  --destructive-foreground: oklch(0.98 0.003 247.9);
+  --destructive: oklch(0.52 0.19 27); /* white text: 5.89:1 */
+  --destructive-foreground: oklch(0.99 0.005 27);
 
-  --border: oklch(0.92 0.004 286.3);
-  --input: oklch(0.92 0.004 286.3);
-  --ring: oklch(0.55 0.22 264);
+  /* Defined for later use; no component variant exists yet. Success sits at hue
+     150 — a full 46 degrees off the primary, so the two never read as the same
+     colour at a glance. */
+  --success: oklch(0.52 0.12 150);
+  --success-foreground: oklch(0.99 0.005 150);
+  --warning: oklch(0.68 0.14 75);
+  --warning-foreground: oklch(0.22 0.008 80);
+
+  --border: oklch(0.915 0.004 80);
+  --input: oklch(0.915 0.004 80);
+  /* Slightly lighter than primary: a focus ring sits against the control edge
+     and needs to separate from it, not match it. 4.49:1 on background. */
+  --ring: oklch(0.55 0.11 196);
 }
 
-/* Defined but not yet reachable — nothing toggles this class. See README. */
+/*
+ * Defined but not yet reachable — nothing toggles this class. Kept in step with
+ * the light palette anyway, so whenever a toggle does land it starts from values
+ * someone calibrated rather than a stale first draft.
+ *
+ * Primary lightens to 0.70 here: on a dark surface the same 0.50 teal would sit
+ * too close to the background, and dark text on it reads better than white.
+ */
 .dark {
-  --background: oklch(0.21 0.006 285.9);
-  --foreground: oklch(0.985 0 0);
+  --background: oklch(0.19 0.006 80);
+  --foreground: oklch(0.97 0.004 80);
 
-  --card: oklch(0.21 0.006 285.9);
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(0.23 0.006 80);
+  --card-foreground: oklch(0.97 0.004 80);
 
-  --popover: oklch(0.21 0.006 285.9);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.23 0.006 80);
+  --popover-foreground: oklch(0.97 0.004 80);
 
-  --primary: oklch(0.62 0.19 260);
-  --primary-foreground: oklch(0.21 0.006 285.9);
+  --primary: oklch(0.7 0.11 196);
+  --primary-foreground: oklch(0.19 0.02 196);
 
-  --secondary: oklch(0.274 0.006 286);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.28 0.006 80);
+  --secondary-foreground: oklch(0.97 0.004 80);
 
-  --muted: oklch(0.274 0.006 286);
-  --muted-foreground: oklch(0.705 0.015 286.1);
+  --muted: oklch(0.28 0.006 80);
+  --muted-foreground: oklch(0.72 0.012 80);
 
-  --accent: oklch(0.274 0.006 286);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.28 0.006 80);
+  --accent-foreground: oklch(0.97 0.004 80);
 
-  --destructive: oklch(0.704 0.191 22.2);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.65 0.18 27);
+  --destructive-foreground: oklch(0.19 0.02 27);
 
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0.19 260);
+  --success: oklch(0.7 0.13 150);
+  --success-foreground: oklch(0.19 0.02 150);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.19 0.02 80);
+
+  --border: oklch(1 0 0 / 13%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.7 0.11 196);
 }
 
 /* Exposes the tokens above as Tailwind utilities: bg-primary, text-muted-foreground, … */
@@ -92,6 +133,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

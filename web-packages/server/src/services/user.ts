@@ -25,13 +25,13 @@ const publicFields = { id: true, username: true, name: true } as const
 
 export const createUserService: Service<UserService> = app => ({
   findByUsername: username =>
-    app.prisma.user.findUnique({
+    app.$prisma.user.findUnique({
       where: { username },
       select: { ...publicFields, phone: true, passwordHash: true },
     }),
 
   currentUser: async userId => {
-    const row = await app.prisma.user.findUnique({
+    const row = await app.$prisma.user.findUnique({
       where: { id: userId },
       select: { ...publicFields, phone: true, platformAdmin: { select: { userId: true } } },
     })
@@ -42,12 +42,12 @@ export const createUserService: Service<UserService> = app => ({
   },
 
   isPlatformAdmin: async userId =>
-    (await app.prisma.platformAdmin.findUnique({
+    (await app.$prisma.platformAdmin.findUnique({
       where: { userId },
       select: { userId: true },
     })) !== null,
 
   updatePasswordHash: async (userId, passwordHash) => {
-    await app.prisma.user.update({ where: { id: userId }, data: { passwordHash } })
+    await app.$prisma.user.update({ where: { id: userId }, data: { passwordHash } })
   },
 })

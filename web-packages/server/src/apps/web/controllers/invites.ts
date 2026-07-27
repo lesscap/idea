@@ -8,7 +8,7 @@ import { AcceptInviteBody } from '../schema/index.ts'
 // have accounts yet.
 export const InvitesController: Controller = app => {
   app.get('/:token', async c => {
-    const preview = await app.workspace.previewInvite(c.req.param('token'))
+    const preview = await app.$workspace.previewInvite(c.req.param('token'))
     // Unknown, expired, and already-used all answer identically. Telling them
     // apart would let a link-holder probe for facts about other invitations.
     return preview ? sendOk(c, preview) : notFound(c, 'invitation is not valid')
@@ -22,7 +22,7 @@ export const InvitesController: Controller = app => {
     // joins as themselves. Without this branch they would be forced to invent a
     // duplicate account just to accept the invitation.
     if (current) {
-      const result = await app.workspace.acceptAsExistingUser(token, current.userId)
+      const result = await app.$workspace.acceptAsExistingUser(token, current.userId)
       if (result.kind !== 'ok') return notFound(c, 'invitation is not valid')
       await startSession(c, { userId: current.userId, workspaceId: result.workspaceId })
       return sendOk(c, { workspaceId: result.workspaceId })
@@ -37,7 +37,7 @@ export const InvitesController: Controller = app => {
     }
     const { username, password, name, phone } = parsed.data
 
-    const result = await app.workspace.acceptAsNewUser(token, {
+    const result = await app.$workspace.acceptAsNewUser(token, {
       username,
       password,
       name,
