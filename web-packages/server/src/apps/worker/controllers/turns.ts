@@ -28,7 +28,12 @@ export const TurnsController: Controller = app => {
     if (!claimed) return sendOk(c, { turn: null })
 
     const conversation = await app.$conversation.get(claimed.conversationId)
-    return sendOk(c, { turn: claimed, conversation })
+    // The endpoint and model ride along rather than being fetched separately:
+    // the server already knows which backend this worker runs, and none of it is
+    // secret — the credential is named here, never carried.
+    const provider = await app.$provider.get(worker.providerId)
+
+    return sendOk(c, { turn: claimed, conversation, provider: provider?.config ?? null })
   })
 
   // The transcript so far, so a worker can rebuild context after a restart.
@@ -68,10 +73,17 @@ export const TurnsController: Controller = app => {
       return sendOk(c, { renewed })
     }
 
-    const stored = await app.$conversation.appendEvent(
-      turn.conversationId,
-      parsed.data as ConversationEvent,
-    )
+    const event = parsed.data as ConversationEvent
+    const stored = await app.$conversation.appendEvent(turn.conversationId, event)
+
+    // The handle the next turn resumes from. Taken from the transcript rather
+    // than reported separately, because the fact is already here — and it
+    // changes whenever a session could not be resumed and a new one began, so
+    // recording it only once would leave later turns resuming an id that no
+    // longer exists.
+    if (event.type === 'thread.started' && event.providerSessionId)
+      await app.$conversation.rememberSession(turn.conversationId, event.providerSessionId)
+
     return sendOk(c, { sequence: stored.sequence })
   })
 

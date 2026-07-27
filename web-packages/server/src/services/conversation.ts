@@ -42,6 +42,9 @@ export type ConversationService = {
     event: ConversationEvent,
     after?: AppendHook,
   ) => Promise<StoredEvent>
+  // The provider's own handle for this conversation, so a later turn can resume
+  // rather than start over.
+  rememberSession: (conversationId: Id, providerSessionId: string) => Promise<void>
 }
 
 const MAX_SEQUENCE_RETRIES = 5
@@ -141,6 +144,13 @@ export const createConversationService: Service<ConversationService> = app => {
 
   return {
     appendEvent,
+
+    rememberSession: async (conversationId, providerSessionId) => {
+      await app.$prisma.conversation.update({
+        where: { id: conversationId },
+        data: { providerSessionId },
+      })
+    },
 
     create: async ({ workspaceId, appId, createdById }) =>
       view(

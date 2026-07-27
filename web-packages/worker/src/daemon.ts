@@ -84,13 +84,15 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
           log(`claim failed: ${String(error)}`)
           return null
         })
-        if (!claimed?.conversation) break
+        // A claim without either is a server the worker cannot work with; stop
+        // rather than spin.
+        if (!claimed?.conversation || !claimed.provider) break
 
         running++
-        const { turn, conversation } = claimed
+        const { turn, conversation, provider } = claimed
         // Deliberately not awaited: the loop goes back for more work while this
         // turn runs, which is what the slots are for.
-        void runTurn(client, root, turn, conversation, log).finally(() => {
+        void runTurn(client, root, turn, conversation, provider, log).finally(() => {
           running--
           // Finishing frees both a slot and the conversation, so something that
           // was unclaimable a moment ago may be claimable now.

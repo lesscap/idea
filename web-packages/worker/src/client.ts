@@ -15,8 +15,19 @@ export type Conversation = {
   id: number
   workspaceId: number
   appId: number | null
-  agentKind: string
+  agentKind: string | null
+  // The provider's handle for this conversation. Null before the first turn, or
+  // after one had to start a new session.
+  providerSessionId: string | null
   title: string | null
+}
+
+// Endpoint and model, sent with the claim. Not secret — the credential is named
+// by `tokenEnv` and read from this process's own environment.
+export type ProviderConfig = {
+  baseUrl: string
+  model: string
+  tokenEnv: string
 }
 
 export type RegisterInput = {
@@ -29,7 +40,11 @@ export type RegisterInput = {
 
 export type WorkerClient = {
   register: (input: RegisterInput) => Promise<{ id: number; token: string; outcome: string }>
-  claim: () => Promise<{ turn: ClaimedTurn; conversation: Conversation | null } | null>
+  claim: () => Promise<{
+    turn: ClaimedTurn
+    conversation: Conversation | null
+    provider: ProviderConfig | null
+  } | null>
   events: (turnId: number, after?: number) => Promise<StoredEvent[]>
   emit: (turnId: number, event: ConversationEvent) => Promise<void>
   heartbeat: (turnId: number) => Promise<boolean>
@@ -90,10 +105,14 @@ export const createClient = (server: string, token?: string): WorkerClient => {
     },
 
     claim: async () => {
-      const data = await post<{ turn: ClaimedTurn | null; conversation: Conversation | null }>(
-        '/turns/claim',
-      )
-      return data.turn ? { turn: data.turn, conversation: data.conversation } : null
+      const data = await post<{
+        turn: ClaimedTurn | null
+        conversation: Conversation | null
+        provider: ProviderConfig | null
+      }>('/turns/claim')
+      return data.turn
+        ? { turn: data.turn, conversation: data.conversation, provider: data.provider }
+        : null
     },
 
     events: async (turnId, after) =>

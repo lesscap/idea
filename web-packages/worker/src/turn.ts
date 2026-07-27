@@ -1,51 +1,31 @@
+import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
 import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
-import { ensureRepo, ensureWorktree } from './worktree.ts'
+import { appLayout, ensureRepo, ensureWorktree } from './worktree.ts'
 
-// Running one turn: prepare the context, do the work, close the turn.
-//
-// The agent is not wired up in this slice. What is being settled here is
-// everything around it — that a claim leads to a prepared worktree, that the
-// lease is renewed while work is in progress, and that the turn is closed
-// exactly once whatever happens. Dropping a model call into `respond` below
-// changes this file and nothing else.
+// Running one turn: prepare the context, talk to the agent, close the turn.
 
 // How often to renew the lease. Well under the server's window, because the
-// point is to survive a single tool call that produces no other event for
-// minutes — without renewal the reaper takes the turn and runs it again.
+// point is to survive stretches that produce no events — without renewal the
+// reaper takes the turn and runs it a second time.
 const HEARTBEAT_MS = 20_000
 
-// Which repository backs a conversation. An app that has one of its own gets
-// it; a conversation attached to nothing gets the workspace's, so the agent
-// always has somewhere to work and there is one code path rather than two.
-const repoKey = (conversation: Conversation): string =>
-  conversation.appId === null
-    ? `workspace-${conversation.workspaceId}`
-    : `app-${conversation.appId}`
-
-export type TurnContext = {
-  worktree: string
-  conversation: Conversation
-}
-
-export const prepare = (root: string, conversation: Conversation): TurnContext => {
-  // Always the local path today: App carries no remote yet. When it grows one,
-  // the argument below becomes that field and the clone branch in ensureRepo —
-  // already written and reached by the tests — starts being used.
-  const repo = ensureRepo(root, repoKey(conversation), null)
-  return {
-    worktree: ensureWorktree(root, repo.path, conversation.id),
-    conversation,
-  }
-}
+// Which directory backs a conversation. An app it belongs to gets its own; one
+// that belongs to nothing yet works in a scratch area, because a conversation
+// often starts before the app it is about exists — someone says "I need expense
+// approval" and there is nothing to attach it to yet.
+const appKey = (conversation: Conversation): string =>
+  conversation.appId === null ? '_scratch' : `app-${conversation.appId}`
 
 export const runTurn = async (
   client: WorkerClient,
   root: string,
   claimed: ClaimedTurn,
   conversation: Conversation,
+  provider: ProviderConfig,
   log: (message: string) => void,
 ): Promise<void> => {
-  // Renewal runs for the whole turn, including the parts that emit nothing.
+  const controller = new AbortController()
+  // Runs for the whole turn, including the stretches that emit nothing.
   // Cleared in `finally` so a failure cannot leave a timer holding a lease on a
   // turn nobody is running.
   const renewing = setInterval(() => {
@@ -58,40 +38,51 @@ export const runTurn = async (
       sourceSequence: claimed.userEventSequence,
     })
 
-    const context = prepare(root, conversation)
-    log(`turn ${claimed.id} in ${context.worktree}`)
+    const key = appKey(conversation)
+    ensureRepo(root, key, null)
+    const worktree = ensureWorktree(root, key, conversation.id)
+    const { sessions } = appLayout(root, key)
 
-    await respond(client, claimed, context)
+    const events = await client.events(claimed.id)
+    const said = events.find(
+      e => e.sequence === claimed.userEventSequence && e.event.type === 'user_message',
+    )
+    const message = said?.event.type === 'user_message' ? said.event.text : ''
 
-    await client.emit(claimed.id, { type: 'turn.completed' })
+    // Resuming keeps the agent's own memory of the conversation. When there is
+    // nothing local to resume — another machine ran the earlier turns, or the
+    // directory was cleared — a fresh session with the transcript as context
+    // keeps the conversation unbroken for the person, which is what matters.
+    const resume = canResume(sessions, conversation.providerSessionId)
+      ? conversation.providerSessionId
+      : null
+    const prompt = resume ? message : asContext(events, message)
+    log(`turn ${claimed.id} in ${worktree} (${resume ? 'resuming' : 'new session'})`)
+
+    for await (const event of runClaude({
+      prompt,
+      worktree,
+      sessions,
+      provider,
+      resume,
+      signal: controller.signal,
+      log,
+    })) {
+      // Written as they arrive rather than collected and flushed: a turn that
+      // dies halfway should leave what it had already said, not nothing.
+      await client.emit(claimed.id, event)
+    }
+
     await client.finish(claimed.id, 'completed')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log(`turn ${claimed.id} failed: ${message}`)
-    // Recorded in the transcript before the turn is closed, so a failed turn
-    // reads as something that happened rather than as a conversation that
-    // simply stopped.
+    // Recorded before the turn closes, so a failure reads as something that
+    // happened rather than as a conversation that simply stopped.
     await client.emit(claimed.id, { type: 'turn.failed', error: { message } }).catch(() => {})
     await client.finish(claimed.id, 'failed').catch(() => {})
   } finally {
     clearInterval(renewing)
+    controller.abort()
   }
-}
-
-// The agent's reply. A placeholder that names itself — the transcript should not
-// imply a model was consulted when none was.
-const respond = async (
-  client: WorkerClient,
-  claimed: ClaimedTurn,
-  context: TurnContext,
-): Promise<void> => {
-  await client.emit(claimed.id, {
-    type: 'item.completed',
-    item: {
-      id: `placeholder-${claimed.id}`,
-      status: 'completed',
-      type: 'agent_message',
-      text: `The agent is not connected yet. Working directory: ${context.worktree}`,
-    },
-  })
 }
