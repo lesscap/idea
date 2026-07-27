@@ -1,6 +1,6 @@
-import { createLocale } from '../core/i18n.tsx'
-import { en } from './messages/en.ts'
-import { zh } from './messages/zh.ts'
+import { createLocale } from '../core/i18n'
+import { en } from './messages/en'
+import { zh } from './messages/zh'
 
 // Assembly: hands the mechanism in core/i18n.tsx this application's messages and
 // re-exports the result already bound to their types. Components import from
@@ -17,6 +17,12 @@ export const LOCALE_NAMES: Record<Locale, string> = {
 }
 
 export const { LocaleProvider, useLocale, useLocaleControl } = createLocale({ zh, en }, 'zh')
+
+// For the few places that pass translation around as a value rather than
+// calling it in place — the resource registry names its tabs from plain data,
+// so it takes the translator as an argument instead of being a hook.
+export type Translate = ReturnType<typeof useLocale>
+export type MessageId = Parameters<Translate>[0]
 
 const STORAGE_KEY = 'idea.locale'
 

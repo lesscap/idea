@@ -1,5 +1,5 @@
 import type { CreatedInvite, Id, Role, WorkspaceMember, WorkspaceMembership } from '@idea/shared'
-import { get, post } from '../../lib/request.ts'
+import { get, post } from '../../lib/request'
 
 export const listWorkspaces = (): Promise<WorkspaceMembership[]> =>
   get<WorkspaceMembership[]>('/workspaces')

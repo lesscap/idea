@@ -7,9 +7,9 @@
 //
 // The test for belonging here: could this be dropped into an entirely different
 // product unchanged? If not, it belongs to a feature.
-export { Avatar } from './avatar/index.tsx'
-export { Badge, type BadgeProps } from './badge/index.tsx'
-export { Button, type ButtonProps, buttonVariants } from './button/index.tsx'
+export { Avatar } from './avatar'
+export { Badge, type BadgeProps } from './badge'
+export { Button, type ButtonProps, buttonVariants } from './button'
 export {
   Card,
   CardContent,
@@ -17,7 +17,7 @@ export {
   CardFooter,
   CardHeader,
   CardTitle,
-} from './card/index.tsx'
+} from './card'
 export {
   Dialog,
   DialogClose,
@@ -27,7 +27,7 @@ export {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from './dialog/index.tsx'
+} from './dialog'
 export {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +38,6 @@ export {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from './dropdown-menu/index.tsx'
-export { Input } from './input/index.tsx'
-export { Label } from './label/index.tsx'
+} from './dropdown-menu'
+export { Input } from './input'
+export { Label } from './label'

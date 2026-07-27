@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { BrowserRouter, useRoutes } from 'react-router-dom'
-import { SessionStoreProvider } from '../core/session/store.tsx'
-import { useLoadSession } from '../core/session/use-session.ts'
-import { detectLocale, LocaleProvider } from '../i18n/index.tsx'
-import { routes } from './routes.tsx'
+import { SessionStoreProvider } from '../core/session/store'
+import { useLoadSession } from '../core/session/use-session'
+import { detectLocale, LocaleProvider } from '../i18n'
+import { routes } from './routes'
 
 // Resolves the session once, before anything decides whether to redirect.
 // Guards render nothing while status is 'loading', so this is what unblocks the

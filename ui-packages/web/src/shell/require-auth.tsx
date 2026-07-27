@@ -4,9 +4,9 @@ import {
   useCurrentUser,
   useCurrentWorkspaceId,
   useSessionStatus,
-} from '../core/session/use-session.ts'
-import { useLocale } from '../i18n/index.tsx'
-import { Card, CardDescription, CardHeader, CardTitle } from '../ui/index.ts'
+} from '../core/session/use-session'
+import { useLocale } from '../i18n'
+import { Card, CardDescription, CardHeader, CardTitle } from '../ui'
 
 // Guards everything behind sign-in.
 //

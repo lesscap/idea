@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Badge } from '../badge/index.tsx'
-import { Button } from '../button/index.tsx'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../card/index.tsx'
+import { Badge } from '../badge'
+import { Button } from '../button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../card'
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../dialog/index.tsx'
+} from '../dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,9 +18,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../dropdown-menu/index.tsx'
-import { Input } from '../input/index.tsx'
-import { Label } from '../label/index.tsx'
+} from '../dropdown-menu'
+import { Input } from '../input'
+import { Label } from '../label'
 
 // A gallery of every primitive in its full state matrix. Running the real app
 // only ever shows the states that application happens to use, so a broken

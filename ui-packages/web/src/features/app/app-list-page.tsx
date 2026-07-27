@@ -1,19 +1,11 @@
 import type { App } from '@idea/shared'
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useCurrentWorkspaceId } from '../../core/session/use-session.ts'
-import { useLocale, useLocaleControl } from '../../i18n/index.tsx'
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../ui/index.ts'
-import { listApps } from './api.ts'
-import { CreateAppDialog } from './create-app-dialog.tsx'
+import { useCurrentWorkspaceId } from '../../core/session/use-session'
+import { useLocale, useLocaleControl } from '../../i18n'
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui'
+import { listApps } from './api'
+import { CreateAppDialog } from './create-app-dialog'
 
 export const AppListPage = () => {
   const __ = useLocale()
@@ -46,7 +38,10 @@ export const AppListPage = () => {
     )
 
   return (
-    <div className="flex flex-col gap-6">
+    // Its own padding: the shell no longer wraps content in a padded <main>,
+    // because not every resource wants the same inset — a conversation-shaped
+    // view wants none at all.
+    <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{__('app.heading')}</h1>
         <Button data-testid="app-create" onClick={() => setCreating(true)}>

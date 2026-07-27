@@ -1,0 +1,105 @@
+import { Boxes, FileText, type LucideIcon, Settings, Users } from 'lucide-react'
+import type { ComponentType } from 'react'
+import { matchPath } from 'react-router-dom'
+import { AppListPage } from '../features/app/app-list-page'
+import type { Translate } from '../i18n'
+import { Placeholder } from './content/placeholder'
+
+// Every resource the main area can show, in one place. Adding a kind is one
+// entry plus one component — this supplies the route pattern, the tab label and
+// icon, and the content, so no second copy of a path string exists to drift out
+// of step.
+//
+// TWO RULES for anything registered here:
+//
+//  1. Content takes its params as props and must NOT read them from the router.
+//     Every open tab stays mounted (see ./content), so a background tab calling
+//     useParams() receives the *active* tab's params — a wrong value, silently,
+//     with nothing throwing.
+//
+//  2. Content must be a stable module-level component. An inline
+//     `Content: () => <X/>` is a fresh component type on every render, which
+//     remounts the subtree and throws away exactly the state that keeping tabs
+//     mounted was meant to preserve.
+
+export type ResourceParams = Record<string, string | undefined>
+
+type ResourceDef = {
+  /** Route pattern, leading slash included: '/requirements/:code'. */
+  path: string
+  icon: LucideIcon
+  /** Tab and nav label. Takes the translator as an argument because this is data, not a hook. */
+  title: (__: Translate, params: ResourceParams) => string
+  Content: ComponentType<{ params: ResourceParams }>
+}
+
+const RequirementList = () => <Placeholder titleKey="resource.requirements" />
+
+const RequirementDetail = ({ params }: { params: ResourceParams }) => (
+  <Placeholder titleKey="resource.requirements" detail={params.code} />
+)
+
+const ConversationList = () => <Placeholder titleKey="resource.conversations" />
+
+const MemberList = () => <Placeholder titleKey="resource.members" />
+
+const SettingsPage = () => <Placeholder titleKey="resource.settings" />
+
+export const RESOURCES = {
+  requirements: {
+    path: '/requirements',
+    icon: FileText,
+    title: __ => __('resource.requirements'),
+    Content: RequirementList,
+  },
+  requirement: {
+    path: '/requirements/:code',
+    icon: FileText,
+    // The code is the label. A real title has to be fetched, and a tab strip
+    // whose labels change width after loading is worse than one that reads
+    // "R-1" — which is what people say out loud anyway.
+    title: (_, params) => params.code ?? '',
+    Content: RequirementDetail,
+  },
+  apps: {
+    path: '/apps',
+    icon: Boxes,
+    title: __ => __('resource.apps'),
+    Content: AppListPage,
+  },
+  conversations: {
+    path: '/conversations',
+    icon: FileText,
+    title: __ => __('resource.conversations'),
+    Content: ConversationList,
+  },
+  members: {
+    path: '/members',
+    icon: Users,
+    title: __ => __('resource.members'),
+    Content: MemberList,
+  },
+  settings: {
+    path: '/settings',
+    icon: Settings,
+    title: __ => __('resource.settings'),
+    Content: SettingsPage,
+  },
+} satisfies Record<string, ResourceDef>
+
+export type ResourceKind = keyof typeof RESOURCES
+
+export type ResourceMatch = {
+  kind: ResourceKind
+  def: ResourceDef
+  params: ResourceParams
+}
+
+// Reuses react-router's own matcher rather than hand-written patterns, so a ref
+// and a route resolve by identical rules. flatMap over the entries keeps this a
+// lookup instead of a growing chain of conditionals.
+export const matchResource = (ref: string): ResourceMatch | null =>
+  Object.entries(RESOURCES).flatMap(([kind, def]) => {
+    const matched = matchPath(def.path, `/${ref}`)
+    return matched ? [{ kind: kind as ResourceKind, def, params: matched.params }] : []
+  })[0] ?? null

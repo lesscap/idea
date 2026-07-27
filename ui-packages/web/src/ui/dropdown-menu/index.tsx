@@ -1,6 +1,12 @@
 import * as Primitive from '@radix-ui/react-dropdown-menu'
 import type { ComponentProps } from 'react'
-import { cn } from '../../lib/cn.ts'
+import { cn } from '../../lib/cn'
+
+// Icons inside menu rows carry the same constraint Button applies. Without it
+// lucide falls back to its own 24px default next to 14px text, which is what
+// every menu here looked like until now. It belongs on the primitive rather than
+// on each call site — the alternative is remembering it at every use, forever.
+const ROW_ICON = '[&_svg]:size-4 [&_svg]:shrink-0'
 
 export const DropdownMenu = Primitive.Root
 export const DropdownMenuTrigger = Primitive.Trigger
@@ -31,6 +37,7 @@ export const DropdownMenuItem = ({
     className={cn(
       'relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none',
       'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      ROW_ICON,
       className,
     )}
     {...props}
@@ -41,7 +48,10 @@ export const DropdownMenuLabel = ({
   className,
   ...props
 }: ComponentProps<typeof Primitive.Label>) => (
-  <Primitive.Label className={cn('px-2 py-1.5 text-sm font-semibold', className)} {...props} />
+  <Primitive.Label
+    className={cn('flex items-center gap-2 px-2 py-1.5 text-sm font-semibold', ROW_ICON, className)}
+    {...props}
+  />
 )
 
 export const DropdownMenuSeparator = ({
@@ -61,6 +71,7 @@ export const DropdownMenuSubTrigger = ({
     className={cn(
       'flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none',
       'focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent',
+      ROW_ICON,
       className,
     )}
     {...props}

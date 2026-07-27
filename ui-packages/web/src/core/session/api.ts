@@ -1,5 +1,5 @@
 import type { CurrentUser, Id, Role } from '@idea/shared'
-import { del, get, patch, post } from '../../lib/request.ts'
+import { del, get, patch, post } from '../../lib/request'
 
 // The session resource: POST creates it, GET reads it, PATCH changes the
 // selected workspace, DELETE ends it.

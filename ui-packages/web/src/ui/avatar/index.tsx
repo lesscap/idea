@@ -1,4 +1,4 @@
-import { cn } from '../../lib/cn.ts'
+import { cn } from '../../lib/cn'
 
 // Text avatar: an initial on a colour derived from the seed.
 //

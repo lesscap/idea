@@ -50,6 +50,31 @@ export const zh = {
     usernameTaken: '该用户名已被占用',
   },
 
+  // Names of the things the main area can show. Keyed by resource kind, so the
+  // registry in shell/resources can label a tab from data alone.
+  resource: {
+    requirements: '需求',
+    apps: '应用',
+    conversations: '会话',
+    members: '成员',
+    settings: '设置',
+  },
+
+  shell: {
+    placeholder: '这块还没做，等模型定下来再填。',
+    emptyMain: '从左侧选一个开始',
+    unknownResource: '找不到「{0}」',
+    closeTab: '关闭标签页',
+    collapseSide: '收起侧栏',
+    expandSide: '展开侧栏',
+    collapseConversation: '收起会话',
+    expandConversation: '展开会话',
+    newConversation: '新会话',
+    noConversation: '选一个会话，或新建一个',
+    conversationSoon: '对话还没接上',
+    composerSoon: '输入区待接入',
+  },
+
   workspace: {
     noneTitle: '你还不属于任何工作空间',
     noneHint: '请联系管理员邀请你加入。收到邀请链接后打开即可进入。',

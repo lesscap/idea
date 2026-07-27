@@ -1,5 +1,5 @@
 import type { App, Id, Paged } from '@idea/shared'
-import { get, patch, post } from '../../lib/request.ts'
+import { get, patch, post } from '../../lib/request'
 
 // No workspaceId anywhere: these all act on the workspace currently selected in
 // the session, and the server re-checks membership on each call.

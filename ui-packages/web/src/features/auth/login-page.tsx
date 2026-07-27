@@ -1,9 +1,9 @@
 import { type FormEvent, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { useCurrentUser, useSignIn } from '../../core/session/use-session.ts'
-import { useLocale } from '../../i18n/index.tsx'
-import { LocaleSwitch } from '../../shell/locale-switch.tsx'
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../ui/index.ts'
+import { useCurrentUser, useSignIn } from '../../core/session/use-session'
+import { useLocale } from '../../i18n'
+import { LocaleSwitch } from '../../parts/locale-switch'
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../ui'
 
 export const LoginPage = () => {
   const __ = useLocale()

@@ -1,4 +1,4 @@
-import type { zh } from './zh.ts'
+import type { zh } from './zh'
 
 // Typed against zh, so omitting a message or misspelling a key fails to
 // compile. No reconciliation script needed — the type checker is the check.
@@ -49,6 +49,29 @@ export const en: typeof zh = {
     processing: 'Working…',
     acceptFailed: 'Could not accept the invitation',
     usernameTaken: 'That username is taken',
+  },
+
+  resource: {
+    requirements: 'Requirements',
+    apps: 'Apps',
+    conversations: 'Conversations',
+    members: 'Members',
+    settings: 'Settings',
+  },
+
+  shell: {
+    placeholder: 'Not built yet — waiting on the model behind it.',
+    emptyMain: 'Pick something from the left to begin',
+    unknownResource: 'No such thing as “{0}”',
+    closeTab: 'Close tab',
+    collapseSide: 'Collapse sidebar',
+    expandSide: 'Expand sidebar',
+    collapseConversation: 'Collapse conversation',
+    expandConversation: 'Expand conversation',
+    newConversation: 'New conversation',
+    noConversation: 'Pick a conversation, or start one',
+    conversationSoon: 'Conversations are not wired up yet',
+    composerSoon: 'Composer to come',
   },
 
   workspace: {

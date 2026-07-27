@@ -1,8 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useCurrentUser, useRefreshSession } from '../../core/session/use-session.ts'
-import { useLocale } from '../../i18n/index.tsx'
-import { useErrorMessage } from '../../i18n/use-error-message.ts'
+import { useCurrentUser, useRefreshSession } from '../../core/session/use-session'
+import { useLocale } from '../../i18n'
+import { useErrorMessage } from '../../i18n/use-error-message'
 import {
   Button,
   Card,
@@ -12,8 +12,8 @@ import {
   CardTitle,
   Input,
   Label,
-} from '../../ui/index.ts'
-import { acceptInvite, previewInvite } from './api.ts'
+} from '../../ui'
+import { acceptInvite, previewInvite } from './api'
 
 type Preview = { workspaceName: string; invitedByName: string }
 

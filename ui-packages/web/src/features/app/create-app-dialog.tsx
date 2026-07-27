@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react'
-import { useLocale } from '../../i18n/index.tsx'
-import { useErrorMessage } from '../../i18n/use-error-message.ts'
+import { useLocale } from '../../i18n'
+import { useErrorMessage } from '../../i18n/use-error-message'
 import {
   Button,
   Dialog,
@@ -10,8 +10,8 @@ import {
   DialogTitle,
   Input,
   Label,
-} from '../../ui/index.ts'
-import { createApp } from './api.ts'
+} from '../../ui'
+import { createApp } from './api'
 
 type Props = {
   open: boolean

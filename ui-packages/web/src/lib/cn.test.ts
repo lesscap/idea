@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cn } from './cn.ts'
+import { cn } from './cn'
 
 // The only piece of real logic in the primitive layer, and the one whose failure
 // is hardest to recognise: without the tailwind-merge step both classes survive

@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { RequestError } from '../lib/request.ts'
-import { useLocale } from './index.tsx'
+import { RequestError } from '../lib/request'
+import { useLocale } from '.'
 
 // Turns a thrown request failure into something worth showing a person.
 //

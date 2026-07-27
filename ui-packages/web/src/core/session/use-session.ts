@@ -1,8 +1,8 @@
 import type { CurrentUser, Id, Role } from '@idea/shared'
 import { useCallback } from 'react'
-import { isUnauthorized } from '../../lib/request.ts'
-import * as api from './api.ts'
-import { type SessionStatus, useSessionStore } from './store.tsx'
+import { isUnauthorized } from '../../lib/request'
+import * as api from './api'
+import { type SessionStatus, useSessionStore } from './store'
 
 // Accessors and actions for the session store. Named hooks rather than raw
 // `useSessionStore(s => s.user)` at every call site: a typo in an inline

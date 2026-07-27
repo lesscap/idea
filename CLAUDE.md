@@ -59,6 +59,52 @@ session cookie is httpOnly, so signing out goes through the API
 (`fetch('/api/web/session', { method: 'DELETE' })`) rather than hunting for a
 menu item.
 
+## Frontend layers
+
+`ui-packages/web/src` is layered, and each name states its relationship. A layer
+is defined by what it may *import*, not by what it happens to contain.
+
+```clojure
+;; May-import graph. Each set is complete — transitivity is not implied, so
+;; adding an edge is always a deliberate act rather than a side effect.
+(def may-import
+  {:ui       #{}                                   ; generic React primitives: button, input, dialog
+   :core     #{:ui}                                ; mechanism: the i18n engine, the session store
+   :i18n     #{:core}                              ; message bundles + assembly
+   :parts    #{:ui :core :i18n}                    ; shared components/hooks that know this product
+   :features #{:ui :core :i18n :parts}             ; leaf capabilities, each owning its own API calls
+   :shell    #{:ui :core :i18n :parts :features}}) ; composition: layout, routing, resource registry
+
+;; The one-way rule is a property of that map, not a separate convention:
+(assert (not (contains? (may-import :features) :shell)))
+```
+
+So a feature that needs to reach back into the shell is telling you the shell
+should be passing it a prop. `features/conversation/conversation-list.tsx` takes
+`conversationId` and `onSelect` rather than the shell's `Workspace` object for
+exactly this reason.
+
+`ui/` versus `parts/` is the line worth guarding, because it erodes quietly — a
+component picks up one business import and nothing complains. Keep the test
+mechanical rather than a judgement call:
+
+```clojure
+(defn belongs-in-ui? [component]
+  (empty? (intersection (imports component) #{:core :i18n :shared})))
+
+;; A dropdown is :ui. A language switcher that saves the choice to your account
+;; reaches :core, so it is :parts.
+```
+
+## Documentation style
+
+Prose for reasoning — why a decision was made, what it cost, what it rules out.
+
+Clojure for anything with structure or logic: dependency graphs, matching rules,
+state machines, decision flows. An s-expression states a rule once and exactly,
+where a table or a paragraph only depicts it and leaves the reader to reconstruct
+what it means. It is notation, not code to be run — nothing compiles it.
+
 ## Language
 
 Chinese in conversation and UI copy. English in code, comments, documentation,

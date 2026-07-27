@@ -1,5 +1,5 @@
 import type { Id, InvitePreview } from '@idea/shared'
-import { get, post } from '../../lib/request.ts'
+import { get, post } from '../../lib/request'
 
 // Invite endpoints, local to this leaf feature. Both are public — the token in
 // the URL is the credential, since the person using it has no account yet.

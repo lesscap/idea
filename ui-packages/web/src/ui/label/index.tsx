@@ -1,6 +1,6 @@
 import * as LabelPrimitive from '@radix-ui/react-label'
 import type { ComponentProps } from 'react'
-import { cn } from '../../lib/cn.ts'
+import { cn } from '../../lib/cn'
 
 // Radix's Label rather than a bare <label>: it forwards clicks to the associated
 // control even when the control is a custom component, which a plain htmlFor

@@ -1,7 +1,7 @@
 import type { Id } from '@idea/shared'
 import { useState } from 'react'
-import { useLocale } from '../../i18n/index.tsx'
-import { useErrorMessage } from '../../i18n/use-error-message.ts'
+import { useLocale } from '../../i18n'
+import { useErrorMessage } from '../../i18n/use-error-message'
 import {
   Button,
   Dialog,
@@ -11,8 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-} from '../../ui/index.ts'
-import { createInvite } from './api.ts'
+} from '../../ui'
+import { createInvite } from './api'
 
 type Props = {
   workspaceId: Id

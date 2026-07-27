@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { cn } from '../../lib/cn.ts'
+import { cn } from '../../lib/cn'
 
 export const Input = ({ className, type, ...props }: ComponentProps<'input'>) => (
   <input
