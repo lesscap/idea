@@ -1,15 +1,15 @@
+import type { WorkspaceMembership } from '@idea/shared'
+import { Check, ChevronsUpDown } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useChooseWorkspace, useCurrentWorkspaceId } from '../core/session/use-session.ts'
+import { listWorkspaces } from '../features/workspace/api.ts'
 import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@idea/design'
-import type { WorkspaceMembership } from '@idea/shared'
-import { Check, ChevronsUpDown } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useChooseWorkspace, useCurrentWorkspaceId } from '../core/session/use-session.ts'
-import { listWorkspaces } from '../features/workspace/api.ts'
+} from '../ui/index.ts'
 
 // Lives in the shell, not in the workspace feature: it reads core session state
 // and drives navigation for every other feature, which is exactly the kind of

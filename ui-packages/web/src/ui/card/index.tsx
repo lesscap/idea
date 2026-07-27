@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import { cn } from '../lib/cn.ts'
+import { cn } from '../../lib/cn.ts'
 
 export const Card = ({ className, ...props }: ComponentProps<'div'>) => (
   <div

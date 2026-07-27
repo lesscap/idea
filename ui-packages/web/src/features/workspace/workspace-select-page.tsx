@@ -1,8 +1,15 @@
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@idea/design'
 import type { WorkspaceMembership } from '@idea/shared'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChooseWorkspace } from '../../core/session/use-session.ts'
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../ui/index.ts'
 import { listWorkspaces } from './api.ts'
 
 // Shown only when a user belongs to more than one workspace — login preselects

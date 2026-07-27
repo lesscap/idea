@@ -1,3 +1,8 @@
+import { ChevronDown, LogOut, UserPlus } from 'lucide-react'
+import { useState } from 'react'
+import { Outlet, useNavigate } from 'react-router-dom'
+import { useCurrentUser, useCurrentWorkspaceId, useSignOut } from '../core/session/use-session.ts'
+import { InviteDialog } from '../features/workspace/invite-dialog.tsx'
 import {
   Button,
   DropdownMenu,
@@ -6,12 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@idea/design'
-import { ChevronDown, LogOut, UserPlus } from 'lucide-react'
-import { useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
-import { useCurrentUser, useCurrentWorkspaceId, useSignOut } from '../core/session/use-session.ts'
-import { InviteDialog } from '../features/workspace/invite-dialog.tsx'
+} from '../ui/index.ts'
 import { WorkspaceSwitcher } from './workspace-switcher.tsx'
 
 // The signed-in frame. Composition across features happens here — the workspace

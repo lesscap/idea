@@ -1,3 +1,7 @@
+import type { App, AppStatus } from '@idea/shared'
+import { Plus } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useCurrentWorkspaceId } from '../../core/session/use-session.ts'
 import {
   Badge,
   Button,
@@ -6,11 +10,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@idea/design'
-import type { App, AppStatus } from '@idea/shared'
-import { Plus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useCurrentWorkspaceId } from '../../core/session/use-session.ts'
+} from '../../ui/index.ts'
 import { listApps } from './api.ts'
 import { CreateAppDialog } from './create-app-dialog.tsx'
 

@@ -1,7 +1,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import type { ComponentProps } from 'react'
-import { cn } from '../lib/cn.ts'
+import { cn } from '../../lib/cn.ts'
 
 // Radix handles what is tedious and easy to get subtly wrong by hand: focus is
 // trapped inside the dialog, Escape closes it, focus returns to whatever opened

@@ -1,3 +1,7 @@
+import { type FormEvent, useState } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
+import { useCurrentUser, useSignIn } from '../../core/session/use-session.ts'
+import { RequestError } from '../../lib/request.ts'
 import {
   Button,
   Card,
@@ -7,11 +11,7 @@ import {
   CardTitle,
   Input,
   Label,
-} from '@idea/design'
-import { type FormEvent, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
-import { useCurrentUser, useSignIn } from '../../core/session/use-session.ts'
-import { RequestError } from '../../lib/request.ts'
+} from '../../ui/index.ts'
 
 export const LoginPage = () => {
   const user = useCurrentUser()

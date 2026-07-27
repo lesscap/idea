@@ -1,3 +1,7 @@
+import { type FormEvent, useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useCurrentUser, useRefreshSession } from '../../core/session/use-session.ts'
+import { RequestError } from '../../lib/request.ts'
 import {
   Button,
   Card,
@@ -7,11 +11,7 @@ import {
   CardTitle,
   Input,
   Label,
-} from '@idea/design'
-import { type FormEvent, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useCurrentUser, useRefreshSession } from '../../core/session/use-session.ts'
-import { RequestError } from '../../lib/request.ts'
+} from '../../ui/index.ts'
 import { acceptInvite, previewInvite } from './api.ts'
 
 type Preview = { workspaceName: string; invitedByName: string }

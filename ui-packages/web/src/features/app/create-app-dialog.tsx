@@ -1,3 +1,5 @@
+import { type FormEvent, useState } from 'react'
+import { RequestError } from '../../lib/request.ts'
 import {
   Button,
   Dialog,
@@ -8,9 +10,7 @@ import {
   DialogTitle,
   Input,
   Label,
-} from '@idea/design'
-import { type FormEvent, useState } from 'react'
-import { RequestError } from '../../lib/request.ts'
+} from '../../ui/index.ts'
 import { createApp } from './api.ts'
 
 type Props = {

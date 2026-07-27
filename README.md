@@ -88,18 +88,16 @@ packages/shared/        @idea/shared   cross-runtime contracts: envelope, paging
 web-packages/core/      @idea/core     backend kernel: prisma schema/client, crypto, resource scope
 web-packages/server/    @idea/server   Hono API
 web-packages/worker/    @idea/worker   agent worker daemon
-ui-packages/design/     @idea/design   pure UI: shadcn components + design tokens
 ui-packages/web/        @idea/web      React SPA
 ```
 
-Dependencies run one way. Nothing enforces this, but the two marked edges are
-deliberate — read the reason before changing them.
+Dependencies run one way. Nothing enforces this, but the marked edge is
+deliberate — read the reason before changing it.
 
 ```
 shared ← core ← server
 shared ← core ← (future task runner)
 shared ← worker              ← does NOT depend on core
-design ← web                 ← depends on react only
 shared ← web
 ```
 
@@ -108,33 +106,83 @@ oversight: it may run on a machine outside the network perimeter, and shipping
 database credentials there would be wrong. It talks to the server over HTTP only.
 Before adding data access, ask why it cannot go through the API.
 
-**The design package does not depend on shared and knows no domain types.** Once
-a component layer touches transport contracts, every backend change ripples into
-it and the package stops being reusable anywhere else. Components that need
-structured data take primitive props from the caller.
+`ui-packages/` holds one package today. The grouping stays because it is part of
+the by-runtime-target split, and a second frontend would land there.
 
 ## Frontend structure
 
 ```
 ui-packages/web/src/
+├── ui/              UI primitives — one directory per component
+│   ├── index.ts     the single entry point the rest of the app imports from
+│   ├── button/index.tsx  input/index.tsx  label/index.tsx  card/index.tsx
+│   ├── badge/index.tsx   dialog/index.tsx  dropdown-menu/index.tsx
+│   └── preview/index.tsx component gallery, mounted at /dev/ui
 ├── core/            application-level infrastructure
 │   └── session/     the session store (state + provider + hooks) and its API
-├── features/        leaf features — they consume core, never declare shared state
+├── features/        leaf features — they consume the layers above, never declare shared state
 │   ├── auth/        login page, invite acceptance
 │   ├── workspace/   workspace picker, invite dialog
 │   └── app/         app list, create dialog
 ├── shell/           routing, auth guards, layout, cross-feature composition
-└── lib/             non-React utilities (the fetch wrapper)
+├── lib/             non-React utilities (fetch wrapper, cn)
+└── styles.css       Tailwind entry, design tokens, @theme bindings
 ```
 
 Feature-first rather than layer-first: with layers, adding one feature means
 touching five directories and no single place shows what that feature contains.
 
-`features/` are **leaves**. Shared state lives in `core/`, cross-feature
-composition happens in `shell/`, and features never import each other's internals.
+Each layer answers one question about what belongs in it:
+
+| Directory | Test for belonging |
+|---|---|
+| `ui/` | **could this drop into an entirely different product unchanged?** |
+| `lib/` | does not import react |
+| `core/` | shared across features, with a definite moment at which it goes stale |
+| `features/` | consumes the layers above and declares nothing shared |
+| `shell/` | two features need composing, so they get composed here |
+
+**Nothing under `ui/` may know a domain type** — no `@idea/shared`, no `core/`,
+no `features/`. This used to be enforced by a package boundary (`@idea/design`);
+that package was merged back in once it became clear there was only ever going to
+be one consumer, so the rule now rests on convention plus a grep. A component
+that needs structured data takes primitive props from its caller.
+
+**One directory per component**, not one file. Components grow extra files — a
+variant, an internal sub-component, a test — and a directory absorbs that without
+any caller changing its import. `card` and `dialog` already export five or six
+named components each.
 
 The shell directory is called `shell/`, not `app/`, because `App` is a domain
 entity here — two meanings of "app" in import paths would be a permanent tax.
+
+### Naming
+
+Directories and files are kebab-case, in exactly two shapes: `a-b-c/` and
+`a-b-c.tsx`. `index.ts` / `index.tsx` is the one exception — an entry marker,
+not a name.
+
+Worth stating because React component files invite PascalCase to match the
+component name (`Button.tsx`), and a case-insensitive filesystem hides that drift
+on macOS right up until a Linux CI box rejects it.
+
+### Component preview
+
+`/dev/ui` renders every primitive in its full state matrix — all Button variants
+and sizes including disabled, Input in normal/invalid/disabled, Dialog and
+DropdownMenu open. Running the real app only exercises the states that app
+happens to use, so a broken `disabled` style goes unnoticed until someone reaches
+for it.
+
+It also gives a login-free place to check Dialog keyboard behaviour after a
+change: Escape closes, Tab stays trapped inside, focus returns to the trigger.
+That behaviour is why these are built on Radix rather than by hand.
+
+It ships in production as well. "dev" in the path names the audience, not the
+environment: the page reads no data and exposes nothing, and being reachable on a
+deployed build is what lets you check how that build actually renders. Roughly
+4 kB, which is not worth the environment-conditional machinery needed to strip
+it.
 
 ## State (zustand)
 

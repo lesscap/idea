@@ -1,3 +1,6 @@
+import type { Id } from '@idea/shared'
+import { useState } from 'react'
+import { RequestError } from '../../lib/request.ts'
 import {
   Button,
   Dialog,
@@ -7,10 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-} from '@idea/design'
-import type { Id } from '@idea/shared'
-import { useState } from 'react'
-import { RequestError } from '../../lib/request.ts'
+} from '../../ui/index.ts'
 import { createInvite } from './api.ts'
 
 type Props = {
