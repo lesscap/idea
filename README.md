@@ -79,6 +79,75 @@ shared ← web
 
 **design 不依赖 shared，不认识任何领域类型。** 组件层一旦沾上传输契约，后端契约一变就震到组件层，而且这个包立刻失去复用可能。需要结构化数据的组件，由调用方把数据拆成基础 props 传进来。
 
+## 接口规范
+
+契约定义在 `@idea/shared`（纯数据形状，与传输无关），HTTP 状态码定义在 `server/src/http.ts`（状态码是 HTTP 的事，不该污染契约包）。
+
+**成功**
+
+```json
+{ "success": true, "data": { } }
+```
+
+**失败**——扁平结构，不套 `error` 对象：
+
+```json
+{ "success": false, "code": "not_found", "message": "requirement 12 不存在" }
+```
+
+判别式联合，`success` 一个字段就能让编译器确定哪一半存在，调用方不需要到处 `data?.`：
+
+```ts
+const res = await fetch(...).then(r => r.json()) as ApiResponse<Foo>
+if (!isOk(res)) return handle(res.code)   // 这里 res.code 有类型
+use(res.data)                              // 这里 res.data 有类型
+```
+
+`code` 是给程序分支用的稳定标识，`message` 是给人看的、可以随便改。
+
+**分页**——分页信息在 `data` 里面，不在旁边另开 `meta`：
+
+```json
+{
+  "success": true,
+  "data": { "items": [], "total": 128, "page": 2, "pageSize": 20 }
+}
+```
+
+这样分页响应就是普通的 `ApiResponse<Paged<T>>`，`ok()` / `isOk()` / 前端请求封装全部不用改。另开 `meta` 会逼每个消费方为了一组字段去认识第二种信封形状。
+
+`totalPages` 是**派生**的（`totalPages(paged)`），不落字段——落了就多一个会跟 `total`、`pageSize` 打架的东西。
+
+查询参数用 `parsePageQuery(c.req.query())`：**越界钳制而不报错**。`?pageSize=999999` 返回上限 100 而不是 400，`?page=0` 返回第 1 页。理由是列表接口因为要多了就报错很不友好；响应里回显实际生效的 `pageSize`，客户端能看出被钳过。这同时是安全边界——不钳的话 `pageSize` 直接变成 SQL 的 LIMIT。
+
+```ts
+const query = parsePageQuery(c.req.query())
+const { offset, limit } = toOffset(query)
+const [items, total] = await Promise.all([
+  app.prisma.foo.findMany({ skip: offset, take: limit }),
+  app.prisma.foo.count(),
+])
+return sendOk(c, paged(items, total, query))
+```
+
+**错误 code 与状态码**——一个 code 对应一个状态码，成对定义在工厂函数里，避免同一个 `not_found` 在这个 controller 是 404、在那个是 400：
+
+| 工厂 | HTTP | code |
+|---|---|---|
+| `badRequest(c, msg)` | 400 | `bad_request` |
+| `unauthorized(c)` | 401 | `unauthorized` |
+| `forbidden(c)` | 403 | `forbidden` |
+| `notFound(c)` | 404 | `not_found` |
+| `conflict(c, msg)` | 409 | `conflict` |
+| `unprocessable(c, msg)` | 422 | `unprocessable` |
+| `internal(c)` | 500 | `internal` |
+
+领域专有的失败用 `failWith(c, status, code, message)`，客户端可以按自定义 code 分支，但仍然走同一个信封。
+
+**没有例外出口**：`createApp` 注册了 `notFound` 与 `onError`，未匹配路由和未捕获异常也返回信封，不会漏出框架的纯文本 `404 Not Found`。`onError` 只把堆栈写日志、给客户端通用消息——未捕获异常经常来自数据库驱动，那些消息里带连接串。
+
+controller 一律走 `http.ts` 的 helper，不直接 `c.json`。
+
 ## worker 进程模型
 
 **一台机器一个守护进程**，按能力注册、跨项目复用。
