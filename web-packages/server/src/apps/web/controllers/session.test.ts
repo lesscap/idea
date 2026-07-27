@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ServiceApplication } from '../../../types.ts'
-import { json, mountController } from '../test-support.ts'
+import { json, mountController, okData } from '../test-support.ts'
 import { SessionController } from './session.ts'
 
 const currentUser = {
@@ -27,6 +27,8 @@ const services = (over: Partial<ServiceApplication> = {}): Partial<ServiceApplic
     findByUsername: async () => null,
     isPlatformAdmin: async () => false,
     updatePasswordHash: async () => {},
+    getLocale: async () => null,
+    setLocale: async () => {},
   },
   $workspace: workspaceStub(),
   ...over,
@@ -102,7 +104,7 @@ describe('GET /session', () => {
     // offer at all, and it changes exactly when workspaceId does.
     expect(await res.json()).toEqual({
       success: true,
-      data: { user: currentUser, workspaceId: 3, role: null },
+      data: { user: currentUser, workspaceId: 3, role: null, locale: null },
     })
   })
 })
@@ -127,6 +129,31 @@ describe('PATCH /session (switch workspace)', () => {
     expect(rememberWorkspace).not.toHaveBeenCalled()
   })
 
+  // Language and workspace patch the same resource, so changing one must not
+  // disturb the other — switching language should never move someone out of the
+  // workspace they are in.
+  it('saves the language without touching the workspace', async () => {
+    const setLocale = vi.fn(async () => {})
+    const rememberWorkspace = vi.fn(async () => {})
+    const app = mountController(
+      SessionController,
+      {
+        ...services(),
+        $user: { ...(services().$user as object), setLocale, getLocale: async () => 'en' } as never,
+        $workspace: workspaceStub({ rememberWorkspace }),
+      },
+      { userId: 1, workspaceId: 7 },
+    )
+
+    const res = await app.request('/', { ...json({ locale: 'en' }), method: 'PATCH' })
+
+    expect(res.status).toBe(200)
+    expect(setLocale).toHaveBeenCalledWith(1, 'en')
+    // Still in workspace 7, and nothing was re-remembered.
+    expect(await okData<{ workspaceId: number }>(res)).toMatchObject({ workspaceId: 7 })
+    expect(rememberWorkspace).not.toHaveBeenCalled()
+  })
+
   it('accepts a workspace the user belongs to and remembers it', async () => {
     const rememberWorkspace = vi.fn(async () => {})
     const app = mountController(
@@ -141,7 +168,10 @@ describe('PATCH /session (switch workspace)', () => {
     const res = await app.request('/', { ...json({ workspaceId: 5 }), method: 'PATCH' })
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { workspaceId: 5, role: 'member' } })
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { workspaceId: 5, role: 'member', locale: null },
+    })
     // Switching IS the statement "start me here next time".
     expect(rememberWorkspace).toHaveBeenCalledWith(1, 5)
   })

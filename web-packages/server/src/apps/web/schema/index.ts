@@ -36,9 +36,17 @@ export const LoginBody = z.object({
   password: z.string().min(1).max(200),
 })
 
-export const SelectWorkspaceBody = z.object({
-  workspaceId: z.coerce.number().int().positive(),
-})
+// Both optional, at least one required. Workspace and language are both "what
+// I have currently selected", so they patch the same resource rather than each
+// getting an endpoint of its own.
+export const UpdateSessionBody = z
+  .object({
+    workspaceId: z.coerce.number().int().positive().optional(),
+    locale: z.enum(['zh', 'en']).optional(),
+  })
+  .refine(v => v.workspaceId !== undefined || v.locale !== undefined, {
+    message: 'nothing to update',
+  })
 
 export const AcceptInviteBody = z.object({
   username,

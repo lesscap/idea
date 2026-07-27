@@ -1,4 +1,5 @@
 import { Languages } from 'lucide-react'
+import { useSaveLocale } from '../core/session/use-session.ts'
 import { LOCALE_NAMES, type Locale, storeLocale, useLocaleControl } from '../i18n/index.tsx'
 import {
   Button,
@@ -8,15 +9,26 @@ import {
   DropdownMenuTrigger,
 } from '../ui/index.ts'
 
-// Standalone control, used on the login screen. Signed-in users switch from the
-// account menu instead — but the login screen needs its own, or someone who
-// cannot read the current language has no way in.
+// Used both in the header, next to the avatar, and on the login screen. It was
+// briefly a submenu inside the account menu, which buried a one-click choice two
+// levels deep — and the login screen needs it regardless, or someone who cannot
+// read the current language has no way in.
+//
+// Writes to both places, and they are not redundant:
+//   localStorage — covers signed-out visitors, who have no account to attach a
+//                  preference to, and gives the login screen its language before
+//                  any request has been made
+//   the account  — follows the user to another browser or machine
 export const LocaleSwitch = () => {
   const { locale, setLocale, available } = useLocaleControl()
+  const saveLocale = useSaveLocale()
 
   const choose = (next: Locale) => {
     setLocale(next)
     storeLocale(next)
+    // Fire and forget: the interface has already switched, and failing to
+    // persist a language preference is not worth interrupting anyone over.
+    void saveLocale(next).catch(err => console.error('could not save locale', err))
   }
 
   return (
@@ -25,7 +37,7 @@ export const LocaleSwitch = () => {
         <Button
           variant="ghost"
           size="sm"
-          className="text-muted-foreground"
+          className="gap-2 text-muted-foreground"
           data-testid="locale-switch"
         >
           <Languages />

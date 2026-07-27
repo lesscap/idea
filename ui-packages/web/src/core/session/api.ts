@@ -12,6 +12,9 @@ export type SessionState = {
   readonly user: CurrentUser
   readonly workspaceId: Id | null
   readonly role: Role | null
+  // Stored server-side, so the choice follows the user between devices. Null
+  // means never chosen — the client falls back to the browser's language.
+  readonly locale: string | null
 }
 
 export const login = (username: string, password: string): Promise<SessionState> =>
@@ -21,5 +24,8 @@ export const fetchSession = (): Promise<SessionState> => get<SessionState>('/ses
 
 export const selectWorkspace = (workspaceId: Id): Promise<{ workspaceId: Id; role: Role }> =>
   patch<{ workspaceId: Id; role: Role }>('/session', { workspaceId })
+
+export const saveLocale = (locale: string): Promise<{ locale: string }> =>
+  patch<{ locale: string }>('/session', { locale })
 
 export const logout = (): Promise<{ ok: boolean }> => del<{ ok: boolean }>('/session')

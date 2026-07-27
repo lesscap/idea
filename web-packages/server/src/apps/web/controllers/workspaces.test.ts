@@ -21,6 +21,8 @@ const services = ({
     currentUser: async () => null,
     findByUsername: async () => null,
     updatePasswordHash: async () => {},
+    getLocale: async () => null,
+    setLocale: async () => {},
   },
   $workspace: {
     listForUser: async () => [],

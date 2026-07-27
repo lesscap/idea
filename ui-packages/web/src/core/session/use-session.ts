@@ -16,6 +16,20 @@ export const useSessionStatus = (): SessionStatus => useSessionStore(s => s.stat
 // in none. Drives which entries the UI offers at all.
 export const useCurrentRole = (): Role | null => useSessionStore(s => s.role)
 
+// Persists the language against the account, so it follows the user to another
+// device. Signed-out visitors have no account to attach it to; localStorage
+// covers them, and this is a no-op then.
+export const useSaveLocale = (): ((locale: string) => Promise<void>) => {
+  const user = useSessionStore(s => s.user)
+  return useCallback(
+    async locale => {
+      if (!user) return
+      await api.saveLocale(locale)
+    },
+    [user],
+  )
+}
+
 // Runs once at startup. Not being signed in is the expected answer, not a
 // failure, so a 401 resolves to "ready, nobody" rather than surfacing an error.
 export const useLoadSession = (): (() => Promise<void>) => {

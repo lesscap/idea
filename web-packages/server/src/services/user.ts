@@ -17,6 +17,10 @@ export type UserService = {
   currentUser: (userId: Id) => Promise<CurrentUser | null>
   isPlatformAdmin: (userId: Id) => Promise<boolean>
   updatePasswordHash: (userId: Id, passwordHash: string) => Promise<void>
+  // Interface language. Null means never chosen — the client then follows the
+  // browser rather than being pinned to a default nobody picked.
+  getLocale: (userId: Id) => Promise<string | null>
+  setLocale: (userId: Id, locale: string) => Promise<void>
 }
 
 // Explicit projection everywhere, never a bare findUnique: selecting whole rows
@@ -49,5 +53,21 @@ export const createUserService: Service<UserService> = app => ({
 
   updatePasswordHash: async (userId, passwordHash) => {
     await app.$prisma.user.update({ where: { id: userId }, data: { passwordHash } })
+  },
+
+  getLocale: async userId =>
+    (
+      await app.$prisma.userPreference.findUnique({
+        where: { userId },
+        select: { locale: true },
+      })
+    )?.locale ?? null,
+
+  setLocale: async (userId, locale) => {
+    await app.$prisma.userPreference.upsert({
+      where: { userId },
+      create: { userId, locale },
+      update: { locale },
+    })
   },
 })

@@ -2,7 +2,7 @@ import { zValidator } from '@hono/zod-validator'
 import { notFound, sendOk, unauthorized } from '../../../http.ts'
 import type { Controller } from '../../../types.ts'
 import { endSession, requireSession, session, startSession } from '../middleware/session.ts'
-import { LoginBody, SelectWorkspaceBody } from '../schema/index.ts'
+import { LoginBody, UpdateSessionBody } from '../schema/index.ts'
 
 // The session as a resource: POST creates it, GET reads it, PATCH changes the
 // selected workspace, DELETE ends it. Four verbs on one singular resource
@@ -37,7 +37,12 @@ export const SessionController: Controller = app => {
     await startSession(c, { userId, workspaceId })
 
     const user = await app.$user.currentUser(userId)
-    return sendOk(c, { user, workspaceId, role: await roleIn(userId, workspaceId) })
+    return sendOk(c, {
+      user,
+      workspaceId,
+      role: await roleIn(userId, workspaceId),
+      locale: await app.$user.getLocale(userId),
+    })
   })
 
   app.get('/', requireSession, async c => {
@@ -48,14 +53,31 @@ export const SessionController: Controller = app => {
       endSession(c)
       return unauthorized(c)
     }
-    return sendOk(c, { user, workspaceId, role: await roleIn(userId, workspaceId) })
+    return sendOk(c, {
+      user,
+      workspaceId,
+      role: await roleIn(userId, workspaceId),
+      locale: await app.$user.getLocale(userId),
+    })
   })
 
   // Switching workspace is a field change on this resource, not a separate
   // action — which is the whole reason the session is modelled as a resource.
-  app.patch('/', requireSession, zValidator('json', SelectWorkspaceBody), async c => {
-    const { userId } = session(c)
-    const { workspaceId } = c.req.valid('json')
+  app.patch('/', requireSession, zValidator('json', UpdateSessionBody), async c => {
+    const { userId, workspaceId: currentWorkspaceId } = session(c)
+    const { workspaceId, locale } = c.req.valid('json')
+
+    // Language is a stored preference, not part of the session cookie: it
+    // affects only what is displayed, never what may be read.
+    if (locale) await app.$user.setLocale(userId, locale)
+
+    if (workspaceId === undefined) {
+      return sendOk(c, {
+        workspaceId: currentWorkspaceId,
+        role: await roleIn(userId, currentWorkspaceId),
+        locale: locale ?? (await app.$user.getLocale(userId)),
+      })
+    }
 
     // Membership is verified before it goes into the session, and verified again
     // on every subsequent request. The session records a selection, never a
@@ -67,7 +89,7 @@ export const SessionController: Controller = app => {
     // Only after membership checks out — remembering a workspace the user
     // cannot enter would just produce a fallback on every future sign-in.
     await app.$workspace.rememberWorkspace(userId, workspaceId)
-    return sendOk(c, { workspaceId, role })
+    return sendOk(c, { workspaceId, role, locale: await app.$user.getLocale(userId) })
   })
 
   // Idempotent, and deliberately not behind requireSession: logging out when
