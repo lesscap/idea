@@ -22,15 +22,33 @@ const git = (cwd: string, ...args: string[]) => {
   }
 }
 
-export type WorktreeLayout = {
-  repos: string
+// Everything belonging to one application, under one directory.
+//
+// `sessions` is what the agent SDK is pointed at (CLAUDE_CONFIG_DIR). It sits
+// beside the worktrees rather than inside them, which is the point: reclaiming a
+// worktree — the whole reason a worktree is treated as a cache — must not take
+// the agent's memory of the conversation with it. The SDK still separates
+// sessions by working directory inside there, so conversations stay isolated
+// without us inventing a key.
+//
+// It also means removing an application is one `rm -rf` rather than a hunt
+// through a directory the SDK owns and sweeps on its own schedule.
+export type AppLayout = {
+  root: string
+  repo: string
+  sessions: string
   worktrees: string
 }
 
-export const layout = (root: string): WorktreeLayout => ({
-  repos: join(root, 'repos'),
-  worktrees: join(root, 'worktrees'),
-})
+export const appLayout = (root: string, appKey: string): AppLayout => {
+  const base = join(root, 'apps', appKey)
+  return {
+    root: base,
+    repo: join(base, 'repo'),
+    sessions: join(base, 'claude'),
+    worktrees: join(base, 'worktrees'),
+  }
+}
 
 // An app with no remote still needs somewhere to work, and an app that has one
 // needs it fetched. Both end with a repository at the same path.
@@ -46,10 +64,10 @@ export const layout = (root: string): WorktreeLayout => ({
 // initial commit gives it something to point at.)
 export const ensureRepo = (
   root: string,
-  key: string,
+  appKey: string,
   remote: string | null,
 ): { path: string; created: boolean } => {
-  const path = join(layout(root).repos, key)
+  const path = appLayout(root, appKey).repo
   if (existsSync(join(path, '.git'))) {
     if (remote) git(path, 'fetch', '--quiet', 'origin')
     return { path, created: false }
@@ -81,8 +99,9 @@ export const branchName = (conversationId: number): string => `idea/c${conversat
 // half-removed, or already there. `git worktree prune` first because a directory
 // deleted by hand leaves the repository still believing it exists, and the add
 // then fails on a worktree nobody can see.
-export const ensureWorktree = (root: string, repoPath: string, conversationId: number): string => {
-  const path = join(layout(root).worktrees, String(conversationId))
+export const ensureWorktree = (root: string, appKey: string, conversationId: number): string => {
+  const { repo: repoPath, worktrees } = appLayout(root, appKey)
+  const path = join(worktrees, String(conversationId))
   if (existsSync(path)) return path
 
   git(repoPath, 'worktree', 'prune')

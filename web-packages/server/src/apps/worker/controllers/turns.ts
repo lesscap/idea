@@ -24,7 +24,7 @@ export const TurnsController: Controller = app => {
   // losing it is the ordinary outcome rather than an error.
   app.post('/claim', async c => {
     const worker = currentWorker(c)
-    const claimed = await app.$turn.claimNext(worker.id)
+    const claimed = await app.$turn.claimNext(worker)
     if (!claimed) return sendOk(c, { turn: null })
 
     const conversation = await app.$conversation.get(claimed.conversationId)

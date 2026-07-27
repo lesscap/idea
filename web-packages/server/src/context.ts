@@ -6,6 +6,7 @@ import { createAuthService } from './services/auth.ts'
 import { createConversationService } from './services/conversation.ts'
 import { createHealthService } from './services/health.ts'
 import { createPendingInputService } from './services/pending-input.ts'
+import { createProviderService } from './services/provider.ts'
 import { createTurnService } from './services/turn.ts'
 import { createUserService } from './services/user.ts'
 import { createWorkerService } from './services/worker.ts'
@@ -32,6 +33,7 @@ export const createContext = (config: Config): [ServiceApplication, Dispose] => 
     $app: createAppService(app),
     $conversation: createConversationService(app),
     $pendingInput: createPendingInputService(app),
+    $provider: createProviderService(app),
     $turn: createTurnService(app),
     $worker: createWorkerService(app),
     // Not a resource: it holds only live subscriptions, which end with their

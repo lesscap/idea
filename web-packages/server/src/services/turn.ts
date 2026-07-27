@@ -22,9 +22,19 @@ export type ClaimedTurn = {
 
 export type TurnOutcome = 'completed' | 'failed' | 'aborted'
 
+// Everything the claim needs to know about who is asking. Passed rather than
+// looked up so the caller cannot accidentally claim on behalf of a worker it did
+// not authenticate.
+export type Claimant = {
+  readonly id: Id
+  readonly workspaceId: Id
+  readonly providerId: Id
+  readonly agentKind: string
+}
+
 export type TurnService = {
   // Null when there is nothing to do, or nothing this worker may take right now.
-  claimNext: (workerId: Id) => Promise<ClaimedTurn | null>
+  claimNext: (worker: Claimant) => Promise<ClaimedTurn | null>
   renewLease: (turnId: Id, workerId: Id) => Promise<boolean>
   finish: (turnId: Id, outcome: TurnOutcome) => Promise<boolean>
   requestAbort: (turnId: Id) => Promise<boolean>
@@ -85,9 +95,26 @@ export const createTurnService: Service<TurnService> = app => {
   }
 
   return {
-    claimNext: async workerId => {
+    claimNext: async worker => {
+      // Two filters, one query, doing two different jobs.
+      //
+      // The workspace filter is a security boundary: even if the worker's own
+      // confinement were defeated, the server still will not hand it another
+      // tenant's work.
+      //
+      // The provider filter keeps a conversation on one backend. A conversation
+      // that has not run yet takes whichever worker reaches it — nobody has to
+      // choose a model in advance. Once one has run, only that backend may
+      // continue it: resume depends on it, and the event vocabulary would
+      // otherwise change under the interface mid-conversation.
       const candidates = await app.$prisma.turn.findMany({
-        where: { status: 'queued' },
+        where: {
+          status: 'queued',
+          conversation: {
+            workspaceId: worker.workspaceId,
+            OR: [{ providerId: null }, { providerId: worker.providerId }],
+          },
+        },
         orderBy: { id: 'asc' },
         take: CANDIDATES,
         select: { id: true, conversationId: true, userEventSequence: true, attempt: true },
@@ -96,8 +123,18 @@ export const createTurnService: Service<TurnService> = app => {
       // Sequential and short-circuiting on purpose: each attempt is a write, and
       // the first success is the answer.
       for (const candidate of candidates) {
-        const claimed = await tryClaim(candidate, workerId)
-        if (claimed) return claimed
+        const claimed = await tryClaim(candidate, worker.id)
+        if (!claimed) continue
+
+        // Stamp on the way out, and only from null: two workers reaching an
+        // unclaimed conversation at once both pass the filter above, and the
+        // first one to get here decides. `providerId: null` in the condition is
+        // what makes the second a no-op instead of a silent reassignment.
+        await app.$prisma.conversation.updateMany({
+          where: { id: claimed.conversationId, providerId: null },
+          data: { providerId: worker.providerId, agentKind: worker.agentKind },
+        })
+        return claimed
       }
       return null
     },

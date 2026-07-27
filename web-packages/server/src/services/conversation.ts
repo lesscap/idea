@@ -19,7 +19,10 @@ export type Conversation = {
   readonly id: Id
   readonly workspaceId: Id
   readonly appId: Id | null
-  readonly agentKind: string
+  // Null until a worker has claimed the first turn. Nobody chooses a backend in
+  // advance — whichever worker reaches it decides, and it is fixed from then on.
+  readonly agentKind: string | null
+  readonly providerSessionId: string | null
   readonly title: string | null
   readonly lastActiveAt: string
 }
@@ -53,7 +56,8 @@ const view = (row: {
   id: number
   workspaceId: number
   appId: number | null
-  agentKind: string
+  agentKind: string | null
+  providerSessionId: string | null
   title: string | null
   lastActiveAt: Date
 }): Conversation => ({
@@ -61,6 +65,7 @@ const view = (row: {
   workspaceId: row.workspaceId,
   appId: row.appId,
   agentKind: row.agentKind,
+  providerSessionId: row.providerSessionId,
   title: row.title,
   lastActiveAt: row.lastActiveAt.toISOString(),
 })
@@ -70,6 +75,7 @@ const SELECT = {
   workspaceId: true,
   appId: true,
   agentKind: true,
+  providerSessionId: true,
   title: true,
   lastActiveAt: true,
 } as const

@@ -7,6 +7,7 @@ import type { AuthService } from './services/auth.ts'
 import type { ConversationService } from './services/conversation.ts'
 import type { HealthService } from './services/health.ts'
 import type { PendingInputService } from './services/pending-input.ts'
+import type { ProviderService } from './services/provider.ts'
 import type { TurnService } from './services/turn.ts'
 import type { UserService } from './services/user.ts'
 import type { WorkerService } from './services/worker.ts'
@@ -29,6 +30,7 @@ export type ServiceApplication = {
   readonly $app: AppService
   readonly $conversation: ConversationService
   readonly $pendingInput: PendingInputService
+  readonly $provider: ProviderService
   readonly $turn: TurnService
   readonly $worker: WorkerService
   readonly $commands: CommandBus

@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset --force",
     "seed:admin": "tsx src/seed/admin.ts",
-    "seed:demo": "tsx src/seed/demo.ts"
+    "seed:demo": "tsx src/seed/demo.ts",
+    "seed:providers": "tsx src/seed/providers.ts"
   },
   "dependencies": {
     "@idea/shared": "workspace:*",

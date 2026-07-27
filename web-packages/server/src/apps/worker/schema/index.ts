@@ -5,12 +5,17 @@ import { z } from 'zod'
 // worker route from drifting into cookie-shaped assumptions.
 
 export const RegisterWorkerBody = z.object({
+  // Proves which workspace this worker may serve. The body cannot name the
+  // workspace itself — otherwise anyone able to reach this endpoint could
+  // register into someone else's tenant and start claiming their turns.
+  enrolmentToken: z.string().trim().min(1).max(200),
   // Stable per machine. This is the identity anchor: the same value returns the
   // same worker row rather than creating another.
   machineId: z.string().trim().min(1).max(128),
   name: z.string().trim().min(1).max(64),
   hostname: z.string().trim().min(1).max(255),
-  capabilities: z.array(z.string().trim().min(1).max(64)).max(32).default([]),
+  // Registry name of the backend this container runs. One, not a list.
+  provider: z.string().trim().min(1).max(64),
 })
 
 export const ClaimTurnParams = z.object({

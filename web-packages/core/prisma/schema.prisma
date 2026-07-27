@@ -63,6 +63,7 @@ model User {
   invitesAccepted Invite[]        @relation("AcceptedBy")
   appsCreated     App[]
   conversations   Conversation[]
+  enrolments      WorkerEnrolment[]
 
   @@map("users")
 }
@@ -122,6 +123,8 @@ model Workspace {
   invites     Invite[]
   preferredBy UserPreference[]
   conversations Conversation[]
+  workers     Worker[]
+  enrolments  WorkerEnrolment[]
 
   @@map("workspaces")
 }
@@ -178,9 +181,18 @@ model Conversation {
   // both cases.
   appId       Int?
   createdById Int
-  // Which adapter normalises this conversation's provider events. One vocabulary
-  // reaches the interface either way; this only picks who translates.
-  agentKind   String @default("claude-code")
+  // Null until the first turn is claimed, then stamped with whichever worker
+  // took it — and fixed from then on. Nobody has to choose a backend in advance;
+  // the deployment decides. Setting it up front is still allowed, and means "run
+  // this one on that backend".
+  //
+  // Fixed afterwards because resume depends on it: a conversation that changed
+  // backends mid-way could not pick up where it left off, and its event
+  // vocabulary would change under the interface.
+  providerId  Int?
+  // A copy of provider.kind taken at the same moment, so editing the provider
+  // row later cannot retroactively change how old turns are read.
+  agentKind   String?
   // The provider's own session handle, used to resume rather than replay. Null
   // until the first turn has run.
   providerSessionId String?
@@ -196,6 +208,7 @@ model Conversation {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   app       App?      @relation(fields: [appId], references: [id], onDelete: SetNull)
   createdBy User      @relation(fields: [createdById], references: [id])
+  provider  Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
   events    ConversationEvent[]
   pending   PendingInput[]
   turns     Turn[]
@@ -299,23 +312,94 @@ model Turn {
 // and exit for its supervisor to restart.
 model Worker {
   id           Int      @id @default(autoincrement())
-  // Stable per machine, so a restarted daemon recovers its identity instead of
-  // registering a duplicate.
-  machineId    String   @unique
-  // Display handle. Unique so two machines cannot both call themselves "build-1"
-  // and leave nobody able to tell which is which.
-  name         String   @unique
+  // Which workspace this worker serves, and it serves exactly one. That is a
+  // security boundary before it is a routing rule: the agent runs untrusted
+  // instructions — a message, or text inside a repository it reads — so the
+  // process it runs in is confined to one tenant's data, and the claim query
+  // refuses to hand it anything else even if that confinement is defeated.
+  workspaceId  Int
+  // Stable per machine, so a restarted daemon recovers its identity rather than
+  // leaving a dead row behind. In a container this lives on the workspace's
+  // volume, which survives the container being rebuilt.
+  machineId    String
+  // Display handle, so an operator can tell two workers apart.
+  name         String
   hostname     String
-  // Returned on every successful registration, so a daemon that lost its local
-  // state can recover it by registering again.
+  // Reissued on every registration; only its hash is stored.
   apiToken     String   @unique
-  capabilities String[] @default([])
+  // Which agent backend this worker runs. A property of the deployment, not of
+  // the tenant: whoever starts the container decides, by giving it that
+  // provider's credentials and SDK. Wanting two backends means running two
+  // containers, which is also how you get them isolated from each other.
+  //
+  // This IS the routing capability — a separate capability list would be a less
+  // precise way of saying the same thing.
+  providerId   Int
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  turns Turn[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Restrict: a provider still being served by a worker should not be deletable
+  // out from under it.
+  provider  Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  turns     Turn[]
 
+  @@unique([workspaceId, machineId])
+  @@unique([workspaceId, name])
   @@map("workers")
+}
+
+// Lets a worker prove which workspace it may serve. A container cannot be
+// allowed to name its own tenant, and it has no user to sign in as.
+//
+// Same shape as an invite: only the hash is stored, the token itself is shown
+// once at creation. Revoking is deleting the row.
+model WorkerEnrolment {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  tokenHash   String    @unique
+  // What this token is for — "mac-mini", "ci" — so revoking the right one does
+  // not require guessing.
+  label       String
+  createdById Int
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  @@index([workspaceId])
+  @@map("worker_enrolments")
+}
+
+// An agent backend. `name` is which provider (glm, deepseek, codex); `kind` is
+// which SDK speaks to it (claude, codex). They are separate axes: GLM and
+// DeepSeek are both `claude` and differ only by endpoint, which is exactly why
+// one adapter serves both.
+//
+// Platform-level, not per workspace: the endpoints and models are ours, not a
+// tenant's. A workspace chooses among the enabled ones.
+model Provider {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  label     String
+  kind      String
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  // { baseUrl, model, tokenEnv }.
+  //
+  // NO CREDENTIALS. `tokenEnv` is the NAME of the environment variable holding
+  // the token, never its value — the database says where to look and never what
+  // it is, so a database dump yields nothing usable. The values live in the
+  // worker's environment.
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workers       Worker[]
+  conversations Conversation[]
+
+  @@map("providers")
 }
 
 // A bearer capability, not a letter addressed to someone: the admin generating

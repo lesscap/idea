@@ -3,14 +3,18 @@ import type { WorkerConfig } from './config.ts'
 import { readOrCreateMachineId, workspaceRoot } from './identity.ts'
 import { runTurn } from './turn.ts'
 
-// The long-lived worker process. One per machine, serving every application —
-// which work it receives is decided by its capabilities, not by its identity.
-// A daemon per app per machine would put the process count on a product of two
-// numbers that both grow.
+// The long-lived worker process. One workspace, one agent backend.
+//
+// The workspace binding is a security boundary before it is a routing rule: this
+// process runs instructions that arrive from outside — a message someone typed,
+// and later the contents of a repository it reads — so it is confined to one
+// tenant's data, and the server's claim query refuses to hand it anything else
+// even if that confinement is defeated. It cannot name its own workspace either;
+// an enrolment token decides.
 //
 // Nothing is kept alive between turns. Everything a conversation needs in order
 // to resume lives outside this process: the transcript on the server, the branch
-// in the repository, the working files in the worktree. So a thousand idle
+// in the repository, the agent's own session beside the worktree. So idle
 // conversations cost nothing, and only work in flight occupies anything.
 //
 // Concurrency is a slot count, not a process count: slots bound how many turns
@@ -47,12 +51,15 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
   const client = createClient(config.server)
 
   const registered = await client.register({
+    enrolmentToken: config.enrolmentToken,
+    provider: config.provider,
     machineId,
     name: config.name,
     hostname: config.hostname,
-    capabilities: config.capabilities,
   })
-  log(`${registered.outcome} as worker ${registered.id} (${config.name}) → ${config.server}`)
+  log(
+    `${registered.outcome} as worker ${registered.id} (${config.name}) running ${config.provider} → ${config.server}`,
+  )
   log(`workspace root: ${root}`)
 
   const abort = new AbortController()

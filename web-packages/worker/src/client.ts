@@ -20,10 +20,11 @@ export type Conversation = {
 }
 
 export type RegisterInput = {
+  enrolmentToken: string
+  provider: string
   machineId: string
   name: string
   hostname: string
-  capabilities: readonly string[]
 }
 
 export type WorkerClient = {

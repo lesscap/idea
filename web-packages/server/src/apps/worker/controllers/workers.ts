@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import { streamSSE } from 'hono/streaming'
-import { conflict, sendOk } from '../../../http.ts'
+import { badRequest, conflict, sendOk, unauthorized } from '../../../http.ts'
 import type { Controller } from '../../../types.ts'
 import { currentWorker, workerAuth } from '../middleware/auth.ts'
 import { RegisterWorkerBody } from '../schema/index.ts'
@@ -18,6 +18,14 @@ export const WorkersController: Controller = app => {
   app.post('/', zValidator('json', RegisterWorkerBody), async c => {
     const result = await app.$worker.register(c.req.valid('json'))
 
+    // One flat answer for an unknown token. Saying "no such workspace" versus
+    // "wrong token" would let whoever holds a bad token probe for which
+    // workspaces exist.
+    if (result.kind === 'not_enrolled') return unauthorized(c, 'enrolment token is not valid')
+
+    if (result.kind === 'unknown_provider')
+      return badRequest(c, 'no such provider, or it is turned off')
+
     if (result.kind === 'name_collision')
       return conflict(
         c,
@@ -30,6 +38,14 @@ export const WorkersController: Controller = app => {
       outcome: result.kind,
     })
   })
+
+  // The non-secret half of the provider registry: endpoints and model names, and
+  // the NAME of the environment variable each credential lives in — never a
+  // credential. A worker reads this at boot to work out which providers it can
+  // actually serve, and reports those as its capabilities.
+  app.get('/providers', workerAuth(app), async c =>
+    sendOk(c, { items: await app.$provider.listEnabled() }),
+  )
 
   // The command stream, and the only definition of "this worker is usable".
   // Live-only: nothing is replayed on reconnect because nothing durable lives
