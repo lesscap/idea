@@ -1,0 +1,29 @@
+{
+  "name": "idea",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @idea/server --filter @idea/web dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write . && pnpm typecheck && pnpm test",
+    "db:generate": "pnpm --filter @idea/core db:generate",
+    "db:migrate": "pnpm --filter @idea/core db:migrate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
+  }
+}

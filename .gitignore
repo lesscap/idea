@@ -1,0 +1,18 @@
+node_modules
+dist
+*.tsbuildinfo
+.DS_Store
+*.log
+
+# Local env (secrets, connection strings) — never commit.
+# Deny every .env* and re-admit only the committed template, so a new variant
+# (.env.production, .env.staging) is ignored by default rather than by being
+# remembered here.
+.env*
+!.env.example
+
+# Prisma generated client
+**/generated
+
+# Local runtime state
+.tmp/

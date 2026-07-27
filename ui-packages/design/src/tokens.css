@@ -1,0 +1,33 @@
+/*
+ * Design tokens as CSS custom properties, not as Tailwind config. Components in
+ * this package reference them by name, so the whole product re-themes by
+ * overriding this one block — and a token is inspectable in devtools, which a
+ * compiled-away config value is not.
+ */
+:root {
+  --idea-color-bg: #ffffff;
+  --idea-color-surface: #f6f7f9;
+  --idea-color-border: #e3e6ea;
+  --idea-color-text: #14171a;
+  --idea-color-text-muted: #6b7280;
+  --idea-color-accent: #2563eb;
+  --idea-color-accent-hover: #1d4ed8;
+  --idea-color-accent-text: #ffffff;
+  --idea-color-danger: #dc2626;
+
+  --idea-radius-sm: 4px;
+  --idea-radius-md: 8px;
+  --idea-radius-lg: 12px;
+
+  --idea-space-1: 4px;
+  --idea-space-2: 8px;
+  --idea-space-3: 12px;
+  --idea-space-4: 16px;
+  --idea-space-6: 24px;
+
+  --idea-font-sans:
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --idea-text-sm: 13px;
+  --idea-text-base: 14px;
+  --idea-text-lg: 16px;
+}

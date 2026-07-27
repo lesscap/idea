@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@import "@idea/design/tokens.css";
+
+/*
+ * @idea/design is consumed as source, so Tailwind's automatic content detection
+ * does not reach it — without this line, utility classes used inside that
+ * package are silently dropped from the build.
+ */
+@source "../../design/src";
+
+body {
+  margin: 0;
+  font-family: var(--idea-font-sans);
+  font-size: var(--idea-text-base);
+  color: var(--idea-color-text);
+  background: var(--idea-color-bg);
+}

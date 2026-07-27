@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: idea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: idea
+      POSTGRES_PASSWORD: idea
+      POSTGRES_DB: idea
+    ports:
+      - '5432:5432'
+    volumes:
+      - idea-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U idea -d idea']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  idea-pgdata:

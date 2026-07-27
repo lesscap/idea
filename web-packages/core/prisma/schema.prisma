@@ -1,0 +1,11 @@
+// Persistence schema. Intentionally empty of models — the skeleton establishes
+// where the schema lives and proves the generate/migrate/connect chain works;
+// domain models arrive with the first real feature.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
