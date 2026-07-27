@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useCurrentUser, useRefreshSession } from '../../core/session/use-session.ts'
-import { RequestError } from '../../lib/request.ts'
+import { useLocale } from '../../i18n/index.tsx'
+import { useErrorMessage } from '../../i18n/use-error-message.ts'
 import {
   Button,
   Card,
@@ -17,6 +18,8 @@ import { acceptInvite, previewInvite } from './api.ts'
 type Preview = { workspaceName: string; invitedByName: string }
 
 export const InviteAcceptPage = () => {
+  const __ = useLocale()
+  const errorMessage = useErrorMessage()
   const { token = '' } = useParams()
   const navigate = useNavigate()
   const user = useCurrentUser()
@@ -56,7 +59,7 @@ export const InviteAcceptPage = () => {
       await refresh()
       navigate('/', { replace: true })
     } catch (err) {
-      setError(err instanceof RequestError ? err.message : '接受邀请失败')
+      setError(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -66,10 +69,8 @@ export const InviteAcceptPage = () => {
     return (
       <Centered>
         <CardHeader>
-          <CardTitle>邀请链接无效</CardTitle>
-          <CardDescription>
-            链接可能已被使用、已过期，或输入有误。请向邀请人索取新链接。
-          </CardDescription>
+          <CardTitle>{__('invite.invalid')}</CardTitle>
+          <CardDescription>{__('invite.invalidHint')}</CardDescription>
         </CardHeader>
       </Centered>
     )
@@ -79,7 +80,7 @@ export const InviteAcceptPage = () => {
     return (
       <Centered>
         <CardHeader>
-          <CardTitle>正在检查邀请…</CardTitle>
+          <CardTitle>{__('invite.checking')}</CardTitle>
         </CardHeader>
       </Centered>
     )
@@ -88,41 +89,39 @@ export const InviteAcceptPage = () => {
   return (
     <Centered>
       <CardHeader>
-        <CardTitle>加入「{preview.workspaceName}」</CardTitle>
-        <CardDescription>{preview.invitedByName} 邀请你加入这个工作空间</CardDescription>
+        <CardTitle>{__('invite.joinTitle', preview.workspaceName)}</CardTitle>
+        <CardDescription>{__('invite.invitedBy', preview.invitedByName)}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={accept} className="flex flex-col gap-4">
           {user ? (
-            <p className="text-sm text-muted-foreground">
-              你已登录为 <strong>{user.name}</strong>，将以当前账号加入。
-            </p>
+            <p className="text-sm text-muted-foreground">{__('invite.signedInAs', user.name)}</p>
           ) : (
             <>
-              <Field id="name" label="姓名" value={name} onChange={setName} required />
+              <Field id="name" label={__('invite.name')} value={name} onChange={setName} required />
               <Field
                 id="username"
-                label="用户名"
+                label={__('auth.username')}
                 value={username}
                 onChange={setUsername}
-                hint="登录用，小写字母、数字与 . _ -"
+                hint={__('invite.usernameHint')}
                 required
               />
               <Field
                 id="password"
-                label="密码"
+                label={__('auth.password')}
                 type="password"
                 value={password}
                 onChange={setPassword}
-                hint="至少 8 位"
+                hint={__('invite.passwordHint')}
                 required
               />
               <Field
                 id="phone"
-                label="手机号（选填）"
+                label={__('invite.phone')}
                 value={phone}
                 onChange={setPhone}
-                hint="以后用于找回密码"
+                hint={__('invite.phoneHint')}
               />
             </>
           )}
@@ -134,7 +133,11 @@ export const InviteAcceptPage = () => {
           )}
 
           <Button type="submit" disabled={busy}>
-            {busy ? '处理中…' : user ? '加入' : '注册并加入'}
+            {busy
+              ? __('invite.processing')
+              : user
+                ? __('invite.join')
+                : __('invite.registerAndJoin')}
           </Button>
         </form>
       </CardContent>

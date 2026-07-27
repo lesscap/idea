@@ -7,6 +7,7 @@
 //
 // The test for belonging here: could this be dropped into an entirely different
 // product unchanged? If not, it belongs to a feature.
+export { Avatar } from './avatar/index.tsx'
 export { Badge, type BadgeProps } from './badge/index.tsx'
 export { Button, type ButtonProps, buttonVariants } from './button/index.tsx'
 export {
@@ -33,6 +34,9 @@ export {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from './dropdown-menu/index.tsx'
 export { Input } from './input/index.tsx'

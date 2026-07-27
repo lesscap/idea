@@ -13,6 +13,14 @@ import { LoginBody, SelectWorkspaceBody } from '../schema/index.ts'
 // `requireSession` individually. Do not wrap this whole controller in
 // `guarded` — it would lock the login endpoint behind the session it issues.
 export const SessionController: Controller = app => {
+  // The caller's role in the workspace they are currently in. Part of the
+  // session context, not a separate lookup the client should have to make:
+  // it changes exactly when workspaceId changes, and the UI needs it to decide
+  // which entries to offer at all — an action nobody can perform should not be
+  // presented and then rejected with a 403.
+  const roleIn = async (userId: number, workspaceId: number | null) =>
+    workspaceId === null ? null : await app.$workspace.roleOf(userId, workspaceId)
+
   // Login. Failure is deliberately uniform: unknown username and wrong password
   // return the identical code and message, and the auth service spends the same
   // hashing time on both. Anything else makes this an account enumerator.
@@ -29,7 +37,7 @@ export const SessionController: Controller = app => {
     await startSession(c, { userId, workspaceId })
 
     const user = await app.$user.currentUser(userId)
-    return sendOk(c, { user, workspaceId })
+    return sendOk(c, { user, workspaceId, role: await roleIn(userId, workspaceId) })
   })
 
   app.get('/', requireSession, async c => {
@@ -40,7 +48,7 @@ export const SessionController: Controller = app => {
       endSession(c)
       return unauthorized(c)
     }
-    return sendOk(c, { user, workspaceId })
+    return sendOk(c, { user, workspaceId, role: await roleIn(userId, workspaceId) })
   })
 
   // Switching workspace is a field change on this resource, not a separate
@@ -59,7 +67,7 @@ export const SessionController: Controller = app => {
     // Only after membership checks out — remembering a workspace the user
     // cannot enter would just produce a fallback on every future sign-in.
     await app.$workspace.rememberWorkspace(userId, workspaceId)
-    return sendOk(c, { workspaceId })
+    return sendOk(c, { workspaceId, role })
   })
 
   // Idempotent, and deliberately not behind requireSession: logging out when

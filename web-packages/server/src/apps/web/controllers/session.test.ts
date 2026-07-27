@@ -98,9 +98,11 @@ describe('GET /session', () => {
     const res = await app.request('/')
 
     expect(res.status).toBe(200)
+    // Role travels with the session: the UI needs it to decide which entries to
+    // offer at all, and it changes exactly when workspaceId does.
     expect(await res.json()).toEqual({
       success: true,
-      data: { user: currentUser, workspaceId: 3 },
+      data: { user: currentUser, workspaceId: 3, role: null },
     })
   })
 })
@@ -139,7 +141,7 @@ describe('PATCH /session (switch workspace)', () => {
     const res = await app.request('/', { ...json({ workspaceId: 5 }), method: 'PATCH' })
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true, data: { workspaceId: 5 } })
+    expect(await res.json()).toEqual({ success: true, data: { workspaceId: 5, role: 'member' } })
     // Switching IS the statement "start me here next time".
     expect(rememberWorkspace).toHaveBeenCalledWith(1, 5)
   })

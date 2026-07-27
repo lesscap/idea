@@ -1,19 +1,12 @@
 import { type FormEvent, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useCurrentUser, useSignIn } from '../../core/session/use-session.ts'
-import { RequestError } from '../../lib/request.ts'
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-} from '../../ui/index.ts'
+import { useLocale } from '../../i18n/index.tsx'
+import { LocaleSwitch } from '../../shell/locale-switch.tsx'
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '../../ui/index.ts'
 
 export const LoginPage = () => {
+  const __ = useLocale()
   const user = useCurrentUser()
   const signIn = useSignIn()
   const navigate = useNavigate()
@@ -32,60 +25,70 @@ export const LoginPage = () => {
     try {
       await signIn(username, password)
       navigate('/', { replace: true })
-    } catch (err) {
-      // The server answers identically for an unknown user and a wrong
-      // password; showing its message verbatim keeps it that way, whereas
-      // "no such user" here would undo that on the client side.
-      setError(err instanceof RequestError ? err.message : '登录失败，请重试')
+    } catch {
+      // One message for every failure. The server refuses to distinguish an
+      // unknown username from a wrong password — spelling out which it was here
+      // would hand back exactly what that refusal protects.
+      setError(__('auth.signInFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>登录 idea</CardTitle>
-          <CardDescription>用邀请时设置的用户名和密码登录</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={submit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="username">用户名</Label>
-              <Input
-                id="username"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                autoComplete="username"
-                autoFocus
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">密码</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </div>
+    <div className="flex min-h-screen flex-col bg-muted/30">
+      {/* The one screen where the language control has to be reachable without
+          an account: someone who cannot read the current language has no way
+          past this page otherwise. */}
+      <div className="flex justify-end p-4">
+        <LocaleSwitch />
+      </div>
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+      <div className="flex flex-1 items-center justify-center p-4 pb-24">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>{__('auth.signInTitle')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="username">{__('auth.username')}</Label>
+                <Input
+                  id="username"
+                  data-testid="login-username"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  autoComplete="username"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="password">{__('auth.password')}</Label>
+                <Input
+                  id="password"
+                  data-testid="login-password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
 
-            <Button type="submit" disabled={busy}>
-              {busy ? '登录中…' : '登录'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" disabled={busy} data-testid="login-submit">
+                {busy ? __('auth.signingIn') : __('auth.signIn')}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -14,7 +14,9 @@ type Stubs = {
 }
 
 const service = ({ remembered = null, stillMember = true, firstWorkspace = null }: Stubs) => {
-  const findUniquePreference = vi.fn(async () => (remembered === null ? null : { lastWorkspaceId: remembered }))
+  const findUniquePreference = vi.fn(async () =>
+    remembered === null ? null : { lastWorkspaceId: remembered },
+  )
   const findUniqueMembership = vi.fn(async () =>
     stillMember && remembered !== null ? { workspaceId: remembered } : null,
   )

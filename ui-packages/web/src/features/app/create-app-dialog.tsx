@@ -1,10 +1,10 @@
 import { type FormEvent, useState } from 'react'
-import { RequestError } from '../../lib/request.ts'
+import { useLocale } from '../../i18n/index.tsx'
+import { useErrorMessage } from '../../i18n/use-error-message.ts'
 import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,6 +20,8 @@ type Props = {
 }
 
 export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
+  const __ = useLocale()
+  const errorMessage = useErrorMessage()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -36,9 +38,10 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
       onCreated()
       onOpenChange(false)
     } catch (err) {
-      // A duplicate name comes back as a conflict; showing the server's message
-      // is more useful than a generic failure.
-      setError(err instanceof RequestError ? err.message : '创建失败')
+      // Translated from the envelope's `code`, scoped to this feature so a
+      // `conflict` reads as "that name is taken" rather than the server's
+      // English sentence.
+      setError(errorMessage(err, 'app'))
     } finally {
       setBusy(false)
     }
@@ -46,32 +49,35 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* No DialogDescription here, so aria-describedby is explicitly cleared —
+          Radix warns about a missing description otherwise, and pointing it at
+          nothing is the correct signal that there deliberately isn't one. */}
+      <DialogContent aria-describedby={undefined}>
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>新建应用</DialogTitle>
-            <DialogDescription>先起个名字，之后再把需求讲清楚。</DialogDescription>
+            <DialogTitle>{__('app.create')}</DialogTitle>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="app-name">名称</Label>
+              <Label htmlFor="app-name">{__('app.name')}</Label>
               <Input
                 id="app-name"
+                data-testid="app-name"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="例如：报销审批"
+                placeholder={__('app.namePlaceholder')}
                 required
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="app-desc">简介（选填）</Label>
+              <Label htmlFor="app-desc">{__('app.description')}</Label>
               <Input
                 id="app-desc"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="这个应用是给谁用的、解决什么问题"
+                placeholder={__('app.descriptionPlaceholder')}
               />
             </div>
             {error && (
@@ -83,10 +89,10 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              取消
+              {__('common.cancel')}
             </Button>
-            <Button type="submit" disabled={busy}>
-              {busy ? '创建中…' : '创建'}
+            <Button type="submit" disabled={busy} data-testid="app-submit">
+              {busy ? __('app.creating') : __('app.create')}
             </Button>
           </DialogFooter>
         </form>

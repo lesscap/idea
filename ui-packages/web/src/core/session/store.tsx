@@ -1,4 +1,4 @@
-import type { CurrentUser, Id } from '@idea/shared'
+import type { CurrentUser, Id, Role } from '@idea/shared'
 import { createContext, type ReactNode, useContext, useRef } from 'react'
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
@@ -30,6 +30,7 @@ export type SessionState = {
   status: SessionStatus
   user: CurrentUser | null
   workspaceId: Id | null
+  role: Role | null
   set: StoreApi<SessionState>['setState']
 }
 
@@ -38,6 +39,7 @@ const buildStore = () =>
     status: 'loading',
     user: null,
     workspaceId: null,
+    role: null,
     set,
   }))
 

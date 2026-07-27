@@ -5,6 +5,7 @@ import {
   useCurrentWorkspaceId,
   useSessionStatus,
 } from '../core/session/use-session.ts'
+import { useLocale } from '../i18n/index.tsx'
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/index.ts'
 
 // Guards everything behind sign-in.
@@ -34,13 +35,16 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
   return <>{children}</>
 }
 
-const NoWorkspace = () => (
-  <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>你还不属于任何工作空间</CardTitle>
-        <CardDescription>请联系管理员邀请你加入。收到邀请链接后打开即可进入。</CardDescription>
-      </CardHeader>
-    </Card>
-  </div>
-)
+const NoWorkspace = () => {
+  const __ = useLocale()
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>{__('workspace.noneTitle')}</CardTitle>
+          <CardDescription>{__('workspace.noneHint')}</CardDescription>
+        </CardHeader>
+      </Card>
+    </div>
+  )
+}

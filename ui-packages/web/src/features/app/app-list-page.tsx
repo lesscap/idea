@@ -1,7 +1,8 @@
-import type { App, AppStatus } from '@idea/shared'
+import type { App } from '@idea/shared'
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useCurrentWorkspaceId } from '../../core/session/use-session.ts'
+import { useLocale, useLocaleControl } from '../../i18n/index.tsx'
 import {
   Badge,
   Button,
@@ -14,13 +15,9 @@ import {
 import { listApps } from './api.ts'
 import { CreateAppDialog } from './create-app-dialog.tsx'
 
-const STATUS_LABEL: Record<AppStatus, string> = {
-  draft: '草稿',
-  active: '使用中',
-  archived: '已归档',
-}
-
 export const AppListPage = () => {
+  const __ = useLocale()
+  const { locale } = useLocaleControl()
   const workspaceId = useCurrentWorkspaceId()
   // Local state, not a store: one consumer, and refetching on mount answers the
   // "when is this stale?" question that a store would leave open.
@@ -40,44 +37,55 @@ export const AppListPage = () => {
   // whichever one the session has selected, so switching invalidates it.
   useEffect(load, [load])
 
+  // Intl is built into the browser, so following the interface language costs
+  // no dependency — and a hardcoded 'zh-CN' would print Chinese-style dates
+  // inside an English interface.
+  const formatDate = (iso: string) =>
+    new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en-GB', { dateStyle: 'medium' }).format(
+      new Date(iso),
+    )
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">应用</h1>
-          <p className="text-sm text-muted-foreground">这个空间里正在创建的软件</p>
-        </div>
-        <Button onClick={() => setCreating(true)}>
+        <h1 className="text-xl font-semibold">{__('app.heading')}</h1>
+        <Button data-testid="app-create" onClick={() => setCreating(true)}>
           <Plus />
-          新建应用
+          {__('app.create')}
         </Button>
       </div>
 
-      {apps === null && <p className="text-sm text-muted-foreground">加载中…</p>}
+      {apps === null && (
+        <p className="text-sm text-muted-foreground" data-testid="apps-loading">
+          {__('common.loading')}
+        </p>
+      )}
 
       {apps?.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>还没有应用</CardTitle>
-            <CardDescription>新建一个应用，然后把想要它做什么讲清楚。</CardDescription>
+            <CardTitle>{__('app.empty')}</CardTitle>
           </CardHeader>
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        data-testid="app-list"
+      >
         {apps?.map(app => (
-          <Card key={app.id}>
+          <Card key={app.id} data-testid="app-card" data-app-id={app.id} data-status={app.status}>
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
                 <CardTitle>{app.name}</CardTitle>
                 <Badge variant={app.status === 'active' ? 'default' : 'secondary'}>
-                  {STATUS_LABEL[app.status]}
+                  {__(`app.status.${app.status}`)}
                 </Badge>
               </div>
               {app.description && <CardDescription>{app.description}</CardDescription>}
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              创建于 {new Date(app.createdAt).toLocaleDateString('zh-CN')}
+              {__('app.createdAt', formatDate(app.createdAt))}
             </CardContent>
           </Card>
         ))}

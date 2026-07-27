@@ -59,6 +59,9 @@ model User {
 // (theme, language, default view later) and would turn it into a junk drawer.
 model UserPreference {
   userId          Int      @id
+  // Interface language. Null means "never chosen" — the client then follows the
+  // browser rather than being forced to a default the user did not pick.
+  locale          String?
   // Where to drop the user on their next sign-in.
   //
   // The foreign key guarantees the workspace still EXISTS. It does not

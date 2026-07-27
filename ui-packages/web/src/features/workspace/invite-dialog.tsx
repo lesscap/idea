@@ -1,6 +1,7 @@
 import type { Id } from '@idea/shared'
 import { useState } from 'react'
-import { RequestError } from '../../lib/request.ts'
+import { useLocale } from '../../i18n/index.tsx'
+import { useErrorMessage } from '../../i18n/use-error-message.ts'
 import {
   Button,
   Dialog,
@@ -20,6 +21,8 @@ type Props = {
 }
 
 export const InviteDialog = ({ workspaceId, open, onOpenChange }: Props) => {
+  const __ = useLocale()
+  const errorMessage = useErrorMessage()
   const [link, setLink] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -31,7 +34,7 @@ export const InviteDialog = ({ workspaceId, open, onOpenChange }: Props) => {
       const { token } = await createInvite(workspaceId, 'member')
       setLink(`${window.location.origin}/invite/${token}`)
     } catch (err) {
-      setError(err instanceof RequestError ? err.message : '生成邀请失败')
+      setError(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -49,21 +52,19 @@ export const InviteDialog = ({ workspaceId, open, onOpenChange }: Props) => {
     <Dialog open={open} onOpenChange={close}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>邀请成员</DialogTitle>
-          <DialogDescription>
-            生成一条邀请链接发给对方。链接不绑定任何身份，谁拿到谁能用，且只能使用一次。
-          </DialogDescription>
+          <DialogTitle>{__('invite.title')}</DialogTitle>
+          <DialogDescription>{__('invite.description')}</DialogDescription>
         </DialogHeader>
 
-        {link ? (
+        {/* Before generating there is nothing to show — the description above
+            already says what the button will do. */}
+        {link && (
           <div className="flex flex-col gap-2">
             <Input readOnly value={link} onFocus={e => e.currentTarget.select()} />
             {/* The server keeps only a digest of the token, so this really is
                 the one and only copy — saying so is not decoration. */}
-            <p className="text-sm text-destructive">请立即复制。关闭后无法再次查看这条链接。</p>
+            <p className="text-sm text-destructive">{__('invite.copyNow')}</p>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">对方将自行设置用户名和密码。</p>
         )}
 
         {error && (
@@ -76,13 +77,13 @@ export const InviteDialog = ({ workspaceId, open, onOpenChange }: Props) => {
           {link ? (
             <>
               <Button variant="outline" onClick={() => navigator.clipboard?.writeText(link)}>
-                复制链接
+                {__('common.copy')}
               </Button>
-              <Button onClick={() => close(false)}>完成</Button>
+              <Button onClick={() => close(false)}>{__('common.done')}</Button>
             </>
           ) : (
             <Button onClick={generate} disabled={busy}>
-              {busy ? '生成中…' : '生成邀请链接'}
+              {busy ? __('invite.generating') : __('invite.generate')}
             </Button>
           )}
         </DialogFooter>

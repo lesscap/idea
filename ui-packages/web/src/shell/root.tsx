@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, useRoutes } from 'react-router-dom'
 import { SessionStoreProvider } from '../core/session/store.tsx'
 import { useLoadSession } from '../core/session/use-session.ts'
+import { detectLocale, LocaleProvider } from '../i18n/index.tsx'
 import { routes } from './routes.tsx'
 
 // Resolves the session once, before anything decides whether to redirect.
@@ -15,10 +16,15 @@ const Routed = () => {
   return useRoutes(routes)
 }
 
+// Locale is resolved before first paint from localStorage or the browser, so the
+// login screen is already in the right language — the one screen where a wrong
+// language is most costly, since someone who cannot read it cannot get past it.
 export const Root = () => (
-  <SessionStoreProvider>
-    <BrowserRouter>
-      <Routed />
-    </BrowserRouter>
-  </SessionStoreProvider>
+  <LocaleProvider initial={detectLocale()}>
+    <SessionStoreProvider>
+      <BrowserRouter>
+        <Routed />
+      </BrowserRouter>
+    </SessionStoreProvider>
+  </LocaleProvider>
 )

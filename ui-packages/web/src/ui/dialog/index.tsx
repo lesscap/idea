@@ -20,11 +20,16 @@ const Overlay = ({ className, ...props }: ComponentProps<typeof DialogPrimitive.
   />
 )
 
+// closeLabel is a prop rather than a translated string, because primitives here
+// must not know about the application's i18n — the red line is that ui/ takes
+// plain values from its caller. Defaults to English so a caller that forgets
+// still ships something a screen reader can announce.
 export const DialogContent = ({
   className,
   children,
+  closeLabel = 'Close',
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content>) => (
+}: ComponentProps<typeof DialogPrimitive.Content> & { closeLabel?: string }) => (
   <DialogPrimitive.Portal>
     <Overlay />
     <DialogPrimitive.Content
@@ -38,7 +43,7 @@ export const DialogContent = ({
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring">
         <X className="h-4 w-4" />
-        <span className="sr-only">关闭</span>
+        <span className="sr-only">{closeLabel}</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>

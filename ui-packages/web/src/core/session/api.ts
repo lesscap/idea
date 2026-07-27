@@ -1,4 +1,4 @@
-import type { CurrentUser, Id } from '@idea/shared'
+import type { CurrentUser, Id, Role } from '@idea/shared'
 import { del, get, patch, post } from '../../lib/request.ts'
 
 // The session resource: POST creates it, GET reads it, PATCH changes the
@@ -11,6 +11,7 @@ import { del, get, patch, post } from '../../lib/request.ts'
 export type SessionState = {
   readonly user: CurrentUser
   readonly workspaceId: Id | null
+  readonly role: Role | null
 }
 
 export const login = (username: string, password: string): Promise<SessionState> =>
@@ -18,7 +19,7 @@ export const login = (username: string, password: string): Promise<SessionState>
 
 export const fetchSession = (): Promise<SessionState> => get<SessionState>('/session')
 
-export const selectWorkspace = (workspaceId: Id): Promise<{ workspaceId: Id }> =>
-  patch<{ workspaceId: Id }>('/session', { workspaceId })
+export const selectWorkspace = (workspaceId: Id): Promise<{ workspaceId: Id; role: Role }> =>
+  patch<{ workspaceId: Id; role: Role }>('/session', { workspaceId })
 
 export const logout = (): Promise<{ ok: boolean }> => del<{ ok: boolean }>('/session')
