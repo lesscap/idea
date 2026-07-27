@@ -81,6 +81,16 @@ export const UpdateAppBody = z
   // An empty PATCH is a caller mistake, not a no-op worth pretending succeeded.
   .refine(v => Object.keys(v).length > 0, { message: 'no fields to update' })
 
+export const CreateConversationBody = z.object({
+  // Optional: a conversation not yet about any particular app still gets one, so
+  // there is a single path rather than a special case.
+  appId: z.coerce.number().int().positive().nullish(),
+})
+
+export const SendMessageBody = z.object({
+  text: z.string().trim().min(1).max(20_000),
+})
+
 export const IdParam = z.object({
   id: z.coerce.number().int().positive(),
 })

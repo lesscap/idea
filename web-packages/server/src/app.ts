@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { sessionMiddleware } from './apps/web/middleware/session.ts'
 import { BASE, Routes } from './apps/web/routes.ts'
+import { BASE as WORKER_BASE, Routes as WorkerRoutes } from './apps/worker/routes.ts'
 import { registerHealth } from './health.ts'
 import { internal, notFound } from './http.ts'
 import type { Controller, ServiceApplication, WebApplication } from './types.ts'
@@ -34,6 +35,15 @@ export const createApp = (services: ServiceApplication): Hono => {
     mount(web, prefix, controller, services)
   }
   root.route(BASE, web)
+
+  // Mounted as its own tree with no shared middleware. The cookie decoder above
+  // belongs to `web` and cannot reach here, so a worker route cannot pick up
+  // browser auth by being added in the wrong place.
+  const worker = new Hono()
+  for (const [prefix, controller] of Object.entries(WorkerRoutes)) {
+    mount(worker, prefix, controller, services)
+  }
+  root.route(WORKER_BASE, worker)
 
   // Without these two, the framework's own plain-text "404 Not Found" and
   // "Internal Server Error" escape as the only responses that are not the

@@ -1,57 +1,144 @@
+import { createClient } from './client.ts'
 import type { WorkerConfig } from './config.ts'
+import { readOrCreateMachineId, workspaceRoot } from './identity.ts'
+import { runTurn } from './turn.ts'
 
-// The long-lived worker process. One per machine — not one per project.
+// The long-lived worker process. One per machine, serving every application —
+// which work it receives is decided by its capabilities, not by its identity.
+// A daemon per app per machine would put the process count on a product of two
+// numbers that both grow.
 //
-// A worker registers a set of *capabilities* and the server routes work to it by
-// matching against them; the project an item belongs to rides on each command
-// instead of being baked into the worker's identity. So a machine runs a single
-// daemon holding a single connection, however many projects it serves.
+// Nothing is kept alive between turns. Everything a conversation needs in order
+// to resume lives outside this process: the transcript on the server, the branch
+// in the repository, the working files in the worktree. So a thousand idle
+// conversations cost nothing, and only work in flight occupies anything.
 //
-// (baton, the reference for this design, binds a worker to one project because
-// its agent works inside a git worktree and project↔repo is 1:1. Our agent
-// elicits requirements rather than editing code, so that constraint is absent
-// and the per-project process it forced is not worth inheriting.)
-//
-// Not built yet, in the order it should be built:
-//   1. register on start — POST /workers { machineId, name, hostname,
-//      capabilities }, persisting the returned identity and token locally
-//   2. hold one outbound command stream (GET /workers/me/stream) and demultiplex
-//      commands by the projectId / conversationId each carries. Outbound-only is
-//      deliberate: no inbound port, so this runs behind NAT on any machine
-//   3. per command, run a Claude Agent SDK conversation, bounded by a slot
-//      count. Concurrency comes from slots, not from one process per task
-//   4. self-watchdog: if the server goes unreachable, exit non-zero and let the
-//      process supervisor restart a clean worker
-//
-// Known trade-off of the single-daemon model: one process holds several
-// projects' context at once, so a crash or a leak crosses project boundaries in
-// a way per-project processes would not. Acceptable for an internal platform;
-// if real tenant isolation is ever needed, run several workers on the machine
-// with disjoint capability sets — the model already allows it.
-//
-// For now it starts, announces itself, and stays up until signalled — enough to
-// prove the process shape and the shutdown path.
-export const runDaemon = async (config: WorkerConfig): Promise<void> => {
-  console.log(`idea worker "${config.name}" on ${config.hostname} → ${config.server}`)
-  console.log(
-    config.capabilities.length > 0
-      ? `capabilities: ${config.capabilities.join(', ')}`
-      : 'no capabilities declared — this worker would receive no work',
-  )
+// Concurrency is a slot count, not a process count: slots bound how many turns
+// run at once, and each occupied slot releases when its turn ends.
 
-  await new Promise<void>(resolve => {
-    // Signal listeners do not hold Node's event loop open, and there is no
-    // connection holding it either yet — without a live handle the process
-    // would exit the moment it started. Step 2 above replaces this timer with
-    // the command stream, which keeps the loop alive on its own.
-    const keepalive = setInterval(() => {}, 60_000)
+// Reconnection backoff for the command stream. A dropped stream is routine — a
+// deploy, a proxy timeout — and since the queue is durable there is nothing to
+// recover, only somewhere to be.
+const RECONNECT_MS = 3_000
 
-    const stop = () => {
-      clearInterval(keepalive)
-      console.log('worker stopping')
+// A backstop for claiming rather than the main path: commands arrive over the
+// stream, and this catches work that appeared while the stream was down.
+const POLL_MS = 15_000
+
+// Losing the server means every lease this process holds is expiring unrenewed.
+// Exiting lets the supervisor start a clean one instead of lingering while
+// holding turns nobody is running.
+const WATCHDOG_MS = 30_000
+const WATCHDOG_FAILURES = 3
+
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, ms)
+    signal.addEventListener('abort', () => {
+      clearTimeout(timer)
       resolve()
-    }
-    process.once('SIGINT', stop)
-    process.once('SIGTERM', stop)
+    })
   })
+
+export const runDaemon = async (config: WorkerConfig): Promise<void> => {
+  const log = (message: string) => console.log(`[idea-worker] ${message}`)
+  const root = workspaceRoot()
+  const machineId = readOrCreateMachineId()
+  const client = createClient(config.server)
+
+  const registered = await client.register({
+    machineId,
+    name: config.name,
+    hostname: config.hostname,
+    capabilities: config.capabilities,
+  })
+  log(`${registered.outcome} as worker ${registered.id} (${config.name}) → ${config.server}`)
+  log(`workspace root: ${root}`)
+
+  const abort = new AbortController()
+  let running = 0
+  let draining = false
+  let exitCode = 0
+
+  const stop = (code: number) => {
+    exitCode = code
+    abort.abort()
+  }
+
+  // Claims until there is nothing more it may take. `draining` collapses
+  // overlapping wake-ups: several commands arriving together should not each
+  // start their own loop.
+  const drain = async (): Promise<void> => {
+    if (draining || abort.signal.aborted) return
+    draining = true
+    try {
+      while (running < config.slots && !abort.signal.aborted) {
+        const claimed = await client.claim().catch(error => {
+          log(`claim failed: ${String(error)}`)
+          return null
+        })
+        if (!claimed?.conversation) break
+
+        running++
+        const { turn, conversation } = claimed
+        // Deliberately not awaited: the loop goes back for more work while this
+        // turn runs, which is what the slots are for.
+        void runTurn(client, root, turn, conversation, log).finally(() => {
+          running--
+          // Finishing frees both a slot and the conversation, so something that
+          // was unclaimable a moment ago may be claimable now.
+          void drain()
+        })
+      }
+    } finally {
+      draining = false
+    }
+  }
+
+  // Reconnects for as long as the process lives, and drains after each
+  // connection ends — anything that arrived while it was down is waiting in the
+  // queue rather than lost.
+  const listen = async (): Promise<void> => {
+    while (!abort.signal.aborted) {
+      try {
+        await client.stream(command => {
+          if (command.type === 'work_available') void drain()
+        }, abort.signal)
+      } catch (error) {
+        if (abort.signal.aborted) return
+        log(`stream lost: ${String(error)}`)
+      }
+      if (abort.signal.aborted) return
+      await sleep(RECONNECT_MS, abort.signal)
+      void drain()
+    }
+  }
+
+  const poll = setInterval(() => void drain(), POLL_MS)
+
+  let failures = 0
+  const watchdog = setInterval(() => {
+    void client
+      .ping()
+      .then(() => {
+        failures = 0
+      })
+      .catch(() => {
+        failures++
+        if (failures < WATCHDOG_FAILURES) return
+        log(`server unreachable after ${failures} attempts — exiting for restart`)
+        stop(1)
+      })
+  }, WATCHDOG_MS)
+
+  process.once('SIGINT', () => stop(0))
+  process.once('SIGTERM', () => stop(0))
+
+  void drain()
+  await listen()
+
+  clearInterval(poll)
+  clearInterval(watchdog)
+  log('stopping')
+  if (exitCode !== 0) process.exitCode = exitCode
 }

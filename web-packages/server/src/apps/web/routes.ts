@@ -1,5 +1,6 @@
 import type { Controller } from '../../types.ts'
 import { AppsController } from './controllers/apps.ts'
+import { ConversationsController } from './controllers/conversations.ts'
 import { InvitesController } from './controllers/invites.ts'
 import { SessionController } from './controllers/session.ts'
 import { WorkspacesController } from './controllers/workspaces.ts'
@@ -30,4 +31,5 @@ export const Routes: Record<string, Controller> = {
   '/invites': InvitesController,
   '/workspaces': guarded(WorkspacesController),
   '/apps': guarded(AppsController),
+  '/conversations': guarded(ConversationsController),
 }

@@ -1,5 +1,6 @@
 export * from './api.ts'
 export * from './domain/app.ts'
+export * from './domain/conversation-event.ts'
 export * from './domain/invite.ts'
 export * from './domain/user.ts'
 export * from './domain/workspace.ts'

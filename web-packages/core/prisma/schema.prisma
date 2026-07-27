@@ -26,6 +26,18 @@ enum AppStatus {
   @@map("app_status")
 }
 
+enum TurnStatus {
+  queued
+  running
+  completed
+  failed
+  // Stopped on purpose. Kept apart from `failed` because nothing went wrong —
+  // the interface must not render it as an error.
+  aborted
+
+  @@map("turn_status")
+}
+
 // Identity only. Authorization lives in separate tables so this one does not
 // grow a new boolean column every time a permission is added.
 model User {
@@ -50,6 +62,7 @@ model User {
   invitesSent     Invite[]        @relation("InvitedBy")
   invitesAccepted Invite[]        @relation("AcceptedBy")
   appsCreated     App[]
+  conversations   Conversation[]
 
   @@map("users")
 }
@@ -108,6 +121,7 @@ model Workspace {
   apps        App[]
   invites     Invite[]
   preferredBy UserPreference[]
+  conversations Conversation[]
 
   @@map("workspaces")
 }
@@ -145,10 +159,163 @@ model App {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id])
+  conversations Conversation[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
   @@map("apps")
+}
+
+// A conversation with the agent. Independent of any one resource: it is told
+// which app it concerns so it can read that project's context, but it belongs to
+// no requirement inside it — which is why the panel showing it survives the main
+// area changing underneath.
+model Conversation {
+  id          Int    @id @default(autoincrement())
+  workspaceId Int
+  // Null for a conversation not yet about anything in particular. It still gets
+  // a worktree — off a workspace-level scratch repo — so one code path serves
+  // both cases.
+  appId       Int?
+  createdById Int
+  // Which adapter normalises this conversation's provider events. One vocabulary
+  // reaches the interface either way; this only picks who translates.
+  agentKind   String @default("claude-code")
+  // The provider's own session handle, used to resume rather than replay. Null
+  // until the first turn has run.
+  providerSessionId String?
+  title       String?
+  // Set once a person names it, which stops the automatic title from
+  // overwriting a deliberate choice.
+  titleLocked Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  // `updatedAt` only moves when a column changes, so it reports a rename as
+  // activity and a long conversation as idle. This is the honest "last spoke".
+  lastActiveAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  app       App?      @relation(fields: [appId], references: [id], onDelete: SetNull)
+  createdBy User      @relation(fields: [createdById], references: [id])
+  events    ConversationEvent[]
+  pending   PendingInput[]
+  turns     Turn[]
+
+  @@index([workspaceId, lastActiveAt])
+  @@index([appId])
+  @@map("conversations")
+}
+
+// The append-only transcript, and the only account of what happened. `sequence`
+// is per-conversation and assigned inside the append transaction; readers order
+// and de-duplicate by it, which is what makes a dropped live frame recoverable
+// by asking again rather than by tracking delivery.
+//
+// `payload` holds a canonical ConversationEvent (see @idea/shared), including
+// the provider's `raw` payload. That field never leaves the server — see
+// toWireEvent.
+model ConversationEvent {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  sequence       Int
+  // The canonical event type, duplicated out of the payload so the common
+  // queries ("just the agent's messages") are an index scan.
+  type           String
+  payload        Json
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, sequence])
+  @@index([conversationId, type])
+  @@map("conversation_events")
+}
+
+// Typed but not yet sent. Deliberately NOT an event: the transcript records what
+// happened, and this has not happened yet.
+//
+// Keeping it separate buys two things a durable-transcript-only design cannot
+// have. Several of these merge into ONE user message when a turn finally starts,
+// so someone thinking out loud in three bursts gets one considered reply rather
+// than three partial ones. And an unsent line can still be withdrawn, which is
+// impossible once it is history.
+model PendingInput {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  text           String
+  attachments    Json?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, id])
+  @@map("pending_inputs")
+}
+
+// One unit of agent work. Exists as a row rather than being derived from the
+// transcript because work is routed to whichever worker is free: with a pool,
+// two of them would otherwise pick up the same message. Binding a conversation
+// to one worker would make derivation safe, at the cost of the routing.
+model Turn {
+  id                Int        @id @default(autoincrement())
+  conversationId    Int
+  // Points at the exact transcript event this turn is answering.
+  userEventSequence Int
+  status            TurnStatus @default(queued)
+  workerId          Int?
+  // Holds the conversation id while running, and null otherwise. The unique
+  // index is the whole mutual-exclusion mechanism: a second worker claiming a
+  // turn for a conversation that already has one running collides here and backs
+  // off. No lock service, no coordination.
+  runningKey        String?    @unique
+  // A claim is a lease, not a handover. Renewed by turn heartbeats — a single
+  // long tool call emits nothing else for minutes, and without renewal the
+  // reaper would take the turn away and run it a second time.
+  leaseUntil        DateTime?
+  attempt           Int        @default(0)
+  abortRequestedAt  DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // The turn outlives the worker that was running it — that is precisely the
+  // case the reaper exists to recover.
+  worker       Worker?      @relation(fields: [workerId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, status])
+  @@index([status, leaseUntil])
+  @@map("turns")
+}
+
+// An agent daemon. Keyed by machine and NOT by app: one process serves every
+// application, and which work reaches it is decided by its capabilities rather
+// than by its identity. The alternative — a daemon per app per machine — puts
+// the process count on a product of two numbers that both grow.
+//
+// Liveness is not tracked here. A worker is usable exactly while its command
+// stream is connected, which removes an entire layer of timeout tuning; the
+// heartbeat endpoint exists only so the daemon can tell it has lost the server
+// and exit for its supervisor to restart.
+model Worker {
+  id           Int      @id @default(autoincrement())
+  // Stable per machine, so a restarted daemon recovers its identity instead of
+  // registering a duplicate.
+  machineId    String   @unique
+  // Display handle. Unique so two machines cannot both call themselves "build-1"
+  // and leave nobody able to tell which is which.
+  name         String   @unique
+  hostname     String
+  // Returned on every successful registration, so a daemon that lost its local
+  // state can recover it by registering again.
+  apiToken     String   @unique
+  capabilities String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  turns Turn[]
+
+  @@map("workers")
 }
 
 // A bearer capability, not a letter addressed to someone: the admin generating

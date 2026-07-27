@@ -1,9 +1,14 @@
 import { createPrisma, createScope, type Dispose } from '@idea/core'
+import { createCommandBus } from './command-bus.ts'
 import type { Config } from './config.ts'
 import { createAppService } from './services/app.ts'
 import { createAuthService } from './services/auth.ts'
+import { createConversationService } from './services/conversation.ts'
 import { createHealthService } from './services/health.ts'
+import { createPendingInputService } from './services/pending-input.ts'
+import { createTurnService } from './services/turn.ts'
 import { createUserService } from './services/user.ts'
+import { createWorkerService } from './services/worker.ts'
 import { createWorkspaceService } from './services/workspace.ts'
 import type { ServiceApplication } from './types.ts'
 
@@ -25,6 +30,13 @@ export const createContext = (config: Config): [ServiceApplication, Dispose] => 
     $auth: createAuthService(app),
     $workspace: createWorkspaceService(app),
     $app: createAppService(app),
+    $conversation: createConversationService(app),
+    $pendingInput: createPendingInputService(app),
+    $turn: createTurnService(app),
+    $worker: createWorkerService(app),
+    // Not a resource: it holds only live subscriptions, which end with their
+    // connections rather than needing release.
+    $commands: createCommandBus(),
   })
 
   return [app, scope.dispose]

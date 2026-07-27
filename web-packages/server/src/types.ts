@@ -1,10 +1,15 @@
 import type { PrismaClient } from '@idea/core'
 import type { Hono } from 'hono'
+import type { CommandBus } from './command-bus.ts'
 import type { Config } from './config.ts'
 import type { AppService } from './services/app.ts'
 import type { AuthService } from './services/auth.ts'
+import type { ConversationService } from './services/conversation.ts'
 import type { HealthService } from './services/health.ts'
+import type { PendingInputService } from './services/pending-input.ts'
+import type { TurnService } from './services/turn.ts'
 import type { UserService } from './services/user.ts'
+import type { WorkerService } from './services/worker.ts'
 import type { WorkspaceService } from './services/workspace.ts'
 
 // Everything a service factory can reach: the config, the resources, and its
@@ -22,6 +27,11 @@ export type ServiceApplication = {
   readonly $auth: AuthService
   readonly $workspace: WorkspaceService
   readonly $app: AppService
+  readonly $conversation: ConversationService
+  readonly $pendingInput: PendingInputService
+  readonly $turn: TurnService
+  readonly $worker: WorkerService
+  readonly $commands: CommandBus
 }
 
 // A service is `(app) => api`: a factory closing over the application, handing
