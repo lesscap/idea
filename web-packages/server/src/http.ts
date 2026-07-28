@@ -1,11 +1,20 @@
-import { fail, ok } from '@idea/shared'
+import type { ApiFailure, ApiSuccess } from '@idea/shared'
 import type { Context } from 'hono'
 
-// HTTP status lives here, not in @idea/shared: the envelope is a data contract
-// that a non-HTTP transport could reuse, while status codes are HTTP's business.
+// The response envelope, and the HTTP statuses that carry it.
+//
+// @idea/shared holds the envelope's SHAPE and nothing else — it is the interface
+// contract between the two runtimes, so it carries types and no logic. The
+// server is the only thing that ever builds one, which puts the builders here,
+// beside the statuses they go out with.
+//
 // Pairing code and status in one factory per failure is what stops `not_found`
 // from going out as a 400 in one controller and a 404 in the next.
 type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 500
+
+const ok = <T>(data: T): ApiSuccess<T> => ({ success: true, data })
+
+const fail = (code: string, message: string): ApiFailure => ({ success: false, code, message })
 
 const failure = (c: Context, status: ErrorStatus, code: string, message: string) =>
   c.json(fail(code, message), status)

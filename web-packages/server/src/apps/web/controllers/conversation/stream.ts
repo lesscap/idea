@@ -1,9 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
-import { type StoredEvent, toWireEvent } from '@idea/shared'
+import type { StoredEvent } from '@idea/shared'
 import { notFound } from '../../../../http.ts'
 import { streamBus } from '../../../../sse.ts'
 import type { Controller } from '../../../../types.ts'
 import { IdParam } from '../../schema/index.ts'
+import { toWireEvent } from '../../wire.ts'
 import { isResponse, scopedConversation } from './scoped.ts'
 
 // The live tail of a conversation. History is not here — it comes from

@@ -1,4 +1,4 @@
-import { type ApiResponse, isOk } from '@idea/shared'
+import type { ApiResponse } from '@idea/shared'
 
 // Vite proxies this prefix to the server in dev; a reverse proxy does the same
 // in production. Nothing else in the app spells out a backend address.
@@ -28,7 +28,9 @@ const send = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
   const body = (await res.json().catch(() => null)) as ApiResponse<T> | null
   if (!body) throw new RequestError('bad_response', `${res.status} ${res.statusText}`)
-  if (!isOk(body)) throw new RequestError(body.code, body.message)
+  // `success` is the envelope's discriminant, so testing it narrows the union on
+  // its own — a guard function would only wrap what the compiler already does.
+  if (!body.success) throw new RequestError(body.code, body.message)
   return body.data
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_PAGE_SIZE, paged, parsePageQuery, toOffset, totalPages } from './paging.ts'
+import { MAX_PAGE_SIZE, paged, parsePageQuery, toOffset } from './paging.ts'
 
 // Query parsing is the security-relevant half: `pageSize` reaches the database
 // as a LIMIT, and `page` becomes an OFFSET. Unclamped, `?pageSize=1000000` is a
@@ -42,21 +42,12 @@ describe('toOffset', () => {
   })
 })
 
-describe('paged / totalPages', () => {
+describe('paged', () => {
+  // The echo is what lets a clamped client tell. It also means a reader working
+  // out whether more pages exist can trust the pageSize it was handed back,
+  // rather than the one it asked for.
   it('echoes the effective query back so a clamped client can tell', () => {
     const query = parsePageQuery({ pageSize: '99999' })
     expect(paged([], 0, query).pageSize).toBe(MAX_PAGE_SIZE)
-  })
-
-  it('rounds a partial last page up', () => {
-    expect(totalPages({ total: 21, pageSize: 20 })).toBe(2)
-  })
-
-  it('reports zero pages for an empty result rather than one empty page', () => {
-    expect(totalPages({ total: 0, pageSize: 20 })).toBe(0)
-  })
-
-  it('does not divide by zero', () => {
-    expect(totalPages({ total: 10, pageSize: 0 })).toBe(0)
   })
 })

@@ -1,5 +1,5 @@
-import { normalizePhone, normalizeUsername } from '@idea/shared'
 import { z } from 'zod'
+import { normalizePhone, normalizeUsername } from '../../../identity.ts'
 
 // Request schemas for the web surface. Normalization happens here, at the edge,
 // so everything downstream works with canonical values — a username that

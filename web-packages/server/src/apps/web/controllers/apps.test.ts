@@ -1,5 +1,6 @@
-import { type PageQuery, paged } from '@idea/shared'
+import type { PageQuery } from '@idea/shared'
 import { describe, expect, it, vi } from 'vitest'
+import { paged } from '../../../paging.ts'
 import type { ServiceApplication } from '../../../types.ts'
 import { failure, json, mountController } from '../test-support.ts'
 import { AppsController } from './apps.ts'

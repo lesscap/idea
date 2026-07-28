@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
-import { parsePageQuery } from '@idea/shared'
 import { badRequest, conflict, notFound, sendOk } from '../../../http.ts'
+import { parsePageQuery } from '../../../paging.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
 import { isResponse, requireCurrentWorkspace } from '../middleware/workspace.ts'

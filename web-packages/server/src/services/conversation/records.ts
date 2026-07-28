@@ -1,4 +1,5 @@
-import { type ConversationEvent, paged, toOffset } from '@idea/shared'
+import type { ConversationEvent } from '@idea/shared'
+import { paged, toOffset } from '../../paging.ts'
 import type { Service } from '../../types.ts'
 import { writeEvent } from './event-log.ts'
 import type { Conversation, ConversationService } from './types.ts'

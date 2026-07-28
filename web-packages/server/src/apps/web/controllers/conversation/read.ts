@@ -1,11 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
-import { parsePageQuery, toWireEvent } from '@idea/shared'
 import { notFound, sendOk } from '../../../../http.ts'
+import { parsePageQuery } from '../../../../paging.ts'
 import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
 import { isResponse, requireCurrentWorkspace } from '../../middleware/workspace.ts'
 import { IdParam, StartConversationBody } from '../../schema/index.ts'
+import { toWireEvent } from '../../wire.ts'
 import { scopedConversation } from './scoped.ts'
 
 // Beyond this a transcript read stops being a window. Nothing in the interface

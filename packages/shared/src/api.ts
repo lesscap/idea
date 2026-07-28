@@ -2,6 +2,10 @@
 // return it, the browser request wrapper narrows it. A discriminated union
 // rather than `{ data?, error? }` so `success` alone tells the compiler which
 // half is present — no optional-chaining at every call site.
+//
+// Shape only. Building one is the server's job (server/src/http.ts) and reading
+// one is a `body.success` test at either end; neither belongs here, because this
+// package is the interface contract and carries no logic.
 export type ApiSuccess<T> = { success: true; data: T }
 
 // `code` is a stable machine-readable string the client can branch on; `message`
@@ -11,13 +15,3 @@ export type ApiSuccess<T> = { success: true; data: T }
 export type ApiFailure = { success: false; code: string; message: string }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure
-
-export const ok = <T>(data: T): ApiSuccess<T> => ({ success: true, data })
-
-export const fail = (code: string, message: string): ApiFailure => ({
-  success: false,
-  code,
-  message,
-})
-
-export const isOk = <T>(res: ApiResponse<T>): res is ApiSuccess<T> => res.success

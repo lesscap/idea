@@ -1,6 +1,14 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { badRequest, conflict, forbidden, internal, notFound, unauthorized } from './http.ts'
+import {
+  badRequest,
+  conflict,
+  forbidden,
+  internal,
+  notFound,
+  sendOk,
+  unauthorized,
+} from './http.ts'
 
 // The point of these helpers is that every failure leaves the server looking
 // identical. A drifting status (`not_found` answered as 400) or a stray field
@@ -39,5 +47,20 @@ describe('failure helpers', () => {
       code: 'internal',
       message: 'internal error',
     })
+  })
+})
+
+// The other half of the same contract. Pinned for the same reason: the browser
+// reads `success` to decide which half it is holding, so the flag has to be
+// there and the payload has to sit under `data` rather than at the top level.
+describe('the success half', () => {
+  it('puts the data under `data` and says so', async () => {
+    const app = new Hono()
+    app.get('/', c => sendOk(c, { name: 'idea' }))
+
+    const res = await app.request('/')
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: { name: 'idea' } })
   })
 })
