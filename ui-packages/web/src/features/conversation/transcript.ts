@@ -6,12 +6,27 @@ import type { StoredEvent, WireEvent } from '@idea/shared'
 // appended to. A streaming answer arrives as repeated frames carrying the whole
 // text so far, so appending shows the reply two or three times over — which is
 // why the adapter synthesises an id for blocks the provider does not identify.
+//
+// Which puts a requirement on the other side: those ids must be unique across
+// the whole conversation, not just within one turn's stream. A per-turn counter
+// made turn two's answer replace turn one's, and nothing here can tell the
+// difference — an id is all this has to go on.
 
 export type Bubble =
   | { kind: 'them'; key: string; text: string }
   | { kind: 'agent'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string }
-  | { kind: 'tool'; key: string; name: string; running: boolean; failed: boolean }
+  | {
+      kind: 'tool'
+      key: string
+      name: string
+      // Kept so the collapsed row can say what the call was about rather than
+      // only naming the tool, and so opening it shows the whole thing.
+      input: unknown
+      output?: string
+      running: boolean
+      failed: boolean
+    }
   | { kind: 'error'; key: string; text: string }
   | { kind: 'note'; key: string; text: string }
 
@@ -30,11 +45,12 @@ const bubbleOf = (event: WireEvent, key: string): Bubble | null => {
     if (item.type === 'agent_message') return { kind: 'agent', key: itemKey, text: item.text }
     if (item.type === 'reasoning') return { kind: 'thinking', key: itemKey, text: item.text }
     if (item.type === 'error') return { kind: 'error', key: itemKey, text: item.message }
-    const name = 'name' in item ? item.name : item.type
     return {
       kind: 'tool',
       key: itemKey,
-      name,
+      name: 'name' in item ? item.name : item.type,
+      input: 'input' in item ? item.input : undefined,
+      ...('output' in item && typeof item.output === 'string' ? { output: item.output } : {}),
       running: item.status === 'in_progress',
       failed: item.status === 'failed',
     }

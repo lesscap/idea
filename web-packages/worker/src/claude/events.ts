@@ -18,9 +18,13 @@ import type { SdkBlock, SdkMessage } from './sdk-types.ts'
 //
 // IDENTITY. Claude gives no id to text or thinking blocks. Items are replaced by
 // id rather than appended to, so without one a streaming interface has no way to
-// tell an update from a new message and shows the text twice. Synthesised ids
-// are per-turn counters, which is enough: they only have to be stable within the
-// stream they appear in.
+// tell an update from a new message and shows the text twice.
+//
+// So they are synthesised — and the scope they must be unique in is the whole
+// CONVERSATION, not this stream. A bare per-stream counter restarts at 1 every
+// turn, so turn two's `msg-2` replaces turn one's answer and the transcript
+// silently loses it. Hence the caller passes the turn id in front: unique within
+// the conversation by construction, and already at hand where the turn runs.
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -41,13 +45,14 @@ const resultText = (content: unknown): string => {
 
 export async function* claudeEvents(
   messages: AsyncIterable<SdkMessage>,
+  scope: string,
 ): AsyncIterable<ConversationEvent> {
   // Tool calls waiting for their result, keyed by the id Claude will quote back.
   const pending = new Map<string, Extract<AgentItem, { type: 'tool_call' }>>()
   let threadStarted = false
   let counter = 0
 
-  const nextId = (kind: string) => `${kind}-${++counter}`
+  const nextId = (kind: string) => `${scope}-${kind}-${++counter}`
 
   for await (const message of messages) {
     if (message.type === 'system') {

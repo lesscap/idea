@@ -65,6 +65,7 @@ export const runTurn = async (
       sessions,
       provider,
       resume,
+      scope: `t${claimed.id}`,
       signal: controller.signal,
       log,
     })) {

@@ -77,6 +77,19 @@ export const en: typeof zh = {
     composerSoon: 'Composer to come',
   },
 
+  // The transcript's own vocabulary: what a folded group of the agent's
+  // working-out says about itself before anyone opens it.
+  transcript: {
+    you: 'You',
+    thinking: 'thinking',
+    step: '{0} step',
+    steps: '{0} steps',
+    failed: '{0} failed',
+    running: 'running',
+    expandActivity: 'Show working',
+    collapseActivity: 'Hide working',
+  },
+
   workspace: {
     noneTitle: 'You are not in any workspace yet',
     noneHint: 'Ask an administrator to invite you. Opening their link brings you in.',

@@ -78,6 +78,19 @@ export const zh = {
     composerSoon: '输入区待接入',
   },
 
+  // The transcript's own vocabulary: what a folded group of the agent's
+  // working-out says about itself before anyone opens it.
+  transcript: {
+    you: '你',
+    thinking: '思考',
+    step: '{0} 步',
+    steps: '{0} 步',
+    failed: '{0} 失败',
+    running: '运行中',
+    expandActivity: '展开过程',
+    collapseActivity: '折叠过程',
+  },
+
   workspace: {
     noneTitle: '你还不属于任何工作空间',
     noneHint: '请联系管理员邀请你加入。收到邀请链接后打开即可进入。',

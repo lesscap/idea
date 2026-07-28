@@ -7,14 +7,19 @@ import type { SdkMessage } from './sdk-types.ts'
 // what is being checked is the translation, and feeding it fixed input is the
 // only way to check the cases a live model rarely produces on demand.
 
-const run = async (...messages: SdkMessage[]): Promise<ConversationEvent[]> => {
+const runIn = async (scope: string, ...messages: SdkMessage[]): Promise<ConversationEvent[]> => {
   const source = (async function* () {
     for (const message of messages) yield message
   })()
   const out: ConversationEvent[] = []
-  for await (const event of claudeEvents(source)) out.push(event)
+  for await (const event of claudeEvents(source, scope)) out.push(event)
   return out
 }
+
+const run = (...messages: SdkMessage[]) => runIn('t1', ...messages)
+
+const idsOf = (events: ConversationEvent[]) =>
+  events.flatMap(e => ('item' in e && e.item ? [e.item.id] : []))
 
 const types = (events: ConversationEvent[]) => events.map(e => e.type)
 
@@ -24,6 +29,35 @@ const DONE: SdkMessage = { type: 'result', subtype: 'success' }
 const say = (text: string): SdkMessage => ({
   type: 'assistant',
   message: { content: [{ type: 'text', text }] },
+})
+
+const think = (thinking: string): SdkMessage => ({
+  type: 'assistant',
+  message: { content: [{ type: 'thinking', thinking }] },
+})
+
+// The ids Claude does not supply have to be unique across the CONVERSATION, not
+// just this stream — the browser replaces items by id, so a second turn reusing
+// the first turn's ids overwrites its answer and the transcript loses a reply.
+// A per-stream counter alone did exactly that, and it was invisible until two
+// turns were run back to back.
+describe('identity across turns', () => {
+  it("does not reuse an earlier turn's ids for the same block sequence", async () => {
+    const first = idsOf(await runIn('t1', SYSTEM, think('why'), say('because'), DONE))
+    const second = idsOf(await runIn('t2', SYSTEM, think('why'), say('because'), DONE))
+
+    expect(first).toHaveLength(2)
+    expect(second).toHaveLength(2)
+    expect(first.filter(id => second.includes(id))).toEqual([])
+  })
+
+  // Within one stream the opposite must hold: a block that grows across frames
+  // has to keep its id, or a streaming answer is drawn once per frame.
+  it('keeps one id per block within a turn', async () => {
+    const ids = idsOf(await run(SYSTEM, say('partial'), say('partial and more'), DONE))
+
+    expect(new Set(ids).size).toBe(ids.length)
+  })
 })
 
 describe('turn boundaries', () => {

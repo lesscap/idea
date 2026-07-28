@@ -20,6 +20,9 @@ export type RunOptions = {
   provider: ProviderConfig
   // Null on the first turn, or when the local session is gone.
   resume: string | null
+  // Namespaces the ids synthesised for blocks Claude leaves unidentified, so
+  // one turn's answer cannot replace an earlier turn's in the transcript.
+  scope: string
   signal: AbortSignal
   log: (message: string) => void
 }
@@ -125,7 +128,7 @@ export const runClaude = (options: RunOptions): AsyncIterable<ConversationEvent>
   return {
     async *[Symbol.asyncIterator]() {
       try {
-        yield* claudeEvents(messages)
+        yield* claudeEvents(messages, options.scope)
       } finally {
         options.signal.removeEventListener('abort', abort)
       }

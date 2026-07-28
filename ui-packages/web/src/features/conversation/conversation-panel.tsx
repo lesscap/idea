@@ -1,8 +1,9 @@
-import { ChevronRight, PanelLeftClose, Send, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { PanelLeftClose, Send, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button, Markdown } from '../../ui'
-import type { Bubble } from './transcript'
+import { groupActivity, isActivityGroup, type StreamItem } from './activity'
+import { ActivityBlock, Step } from './activity-group'
 import { useConversation } from './use-conversation'
 
 // Where the requirement actually gets worked out.
@@ -11,66 +12,75 @@ import { useConversation } from './use-conversation'
 // and closing tabs never unmounts it — a half-typed message survives going to
 // read the requirement it is about.
 
-const Reasoning = ({ text }: { text: string }) => {
-  const [open, setOpen] = useState(false)
+// What the person said, drawn as a record rather than a chat bubble.
+//
+// Left-aligned on a muted ground, not a saturated block on the right. A
+// right-aligned bubble is instant-messaging's language and implies two peers
+// trading lines; this is someone dictating what they need while the other side
+// works it out. A continuous left-aligned record fits that, and lets a long
+// requirement use the full width instead of being squeezed into 85% of it.
+const Said = ({ text }: { text: string }) => {
+  const __ = useLocale()
 
-  // Folded by default. Someone describing what they need wants the answer; the
-  // working-out is for when the answer looks wrong.
+  // Split on blank lines: several messages typed while a turn was running are
+  // merged by the server with `\n\n` between them, and they were separate
+  // thoughts when they were typed.
+  const paragraphs = text.split(/\n{2,}/).filter(p => p.trim() !== '')
+
   return (
-    <div className="text-muted-foreground text-xs" data-testid="bubble-thinking">
-      <button
-        type="button"
-        className="flex items-center gap-1 hover:text-foreground [&_svg]:size-3"
-        onClick={() => setOpen(!open)}
-      >
-        <ChevronRight className={open ? 'rotate-90' : ''} />
-        {text.length} 字
-      </button>
-      {open && <p className="mt-1 whitespace-pre-wrap pl-4 leading-relaxed">{text}</p>}
+    <div
+      className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
+      data-testid="bubble-them"
+    >
+      <span className="mr-2 select-none font-mono text-[11px] text-muted-foreground">
+        {__('transcript.you')}›
+      </span>
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={paragraph}
+          className={index === 0 ? 'inline whitespace-pre-wrap' : 'mt-2 whitespace-pre-wrap'}
+        >
+          {paragraph}
+        </p>
+      ))}
     </div>
   )
 }
 
-const Drawn = ({ bubble }: { bubble: Bubble }) => {
-  if (bubble.kind === 'them')
+const Drawn = ({ item }: { item: StreamItem }) => {
+  if (isActivityGroup(item)) return <ActivityBlock group={item} />
+
+  if (item.kind === 'them') return <Said text={item.text} />
+
+  // The answer is what the transcript is for: a little larger and darker than
+  // its surroundings, and capped near 70 characters because a line wider than
+  // that is tiring to read. No border — a box would make it look like a peer of
+  // the process rows rather than the point of them.
+  if (item.kind === 'agent')
     return (
-      <div className="flex justify-end" data-testid="bubble-them">
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-lg bg-primary px-3 py-2 text-primary-foreground text-sm">
-          {bubble.text}
-        </p>
+      <div className="max-w-[70ch] text-[15px] leading-relaxed" data-testid="bubble-agent">
+        <Markdown text={item.text} />
       </div>
     )
 
-  if (bubble.kind === 'agent')
-    return (
-      <div className="text-sm leading-relaxed" data-testid="bubble-agent">
-        <Markdown text={bubble.text} />
-      </div>
-    )
+  // A lone process step, outside any group: drawn bare, because a summary row
+  // reading "1 step · 1 thinking" above a single line is chrome with nothing
+  // to show.
+  if (item.kind === 'thinking' || item.kind === 'tool') return <Step item={item} />
 
-  if (bubble.kind === 'thinking') return <Reasoning text={bubble.text} />
-
-  if (bubble.kind === 'tool')
-    return (
-      <p className="text-muted-foreground text-xs" data-testid="bubble-tool">
-        {bubble.name}
-        {bubble.running ? ' …' : bubble.failed ? ' ✗' : ' ✓'}
-      </p>
-    )
-
-  if (bubble.kind === 'error')
+  if (item.kind === 'error')
     return (
       <p
         className="rounded-md bg-destructive/10 px-3 py-2 text-destructive text-sm"
         data-testid="bubble-error"
       >
-        {bubble.text}
+        {item.text}
       </p>
     )
 
   return (
     <p className="text-muted-foreground text-xs" data-testid="bubble-note">
-      {bubble.text}
+      {item.text}
     </p>
   )
 }
@@ -89,12 +99,15 @@ export const ConversationPanel = ({
   const [draft, setDraft] = useState('')
   const bottom = useRef<HTMLDivElement>(null)
 
+  const stream = useMemo(() => groupActivity(bubbles, working), [bubbles, working])
+
   // Follows the conversation as it grows. Keyed on the count rather than the
   // content so an answer being revised in place — which is how streaming
   // arrives — does not fight the scroll on every frame.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a change detector, not a value read
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [bubbles.length])
+  }, [stream.length])
 
   const submit = () => {
     const text = draft.trim()
@@ -140,10 +153,12 @@ export const ConversationPanel = ({
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
             data-testid="transcript"
           >
-            {bubbles.map(bubble => (
-              <Drawn key={bubble.key} bubble={bubble} />
+            {stream.map(item => (
+              <Drawn key={item.key} item={item} />
             ))}
-            {working && (
+            {/* Only when nothing is on screen yet. Once a group is live it says
+                so itself, and two "working" indicators is one too many. */}
+            {working && stream.length === 0 && (
               <p className="text-muted-foreground text-xs" data-testid="agent-working">
                 {__('shell.thinking')}
               </p>

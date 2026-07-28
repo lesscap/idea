@@ -1,5 +1,5 @@
 import { MessageSquarePlus } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { get, post } from '../../lib/request'
 import { Button } from '../../ui'
@@ -22,16 +22,20 @@ export const ConversationList = ({
   const __ = useLocale()
   const [items, setItems] = useState<Summary[]>([])
 
-  const load = () =>
-    get<{ items: Summary[] }>('/conversations')
-      .then(data => setItems(data.items))
-      .catch(() => setItems([]))
+  // Stable, so the effect below runs once rather than on every render.
+  const load = useCallback(
+    () =>
+      get<{ items: Summary[] }>('/conversations')
+        .then(data => setItems(data.items))
+        .catch(() => setItems([])),
+    [],
+  )
 
+  // Read once on mount, and again explicitly after creating one — enough to
+  // keep the list current without polling it.
   useEffect(() => {
     void load()
-    // Reloaded when the selection changes, which is also when a new one has just
-    // been created — enough to keep the list current without polling it.
-  }, [])
+  }, [load])
 
   const start = async () => {
     const created = await post<{ id: number }>('/conversations', {})
