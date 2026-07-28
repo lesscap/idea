@@ -21,6 +21,7 @@ import {
 } from '../dropdown-menu'
 import { Input } from '../input'
 import { Label } from '../label'
+import { Markdown } from '../markdown'
 
 // A gallery of every primitive in its full state matrix. Running the real app
 // only ever shows the states that application happens to use, so a broken
@@ -83,6 +84,54 @@ const SWATCHES = [
     fg: 'text-foreground',
   },
 ] as const
+
+// The states an application only produces by luck. A wide table, a formula that
+// outruns its column, a diagram that will not parse — the agent might emit any
+// of them tomorrow and none of them today, which is exactly the gap this page
+// exists to close.
+const MARKDOWN_SAMPLE = [
+  '## 报销规则',
+  '',
+  '超过 $5000$ 元需要总监审批，报销比例 \\(r = 0.8\\)。',
+  '',
+  '\\[\\text{可报金额} = \\sum_{i=1}^{n} \\min(a_i,\\ \\text{上限}_i) \\times r\\]',
+  '',
+  '```mermaid',
+  'graph TD',
+  // Quoted on purpose: with htmlLabels off, an unquoted `>` inside a node label
+  // is eaten. That is mermaid's own syntax rule, not something to work around
+  // here — but a sample that gets it wrong teaches the wrong thing.
+  '  A[提交发票] --> B{"金额 > 5000?"}',
+  '  B -->|是| C[总监审批]',
+  '  B -->|否| D[主管审批]',
+  '  C --> E[财务打款]',
+  '  D --> E',
+  '```',
+  '',
+  '一个没有标记语言的围栏，但开头就是流程图：',
+  '',
+  '```',
+  'flowchart LR',
+  '  提交 --> 审批 --> 打款',
+  '```',
+  '',
+  '| 级别 | 上限 | 审批人 | 时限 | 备注 |',
+  '| --- | --- | --- | --- | --- |',
+  '| 普通 | 5000 | 主管 | 3 个工作日 | 发票必须清晰可读 |',
+  '| 特批 | 不限 | 总监 | 5 个工作日 | 需附情况说明 |',
+  '',
+  '普通代码块不该变成图，即使里面有 `graph` 这个词：',
+  '',
+  '```ts',
+  'const graph = buildGraph(nodes)',
+  '```',
+  '',
+  '画不出来的图，退回源码本身：',
+  '',
+  '```mermaid',
+  '这不是一张图',
+  '```',
+].join('\n')
 
 const Section = ({
   title,
@@ -208,6 +257,13 @@ export const UiPreview = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </Section>
+
+      <Section
+        title="Markdown"
+        note="公式走 KaTeX，图走 mermaid（动态加载，首次出现图时才拉 chunk）。画不出来就退回源码"
+      >
+        <Markdown text={MARKDOWN_SAMPLE} />
       </Section>
 
       <Section title="DropdownMenu" note="方向键导航，Esc 关闭">
