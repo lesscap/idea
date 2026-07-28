@@ -71,11 +71,10 @@ export const zh = {
     expandConversation: '展开会话',
     newConversation: '新会话',
     noConversation: '选一个会话，或新建一个',
-    conversationSoon: '对话还没接上',
     thinking: '正在思考…',
     withdraw: '撤回',
-    composerPlaceholder: '说说你想要什么…',
-    composerSoon: '输入区待接入',
+    composerPlaceholder: '说说你想要什么…  Enter 发送',
+    send: '发送',
   },
 
   // The transcript's own vocabulary: what a folded group of the agent's

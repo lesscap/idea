@@ -1,9 +1,10 @@
-import { PanelLeftClose, Send, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { PanelLeftClose } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
 import { Button, Markdown } from '../../ui'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
 import { ActivityBlock, Step } from './activity-group'
+import { Composer } from './composer'
 import { useConversation } from './use-conversation'
 
 // Where the requirement actually gets worked out.
@@ -96,7 +97,6 @@ export const ConversationPanel = ({
 }) => {
   const __ = useLocale()
   const { bubbles, pending, working, status, send, withdraw } = useConversation(conversationId)
-  const [draft, setDraft] = useState('')
   const bottom = useRef<HTMLDivElement>(null)
 
   const stream = useMemo(() => groupActivity(bubbles, working), [bubbles, working])
@@ -108,15 +108,6 @@ export const ConversationPanel = ({
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [stream.length])
-
-  const submit = () => {
-    const text = draft.trim()
-    if (!text) return
-    // Cleared immediately. Waiting for the round trip makes the interface feel
-    // like it missed the keystroke; restored if the send actually failed.
-    setDraft('')
-    void send(text).catch(() => setDraft(text))
-  }
 
   return (
     <div
@@ -166,52 +157,7 @@ export const ConversationPanel = ({
             <div ref={bottom} />
           </div>
 
-          {/* Typed but not sent. Shown apart from the transcript because it has
-              not happened yet — and because until it does, it can be taken back. */}
-          {pending.length > 0 && (
-            <div className="shrink-0 border-border border-t px-3 py-2" data-testid="pending-list">
-              {pending.map(item => (
-                <div
-                  key={item.id}
-                  className="flex items-start gap-2 text-muted-foreground text-sm"
-                  data-testid={`pending-${item.id}`}
-                >
-                  <span className="min-w-0 flex-1 truncate">{item.text}</span>
-                  <button
-                    type="button"
-                    className="shrink-0 hover:text-foreground [&_svg]:size-3.5"
-                    aria-label={__('shell.withdraw')}
-                    data-testid={`pending-withdraw-${item.id}`}
-                    onClick={() => void withdraw(item.id)}
-                  >
-                    <X />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex shrink-0 items-end gap-2 border-border border-t p-3">
-            <textarea
-              className="max-h-32 min-h-9 flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              rows={1}
-              placeholder={__('shell.composerPlaceholder')}
-              data-testid="composer"
-              value={draft}
-              onChange={event => setDraft(event.target.value)}
-              // Sending while a turn is running is allowed on purpose: the
-              // server holds it and merges it with whatever else arrives before
-              // that turn ends, so a thought delivered in pieces gets one reply.
-              onKeyDown={event => {
-                if (event.key !== 'Enter' || event.shiftKey) return
-                event.preventDefault()
-                submit()
-              }}
-            />
-            <Button size="sm" data-testid="composer-send" disabled={!draft.trim()} onClick={submit}>
-              <Send />
-            </Button>
-          </div>
+          <Composer pending={pending} onSend={send} onWithdraw={withdraw} />
         </>
       )}
     </div>

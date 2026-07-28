@@ -93,12 +93,25 @@ export const TurnsController: Controller = app => {
   app.post('/:id/finish', zValidator('param', ClaimTurnParams), async c => {
     const worker = currentWorker(c)
     const { id } = c.req.valid('param')
-    if (!(await holds(id, worker.id))) return notFound(c, 'turn not found')
+    const turn = await holds(id, worker.id)
+    if (!turn) return notFound(c, 'turn not found')
 
     const body = await c.req.json().catch(() => null)
     const parsed = FinishTurnBody.safeParse(body)
     if (!parsed.success) return badRequest(c, 'outcome must be completed, failed or aborted')
 
-    return sendOk(c, { finished: await app.$turn.finish(id, parsed.data.outcome) })
+    const finished = await app.$turn.finish(id, parsed.data.outcome)
+
+    // Closing the turn is the moment anything typed while it ran becomes
+    // sendable, and this is the only place that moment is observable. Without
+    // this, input staged mid-turn waits for the person to send something else
+    // before it goes anywhere — which, from their side, is a message that
+    // silently never gets answered.
+    if (finished) {
+      const started = await app.$pendingInput.materialize(turn.conversationId)
+      if (started) app.$commands.broadcast({ type: 'work_available' })
+    }
+
+    return sendOk(c, { finished })
   })
 }

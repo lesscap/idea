@@ -291,8 +291,30 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
       await db.app.$pendingInput.enqueue(c.id, { text: 'second' })
 
       expect(await db.app.$pendingInput.materialize(c.id)).toBeNull()
-      // Still pending, not lost — it goes out when the open turn finishes.
+      // Still pending, not lost.
       expect(await db.app.$pendingInput.list(c.id)).toHaveLength(1)
+    })
+
+    // The other half of the sentence above, which went unwritten long enough for
+    // the route that closes a turn to forget to ask: once nothing is open, the
+    // batch that was held back goes out.
+    //
+    // Its own workspace, because the claim takes the oldest turn a worker may
+    // run — with the shared one it picks up whatever an earlier test left queued
+    // and this test finishes someone else's turn.
+    it('goes out once the turn that held it back has closed', async () => {
+      const alone = await db.prisma.workspace.create({ data: { name: 'held-back' } })
+      const c = await conversation(alone.id)
+      const w = await worker('materialize-after-finish', { workspaceId: alone.id })
+      await db.app.$pendingInput.enqueue(c.id, { text: 'first' })
+      await db.app.$pendingInput.materialize(c.id)
+      await db.app.$pendingInput.enqueue(c.id, { text: 'second' })
+      const claimed = await db.app.$turn.claimNext(w)
+
+      expect(await db.app.$turn.finish(claimed?.id ?? 0, 'completed')).toBe(true)
+
+      expect(await db.app.$pendingInput.materialize(c.id)).not.toBeNull()
+      expect(await db.app.$pendingInput.list(c.id)).toEqual([])
     })
 
     it('withdraws an unsent line without disturbing the rest', async () => {

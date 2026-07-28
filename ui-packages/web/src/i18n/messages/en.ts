@@ -70,11 +70,10 @@ export const en: typeof zh = {
     expandConversation: 'Expand conversation',
     newConversation: 'New conversation',
     noConversation: 'Pick a conversation, or start one',
-    conversationSoon: 'Conversations are not wired up yet',
     thinking: 'Thinking…',
     withdraw: 'Withdraw',
-    composerPlaceholder: 'Describe what you need…',
-    composerSoon: 'Composer to come',
+    composerPlaceholder: 'Describe what you need…  Enter to send',
+    send: 'Send',
   },
 
   // The transcript's own vocabulary: what a folded group of the agent's
