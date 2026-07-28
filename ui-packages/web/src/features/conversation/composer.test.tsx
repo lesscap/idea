@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
@@ -19,13 +19,12 @@ const draw = (onSend = vi.fn().mockResolvedValue(undefined)) => {
 }
 
 describe('sending with the keyboard', () => {
-  it('sends on Enter', async () => {
+  it('sends on Enter', () => {
     const { box, onSend } = draw()
 
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(onSend).toHaveBeenCalledWith('你好')
-    await waitFor(() => expect(screen.getByTestId('composer')).not.toBeDisabled())
   })
 
   // Enter also confirms a candidate in a Chinese IME. Sending there ships half a
@@ -47,22 +46,17 @@ describe('sending with the keyboard', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
-  it('does not submit the same draft twice while the request is pending', async () => {
-    let resolve: (() => void) | undefined
-    const onSend = vi.fn(
-      () =>
-        new Promise<void>(done => {
-          resolve = done
-        }),
-    )
+  // What stops the second Enter is the draft being cleared synchronously, not an
+  // in-flight flag — the box is still enabled and still accepts typing, which is
+  // the point: a second thought may be added while the first is on the wire.
+  it('does not submit the same draft twice while the request is pending', () => {
+    const onSend = vi.fn(() => new Promise<void>(() => {}))
     const { box } = draw(onSend)
 
     fireEvent.keyDown(box, { key: 'Enter' })
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(onSend).toHaveBeenCalledTimes(1)
-    resolve?.()
-    await waitFor(() => expect(screen.getByTestId('composer')).not.toBeDisabled())
   })
 })
 

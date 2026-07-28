@@ -1,5 +1,5 @@
 import type { Prisma } from '@idea/core'
-import type { ConversationEvent, Id, StoredEvent } from '@idea/shared'
+import type { ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
 
 export type Conversation = {
   readonly id: Id
@@ -17,11 +17,23 @@ export type Conversation = {
 // event and turn have to land together or not at all.
 export type AppendHook = (tx: Prisma.TransactionClient, sequence: number) => Promise<void>
 
+// How much of a transcript to read.
+//
+// `after` is the reconnect path — everything past a sequence the caller already
+// holds, with no ceiling, because whatever was missed has to arrive. The other
+// two read history backwards: `limit` on its own opens at the most recent N,
+// and `before` walks further back from there.
+export type EventWindow = {
+  readonly after?: number
+  readonly before?: number
+  readonly limit?: number
+}
+
 export type ConversationService = {
   start: (input: { workspaceId: Id; createdById: Id; text: string }) => Promise<Conversation>
-  listForWorkspace: (workspaceId: Id) => Promise<Conversation[]>
+  listForWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<Conversation>>
   get: (id: Id) => Promise<Conversation | null>
-  events: (conversationId: Id, after?: number) => Promise<StoredEvent[]>
+  events: (conversationId: Id, window?: EventWindow) => Promise<StoredEvent[]>
   appendEvent: (
     conversationId: Id,
     event: ConversationEvent,

@@ -69,13 +69,17 @@ const conversation = conversationId
 
 process.stdout.write(`conversation ${conversation.id} ← ${message}\n\n`)
 
-// Where this run starts. Continuing a conversation means the transcript already
-// ends in a completed turn, and watching from the beginning would see that one
-// and declare victory before the new answer had even begun.
-const before = await call(`/conversations/${conversation.id}/events`)
-let seen = conversationId ? (before.items.at(-1)?.sequence ?? -1) : -1
+// Where this run starts. A conversation created a moment ago begins at the
+// beginning and already holds the message — creating it and saying the first
+// thing are one request. Continuing one is the case that needs care: its
+// transcript already ends in a completed turn, so watching from the start would
+// see that one and declare victory before the new answer had begun.
+let seen = -1
 
 if (conversationId) {
+  const before = await call(`/conversations/${conversation.id}/events`)
+  seen = before.items.at(-1)?.sequence ?? -1
+
   const sent = await post(`/conversations/${conversation.id}/messages`, { text: message })
   if (!sent.started)
     process.stdout.write('(a turn was already running — this will merge into the next one)\n')

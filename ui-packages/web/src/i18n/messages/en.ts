@@ -70,6 +70,8 @@ export const en: typeof zh = {
     expandConversation: 'Expand conversation',
     newConversation: 'New conversation',
     noConversation: 'Pick a conversation, or start one',
+    loadMore: 'Load more',
+    loadEarlier: 'Load earlier',
     thinking: 'Thinking…',
     withdraw: 'Withdraw',
     composerPlaceholder: 'Describe what you need…  Enter to send',

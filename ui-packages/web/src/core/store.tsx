@@ -49,6 +49,9 @@ export const SharedStoreProvider = ({
   return <SharedStoreContext.Provider value={ref.current}>{children}</SharedStoreContext.Provider>
 }
 
+// For ACTIONS — the handle a domain module needs to write. Not a reading path:
+// `getState()` on it returns the whole state without subscribing, which is the
+// one thing useSharedStore exists to make impossible. Read through a selector.
 export const useSharedStoreApi = (): StoreApi<SharedStateData> => {
   const store = useContext(SharedStoreContext)
   if (!store) throw new Error('Shared store hooks must be used within SharedStoreProvider')

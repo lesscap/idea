@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
 import { Button, Markdown } from '../../ui'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
@@ -100,19 +100,40 @@ export const ConversationPanel = ({
   onCollapse: () => void
 }) => {
   const __ = useLocale()
-  const { bubbles, pending, working, status, send, withdraw } = useConversation(
-    conversationId,
-    onConversationCreated,
-  )
+  const { bubbles, pending, working, status, hasOlder, loadingOlder, loadOlder, send, withdraw } =
+    useConversation(conversationId, onConversationCreated)
   const bottom = useRef<HTMLDivElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
+  // The scroll height recorded just before a "load earlier" read, consumed by
+  // the effect below once the events land.
+  const anchor = useRef<number | null>(null)
 
   const stream = useMemo(() => groupActivity(bubbles, working), [bubbles, working])
 
-  // Follows the conversation as it grows. Keyed on the count rather than the
-  // content so an answer being revised in place — which is how streaming
-  // arrives — does not fight the scroll on every frame.
+  const showOlder = () => {
+    anchor.current = scroller.current?.scrollHeight ?? 0
+    void loadOlder()
+  }
+
+  // The transcript grows at both ends, and the two ends want opposite things.
+  //
+  // Keyed on the count rather than the content so an answer being revised in
+  // place — which is how streaming arrives — does not fight the scroll on every
+  // frame. Before paint, because a scroll correction applied after one is
+  // exactly the jump it exists to prevent.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a change detector, not a value read
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const el = scroller.current
+    const held = anchor.current
+    // Earlier events go in above what is on screen and push it down by precisely
+    // the height they add. Giving that back leaves the reader on the line they
+    // were reading instead of throwing them forward every time they press.
+    if (held !== null && el) {
+      anchor.current = null
+      el.scrollTop += el.scrollHeight - held
+      return
+    }
+    // Anything else is the conversation growing at the bottom. Follow it.
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
   }, [stream.length])
 
@@ -152,9 +173,24 @@ export const ConversationPanel = ({
       ) : (
         <>
           <div
+            ref={scroller}
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
             data-testid="transcript"
+            data-has-older={hasOlder}
           >
+            {/* Opening reads a window of the most recent events. This is the way
+                back through a long conversation. */}
+            {hasOlder && (
+              <button
+                type="button"
+                className="shrink-0 self-center rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-muted disabled:opacity-60"
+                data-testid="conversation-load-earlier"
+                disabled={loadingOlder}
+                onClick={showOlder}
+              >
+                {__('shell.loadEarlier')}
+              </button>
+            )}
             {stream.map(item => (
               <Drawn key={item.key} item={item} />
             ))}

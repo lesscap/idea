@@ -59,6 +59,9 @@ export const SideColumn = ({
         } ${url.conversationId === 'new' ? 'bg-background font-medium' : ''}`}
         data-testid="conversation-new"
         data-active={url.conversationId === 'new'}
+        // The label is always there, because collapsed this is an icon with no
+        // text beside it. `title` is the hover hint, not a substitute.
+        aria-label={__('shell.newConversation')}
         title={collapsed ? __('shell.newConversation') : undefined}
         onClick={() => onShowConversation('new')}
       >

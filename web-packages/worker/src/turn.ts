@@ -1,6 +1,6 @@
 import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
 import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
-import { appLayout, ensureRepo, ensureWorktree } from './worktree.ts'
+import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 
 // Running one turn: prepare the context, talk to the agent, close the turn.
 
@@ -38,7 +38,7 @@ export const runTurn = async (
 
     ensureRepo(root, WORKSPACE_REPO, null)
     const worktree = ensureWorktree(root, WORKSPACE_REPO, conversation.id)
-    const { sessions } = appLayout(root, WORKSPACE_REPO)
+    const { sessions } = repoLayout(root, WORKSPACE_REPO)
 
     const events = await client.events(claimed.id)
     const said = events.find(

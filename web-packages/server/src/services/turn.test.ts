@@ -368,7 +368,7 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
       for (const text of ['a', 'b', 'c'])
         await db.app.$conversation.appendEvent(c.id, { type: 'user_message', text })
 
-      const missed = await db.app.$conversation.events(c.id, 0)
+      const missed = await db.app.$conversation.events(c.id, { after: 0 })
 
       expect(missed.map(e => e.sequence)).toEqual([1, 2])
     })

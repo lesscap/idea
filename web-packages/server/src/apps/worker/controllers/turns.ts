@@ -44,10 +44,12 @@ export const TurnsController: Controller = app => {
     const turn = await holds(id, worker.id)
     if (!turn) return notFound(c, 'turn not found')
 
+    // No window here. The worker builds the agent's context from the transcript,
+    // so a truncated read would silently drop what the conversation was about.
     const after = c.req.query('after')
     const events = await app.$conversation.events(
       turn.conversationId,
-      after === undefined ? undefined : Number(after),
+      after === undefined ? {} : { after: Number(after) },
     )
     return sendOk(c, { items: events })
   })

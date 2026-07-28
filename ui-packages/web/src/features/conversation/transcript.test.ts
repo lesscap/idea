@@ -101,6 +101,18 @@ describe('is the agent working', () => {
   it('is true for a message with no turn yet', () => {
     expect(isWorking([said(0, 'hello')])).toBe(true)
   })
+
+  // Opening a long conversation reads a WINDOW, and a tool-heavy turn is a long
+  // run of item events between two distant boundaries — so the window can land
+  // entirely inside one. The server widens it back to the boundary rather than
+  // letting that happen, and this is what depends on it: given only the run,
+  // there is nothing to decide from and a busy conversation reads as idle.
+  it('needs a boundary in the window, and answers from it once there is one', () => {
+    const midTurn = [answered(41, 'a', 'partway'), answered(42, 'b', 'still going')]
+
+    expect(isWorking(midTurn)).toBe(false)
+    expect(isWorking([stored(40, { type: 'turn.started' }), ...midTurn])).toBe(true)
+  })
 })
 
 describe('merging what arrived twice', () => {

@@ -84,6 +84,10 @@ export const toBubbles = (events: readonly WireStored[]): Bubble[] => {
 // but over the wire projection, which is all the browser has. Deliberately not
 // read off a status column: the transcript already says, and a second source
 // would be a second thing to keep in step.
+//
+// Safe to answer from a WINDOW of the transcript rather than all of it: the
+// server widens an opening read until it holds a boundary, so there is always
+// one here to decide from. See the windowed events() read.
 export const isWorking = (events: readonly WireStored[]): boolean => {
   const last = events.findLast(
     ({ event }) =>

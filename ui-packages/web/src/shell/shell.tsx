@@ -116,6 +116,28 @@ export const Shell = () => {
           collapsedSize={0}
           groupResizeBehavior="preserve-pixel-size"
           panelRef={conversationRef}
+          // This used to be one-way: the panel's own size was the only source of
+          // "is it collapsed", precisely so there was nothing to keep in step.
+          // Two requirements broke that. The preference has to survive a reload,
+          // and the panel cannot remember it — a fresh mount has no size yet.
+          // And it has to stay independent of whether a conversation is open at
+          // all, so arriving on a URL without `cid` hides the column without
+          // erasing what the person chose.
+          //
+          // So there is now a stored intent and a rendered size, and they need a
+          // referee — the layout effect above. What keeps that from looping is
+          // the equality check in useSetConversationCollapsed; see the comment
+          // there before touching either side.
+          //
+          // `previous === undefined` is the panel's first report, which is its
+          // constraint-derived size rather than anything the person did.
+          //
+          // No unit test covers the guard, and one was tried: jsdom has no
+          // layout, so a mounted panel never reports a resize and the test
+          // passes just as happily with the guard deleted. Faking the report
+          // would only assert what the fake was told to say. Check it in a
+          // browser — open a conversation, collapse it, navigate to a URL with
+          // no `cid`, and come back; the column should still be collapsed.
           onResize={(size, _, previous) => {
             if (!hasConversation || previous === undefined) return
             setConversationCollapsed(size.inPixels < 1)
