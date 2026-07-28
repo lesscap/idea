@@ -2,6 +2,7 @@ import type { PrismaClient } from '@idea/core'
 import type { Hono } from 'hono'
 import type { CommandBus } from './command-bus.ts'
 import type { Config } from './config.ts'
+import type { EventBus } from './event-bus.ts'
 import type { AppService } from './services/app.ts'
 import type { AuthService } from './services/auth.ts'
 import type { ConversationService } from './services/conversation.ts'
@@ -34,6 +35,7 @@ export type ServiceApplication = {
   readonly $turn: TurnService
   readonly $worker: WorkerService
   readonly $commands: CommandBus
+  readonly $events: EventBus
 }
 
 // A service is `(app) => api`: a factory closing over the application, handing

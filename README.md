@@ -4,9 +4,11 @@ A software-creation platform for business people. Someone who does not write cod
 describes what they need, an agent helps them get the requirement right, and the
 result is software their company actually uses.
 
-Current state: **identity and containers are done.** Sign-in, invite-based
-onboarding, workspaces, and app CRUD all work. Requirement elicitation and the
-agent have not been started.
+Current state: **you can hold a conversation with the agent.** Sign-in,
+invite-based onboarding, workspaces and app CRUD work; a conversation runs a real
+model (GLM or DeepSeek), streams its answer into the interface, and resumes on
+the next turn. The agent has no tools yet — see Worker process model for why that
+is a deliberate line rather than an unfinished one.
 
 ## Getting started
 
@@ -30,6 +32,23 @@ pnpm --filter @idea/core seed:admin \
 
 pnpm dev                          # server and web in parallel
 ```
+
+A worker is what actually answers. It needs an enrolment token — which says
+which workspace it may serve, because it cannot name its own — and the name of a
+provider from the registry:
+
+```bash
+pnpm --filter @idea/core seed:providers   # glm, deepseek (endpoints only, no keys)
+
+# Credentials go in web-packages/worker/.env, named by each provider's tokenEnv:
+#   IDEA_PROVIDER_GLM_TOKEN=…
+#   IDEA_PROVIDER_DEEPSEEK_TOKEN=…
+
+IDEA_ENROLMENT_TOKEN=… IDEA_PROVIDER=glm pnpm --filter @idea/worker dev
+```
+
+Without one, a message sits queued and nothing answers — which is what
+`scripts/conversation.mjs` says when it times out.
 
 Open http://localhost:5300 and sign in with the account you just created.
 
@@ -120,9 +139,12 @@ ui-packages/web/src/
 │   └── preview/index.tsx component gallery, mounted at /dev/ui
 ├── core/            application-level infrastructure
 │   └── session/     the session store (state + provider + hooks) and its API
+├── parts/           shared components that know this product (locale switch)
+├── i18n/            message bundles and the assembly that binds them
 ├── features/        leaf features — they consume the layers above, never declare shared state
 │   ├── auth/        login page, invite acceptance
 │   ├── workspace/   workspace picker, invite dialog
+│   ├── conversation/ the panel, its transcript reducer and stream hook
 │   └── app/         app list, create dialog
 ├── shell/           routing, auth guards, layout, cross-feature composition
 ├── lib/             non-React utilities (fetch wrapper, cn)
@@ -139,8 +161,12 @@ Each layer answers one question about what belongs in it:
 | `ui/` | **could this drop into an entirely different product unchanged?** |
 | `lib/` | does not import react |
 | `core/` | shared across features, with a definite moment at which it goes stale |
+| `parts/` | shared like `ui/`, but knows a domain type — so it cannot live there |
 | `features/` | consumes the layers above and declares nothing shared |
 | `shell/` | two features need composing, so they get composed here |
+
+The may-import graph is in `CLAUDE.md`, written once so it does not drift between
+two files.
 
 **Nothing under `ui/` may know a domain type** — no `@idea/shared`, no `core/`,
 no `features/`. This used to be enforced by a package boundary (`@idea/design`);
@@ -351,24 +377,48 @@ is enough to enumerate resources by walking ids.
 
 ## Worker process model
 
-**One daemon per machine**, registering capabilities and serving every project.
+**One worker per workspace, running one agent backend.**
 
-A worker registers what it can *do* (`WORKER_CAPABILITIES`), not which project it
-belongs to. The server matches work against connected workers by capability, and
-the project travels on each command. The connection is **outbound-only** — no
-inbound port, so it runs behind NAT on any machine.
+That binding is a security boundary before it is a routing rule. The agent
+executes instructions that arrive from outside — a message someone typed, and
+later the contents of a repository it reads — so the process running it is
+confined to one tenant's data. The server's claim query filters by workspace as
+well, so even a worker that escaped its own confinement is not handed anyone
+else's work.
 
-Concurrency comes from slots inside one process, not from one process per task.
+A worker cannot name its own workspace: it presents an enrolment token and the
+token decides. The connection is **outbound-only** — no inbound port, so it runs
+behind NAT on any machine.
 
-> baton, the reference implementation, runs one daemon per project because its
-> agent works inside a git worktree and project↔repo is 1:1. Our agent elicits
-> requirements and checks out no code, so that constraint is absent and the
-> per-project process it forced is not worth inheriting.
->
-> **The cost**: one process holds several projects' context, so a crash or a leak
-> crosses project boundaries in a way per-project processes would not. Acceptable
-> for an internal platform. If real isolation is ever needed, run several workers
-> on the machine with disjoint capability sets — the model already allows it.
+```
+IDEA_ENROLMENT_TOKEN   which workspace this worker may serve
+IDEA_PROVIDER          which backend it runs, by registry name (glm, deepseek)
+IDEA_WORKER_HOME       where repos, worktrees and agent sessions live
+WORKER_SLOTS           how many turns may run at once (default 4)
+```
+
+Which backend to use is nobody's decision in advance: a conversation is stamped
+with whichever worker claims its first turn and stays on that one, because resume
+and the event vocabulary both depend on not switching mid-way.
+
+Nothing is kept alive between turns. A conversation resumes from the transcript
+on the server, the branch in its repository, and the agent's own session beside
+the worktree — so idle conversations cost no processes, and concurrency is a slot
+count rather than a process count.
+
+**The agent has no tools.** `tools: []` in the SDK options, verified by there
+being no tool call anywhere in a transcript. This is the line that lets a worker
+run on a personal machine at all, and it moves only when the worker runs in a
+container: opening up the filesystem and the shell is exactly what makes that
+container necessary.
+
+> Note that `allowedTools: []` does NOT do this. It is the auto-approve list, so
+> an empty one leaves every tool available and merely unapproved — the agent will
+> still reach for Bash. `tools: []` is the option that disables them.
+
+Per-workspace also gives the container a job to do beyond isolation: a
+workspace's skills, repositories and sessions all live in one volume, so loading
+them never has to reason about more than one tenant.
 
 ## Conventions
 
@@ -384,7 +434,7 @@ Concurrency comes from slots inside one process, not from one process per task.
   - `Controller = (app: WebApplication) => void`, where
     `WebApplication = Hono & ServiceApplication`
   - Each prefix gets its own sub-instance with the services merged onto it, so
-    `app.get(...)` and `app.workspace.roleOf()` read off one object and
+    `app.get(...)` and `app.$workspace.roleOf()` read off one object and
     controller-registered middleware stays scoped to that prefix
   - Cross-cutting concerns are ordinary function wrappers — see `guarded` in
     `server/src/apps/web/routes.ts`
@@ -398,9 +448,38 @@ Concurrency comes from slots inside one process, not from one process per task.
   controller that queries directly binds the HTTP shape to the data shape and
   forces a database into every test.
 - **Tests cover observable behaviour**, not implementation. Controllers are
-  tested with stub services and no database.
+  tested with stub services and no database; services whose mechanism *is* the
+  database — turn claiming is a unique index rejecting a concurrent write — run
+  against a real one in a throwaway schema. A mock there would only confirm the
+  author's expectations, which is the thing being checked.
 - Code, comments, commit messages, and documentation in English; UI copy in
   Chinese.
+
+## Scripts
+
+Two, and neither is a test. Both need a running server — and `conversation.mjs`
+needs a running worker and real provider credentials — so they cannot go in
+`pnpm test`, and automating them would mean standing up a fake model endpoint and
+then testing the fake.
+
+```bash
+scripts/ui-session.sh as admin 'admin@2026'      # sign the browser in
+scripts/conversation.mjs "我想做一个报销审批系统"   # a whole conversation, no browser
+scripts/conversation.mjs --conversation 3 "还要能导出"
+```
+
+`conversation.mjs` is the one to reach for after changing anything in the
+pipeline: it signs in, creates a conversation, sends, waits for the turn to
+finish and prints the transcript — so "the model answered" and "the interface
+rendered it" can be told apart. Every run also checks that the provider's raw
+payload never left the server.
+
+What each layer covers:
+
+| | covers | when |
+|---|---|---|
+| `pnpm test` | event normalisation, merging and withdrawal, claim races, `raw` containment | before every commit |
+| `conversation.mjs` | the whole pipeline, against a real model | after changing it |
 
 ## Credentials
 
@@ -422,8 +501,15 @@ collide and signed URLs become valid across products.
 
 ## Not built yet
 
-- Requirement entity and the elicitation agent
-- Worker registration protocol, capability matching, command stream
+- **The worker container.** Until it exists the agent has no tools; the two land
+  together
+- **Skills** — what the agent asks about, and in what order. Installed per
+  workspace, which is why they wait for the container
+- Requirement entity, and turning a conversation into structured requirements
+- The Codex adapter. It differs from Claude in a way that matters: no
+  `SessionStore` hook, so its transcript has to be materialised into
+  `$CODEX_HOME/sessions` before a turn and read back after
+- Maths and diagram rendering (KaTeX, mermaid) in the conversation panel
 - SMS verification and password recovery (the phone column is stored, but a
   number must be verified before it can be used to recover an account)
 - Email delivery — invite links are handed over manually for now

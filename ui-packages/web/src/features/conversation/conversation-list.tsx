@@ -1,20 +1,16 @@
 import { MessageSquarePlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useLocale } from '../../i18n'
+import { get, post } from '../../lib/request'
 import { Button } from '../../ui'
 
-// Placeholder for the real list, which will group conversations by the app they
-// concern. That grouping is the visible form of "a conversation senses its
-// context": it knows which app it is about, while belonging to no single
-// requirement inside it.
+// The conversations in this workspace.
 //
-// Takes the selection as plain props rather than the shell's Workspace object.
-// Importing that type would point a feature back at the shell, and the reason
-// this lives under features/ is precisely that the shell composes it, never the
-// other way round.
-//
-// The one live entry exists so the panel can be opened and closed while the
-// layout is being checked. It is a draft, not a stored conversation.
-const DRAFT = 'draft'
+// Takes the selection as plain props rather than the shell's Workspace object:
+// importing that type would point a feature back at the shell, and the reason
+// this lives under features/ is that the shell composes it, not the reverse.
+
+type Summary = { id: number; title: string | null; lastActiveAt: string }
 
 export const ConversationList = ({
   conversationId,
@@ -24,6 +20,24 @@ export const ConversationList = ({
   onSelect: (id: string) => void
 }) => {
   const __ = useLocale()
+  const [items, setItems] = useState<Summary[]>([])
+
+  const load = () =>
+    get<{ items: Summary[] }>('/conversations')
+      .then(data => setItems(data.items))
+      .catch(() => setItems([]))
+
+  useEffect(() => {
+    void load()
+    // Reloaded when the selection changes, which is also when a new one has just
+    // been created — enough to keep the list current without polling it.
+  }, [])
+
+  const start = async () => {
+    const created = await post<{ id: number }>('/conversations', {})
+    await load()
+    onSelect(String(created.id))
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1 px-2 pb-2" data-testid="conversation-list">
@@ -37,25 +51,33 @@ export const ConversationList = ({
           className="px-1.5"
           data-testid="conversation-new"
           aria-label={__('shell.newConversation')}
-          onClick={() => onSelect(DRAFT)}
+          onClick={() => void start()}
         >
           <MessageSquarePlus />
         </Button>
       </div>
 
-      <button
-        type="button"
-        className={`rounded-md px-2 py-1.5 text-left text-sm ${
-          conversationId === DRAFT
-            ? 'bg-background font-medium'
-            : 'text-muted-foreground hover:bg-background/60'
-        }`}
-        data-testid="conversation-draft"
-        data-active={conversationId === DRAFT}
-        onClick={() => onSelect(DRAFT)}
-      >
-        {__('shell.newConversation')}
-      </button>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {items.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            className={`w-full truncate rounded-md px-2 py-1.5 text-left text-sm ${
+              conversationId === String(item.id)
+                ? 'bg-background font-medium'
+                : 'text-muted-foreground hover:bg-background/60'
+            }`}
+            data-testid={`conversation-${item.id}`}
+            data-active={conversationId === String(item.id)}
+            onClick={() => onSelect(String(item.id))}
+          >
+            {/* Until a conversation is named, its first line is the only thing
+                that distinguishes it — and naming it automatically is a separate
+                job that needs the transcript. */}
+            {item.title ?? `${__('shell.newConversation')} #${item.id}`}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

@@ -72,6 +72,9 @@ export const zh = {
     newConversation: '新会话',
     noConversation: '选一个会话，或新建一个',
     conversationSoon: '对话还没接上',
+    thinking: '正在思考…',
+    withdraw: '撤回',
+    composerPlaceholder: '说说你想要什么…',
     composerSoon: '输入区待接入',
   },
 

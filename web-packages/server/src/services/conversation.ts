@@ -87,45 +87,53 @@ export const createConversationService: Service<ConversationService> = app => {
   const appendEvent: ConversationService['appendEvent'] = async (conversationId, event, after) => {
     for (let attempt = 0; attempt < MAX_SEQUENCE_RETRIES; attempt++) {
       try {
-        return await app.$prisma.$transaction(async tx => {
-          // Takes the conversation's row lock, held until this transaction
-          // commits, which is what serialises appends to it. Anything else
-          // reaching this line waits rather than racing for the same sequence.
-          //
-          // An UPDATE rather than `SELECT … FOR UPDATE` because raw SQL names
-          // tables unqualified and resolves them through search_path, which the
-          // driver adapter does not set — the lock would silently apply to a
-          // different schema's table. A generated query is always aimed
-          // correctly. The write is one this function owed anyway: `updatedAt`
-          // would also move on a rename and report an untouched conversation as
-          // active, so activity is stamped explicitly.
-          await tx.conversation.update({
-            where: { id: conversationId },
-            data: { lastActiveAt: new Date() },
+        return await app.$prisma
+          .$transaction(async tx => {
+            // Takes the conversation's row lock, held until this transaction
+            // commits, which is what serialises appends to it. Anything else
+            // reaching this line waits rather than racing for the same sequence.
+            //
+            // An UPDATE rather than `SELECT … FOR UPDATE` because raw SQL names
+            // tables unqualified and resolves them through search_path, which the
+            // driver adapter does not set — the lock would silently apply to a
+            // different schema's table. A generated query is always aimed
+            // correctly. The write is one this function owed anyway: `updatedAt`
+            // would also move on a rename and report an untouched conversation as
+            // active, so activity is stamped explicitly.
+            await tx.conversation.update({
+              where: { id: conversationId },
+              data: { lastActiveAt: new Date() },
+            })
+            const last = await tx.conversationEvent.findFirst({
+              where: { conversationId },
+              orderBy: { sequence: 'desc' },
+              select: { sequence: true },
+            })
+            const sequence = (last?.sequence ?? -1) + 1
+            const row = await tx.conversationEvent.create({
+              data: {
+                conversationId,
+                sequence,
+                type: event.type,
+                payload: event as unknown as Prisma.InputJsonValue,
+              },
+              select: { id: true, sequence: true, createdAt: true },
+            })
+            await after?.(tx, sequence)
+            return {
+              id: row.id,
+              sequence: row.sequence,
+              event,
+              createdAt: row.createdAt.toISOString(),
+            }
           })
-          const last = await tx.conversationEvent.findFirst({
-            where: { conversationId },
-            orderBy: { sequence: 'desc' },
-            select: { sequence: true },
+          .then(stored => {
+            // Published after the transaction commits, not inside it: a subscriber
+            // told about an event that then rolled back would hold something the
+            // transcript does not have.
+            app.$events.publish(conversationId, stored)
+            return stored
           })
-          const sequence = (last?.sequence ?? -1) + 1
-          const row = await tx.conversationEvent.create({
-            data: {
-              conversationId,
-              sequence,
-              type: event.type,
-              payload: event as unknown as Prisma.InputJsonValue,
-            },
-            select: { id: true, sequence: true, createdAt: true },
-          })
-          await after?.(tx, sequence)
-          return {
-            id: row.id,
-            sequence: row.sequence,
-            event,
-            createdAt: row.createdAt.toISOString(),
-          }
-        })
       } catch (error) {
         // A backstop, not the mechanism — the lock above is. It still matters
         // for the one case the lock cannot cover: a conversation row that does

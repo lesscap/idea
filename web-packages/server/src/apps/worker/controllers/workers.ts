@@ -1,6 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
-import { streamSSE } from 'hono/streaming'
+import type { WorkerCommand } from '../../../command-bus.ts'
 import { badRequest, conflict, sendOk, unauthorized } from '../../../http.ts'
+import { streamBus } from '../../../sse.ts'
 import type { Controller } from '../../../types.ts'
 import { currentWorker, workerAuth } from '../middleware/auth.ts'
 import { RegisterWorkerBody } from '../schema/index.ts'
@@ -54,24 +55,16 @@ export const WorkersController: Controller = app => {
   app.get('/me/stream', workerAuth(app), c => {
     const worker = currentWorker(c)
 
-    return streamSSE(c, async stream => {
-      const unsubscribe = app.$commands.subscribe(worker.id, command => {
-        void stream.writeSSE({ data: JSON.stringify(command) })
-      })
-
-      // Resolves when the client disconnects, which is what keeps the handler —
-      // and therefore the subscription — alive in between.
-      await new Promise<void>(resolve => {
-        stream.onAbort(() => {
-          unsubscribe()
-          // Its child processes died with it, so every turn it held is already
-          // abandoned. Releasing now beats waiting out leases that nobody will
-          // renew.
-          void app.$turn.releaseWorker(worker.id)
-          resolve()
-        })
-      })
-    })
+    return streamBus<WorkerCommand>(
+      c,
+      push => app.$commands.subscribe(worker.id, push),
+      command => JSON.stringify(command),
+      {
+        // Its child processes died with it, so every turn it held is already
+        // abandoned. Releasing now beats waiting out leases nobody will renew.
+        onClose: () => void app.$turn.releaseWorker(worker.id),
+      },
+    )
   })
 
   // For the daemon's own watchdog. The server records nothing: a worker is

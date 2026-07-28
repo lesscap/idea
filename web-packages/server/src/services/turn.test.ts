@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createEventBus } from '../event-bus.ts'
 import { createConversationService } from './conversation.ts'
 import { createPendingInputService } from './pending-input.ts'
 import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
@@ -13,6 +14,9 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
 
   beforeAll(async () => {
     db = await setupTestDb(app => ({
+      // Real rather than stubbed: it holds only live subscriptions, so there is
+      // nothing to fake and a stub would just be another thing to keep correct.
+      $events: createEventBus(),
       $conversation: createConversationService(app),
       $pendingInput: createPendingInputService(app),
       $turn: createTurnService(app),

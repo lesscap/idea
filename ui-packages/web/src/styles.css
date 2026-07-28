@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Typography, for rendering what the agent writes. Its answers are markdown —
+   headings, lists, emphasis — and without this they arrive as literal asterisks. */
+@plugin "@tailwindcss/typography";
 
 /*
  * Design tokens and their Tailwind bindings live in one file on purpose: adding
