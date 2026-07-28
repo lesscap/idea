@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEventBus } from '../event-bus.ts'
-import { createConversationService } from './conversation.ts'
+import { createConversationService } from './conversation/index.ts'
 import { createPendingInputService } from './pending-input.ts'
 import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 import { type Claimant, createTurnService } from './turn.ts'

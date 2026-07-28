@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { Conversation } from '../../../../services/conversation.ts'
+import type { Conversation } from '../../../../services/conversation/index.ts'
 import type { WebApplication } from '../../../../types.ts'
 import { isResponse, requireCurrentWorkspace } from '../../middleware/workspace.ts'
 

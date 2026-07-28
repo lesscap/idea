@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { BrowserRouter, useRoutes } from 'react-router-dom'
-import { SessionStoreProvider } from '../core/session/store'
+import { readLayoutState } from '../core/layout/storage'
 import { useLoadSession } from '../core/session/use-session'
+import { SharedStoreProvider } from '../core/store'
 import { detectLocale, LocaleProvider } from '../i18n'
 import { routes } from './routes'
 
@@ -21,10 +22,10 @@ const Routed = () => {
 // language is most costly, since someone who cannot read it cannot get past it.
 export const Root = () => (
   <LocaleProvider initial={detectLocale()}>
-    <SessionStoreProvider>
+    <SharedStoreProvider initial={readLayoutState()}>
       <BrowserRouter>
         <Routed />
       </BrowserRouter>
-    </SessionStoreProvider>
+    </SharedStoreProvider>
   </LocaleProvider>
 )

@@ -6,17 +6,16 @@ import {
   useDefaultLayout,
   usePanelCallbackRef,
 } from 'react-resizable-panels'
-import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/session/use-session'
-import { ConversationPanel } from '../features/conversation/conversation-panel'
-import { useLocaleControl } from '../i18n'
-import { ContentColumn } from './content'
-import { ShellLayoutProvider } from './layout/store'
 import {
   useConversationCollapsed,
   useSetConversationCollapsed,
   useSideCollapsed,
   useToggleSide,
-} from './layout/use-shell-layout'
+} from '../core/layout/use-layout'
+import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/session/use-session'
+import { ConversationPanel } from '../features/conversation/conversation-panel'
+import { useLocaleControl } from '../i18n'
+import { ContentColumn } from './content'
 import { SideColumn } from './side'
 import { useWorkspaceUrl } from './url/use-workspace-url'
 
@@ -30,7 +29,7 @@ import { useWorkspaceUrl } from './url/use-workspace-url'
 // within the tree whenever a conversation opened or closed, remounting it and
 // discarding every tab's state — the exact loss this layout exists to prevent,
 // arriving through a side door.
-const ShellFrame = () => {
+export const Shell = () => {
   const workspace = useWorkspaceUrl()
   const sideCollapsed = useSideCollapsed()
   const toggleSide = useToggleSide()
@@ -57,9 +56,11 @@ const ShellFrame = () => {
   const hasConversation = url.conversationId !== null
   const conversationHidden = !hasConversation || conversationCollapsed
 
-  // URL presence and layout preference are deliberately independent. With no
-  // cid the panel disappears without overwriting the remembered preference;
-  // with one, that preference alone decides whether the panel is open.
+  // Paint-blocking on purpose. The panel handle exists only after commit, while
+  // its first rendered width can disagree with the URL/store. Synchronising
+  // before paint prevents a blank 340px conversation column flashing on entry.
+  // URL presence and layout preference remain independent: hiding for no cid
+  // never overwrites the remembered preference.
   useLayoutEffect(() => {
     if (!conversationHandle) return
     if (conversationHidden && !conversationHandle.isCollapsed()) conversationHandle.collapse()
@@ -150,9 +151,3 @@ const ShellFrame = () => {
     </div>
   )
 }
-
-export const Shell = () => (
-  <ShellLayoutProvider>
-    <ShellFrame />
-  </ShellLayoutProvider>
-)

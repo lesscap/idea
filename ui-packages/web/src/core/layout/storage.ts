@@ -1,7 +1,6 @@
-export type ShellLayoutSnapshot = {
-  sideCollapsed: boolean
-  conversationCollapsed: boolean
-}
+import type { SharedStateData } from '../store'
+
+export type LayoutState = Pick<SharedStateData, 'sideCollapsed' | 'conversationCollapsed'>
 
 const SIDE_KEY = 'idea.shell.side-collapsed'
 const CONVERSATION_KEY = 'idea.shell.conversation-collapsed'
@@ -18,11 +17,11 @@ const writeFlag = (key: string, value: boolean): void => {
   try {
     globalThis.localStorage?.setItem(key, value ? '1' : '0')
   } catch {
-    // A layout preference is optional; the panel still works without storage.
+    // A layout preference is optional; the panels still work without storage.
   }
 }
 
-export const readShellLayout = (): ShellLayoutSnapshot => ({
+export const readLayoutState = (): LayoutState => ({
   sideCollapsed: readFlag(SIDE_KEY),
   conversationCollapsed: readFlag(CONVERSATION_KEY),
 })

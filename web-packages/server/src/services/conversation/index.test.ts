@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createEventBus } from '../event-bus.ts'
-import { createConversationService } from './conversation.ts'
-import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
+import { createEventBus } from '../../event-bus.ts'
+import { databaseUrl, setupTestDb, type TestDb } from '../test-support.ts'
+import { createConversationService } from './index.ts'
 
 describe.skipIf(!databaseUrl)('conversation persistence', () => {
   let db: TestDb

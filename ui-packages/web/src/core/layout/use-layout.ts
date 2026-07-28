@@ -1,34 +1,33 @@
 import { useCallback } from 'react'
+import { useSharedStore, useSharedStoreApi } from '../store'
 import { persistConversationCollapsed, persistSideCollapsed } from './storage'
-import { useShellLayoutStore } from './store'
 
-export const useSideCollapsed = (): boolean => useShellLayoutStore(s => s.sideCollapsed)
+export const useSideCollapsed = (): boolean => useSharedStore(s => s.sideCollapsed)
 
-export const useConversationCollapsed = (): boolean =>
-  useShellLayoutStore(s => s.conversationCollapsed)
+export const useConversationCollapsed = (): boolean => useSharedStore(s => s.conversationCollapsed)
 
 export const useToggleSide = (): (() => void) => {
-  const set = useShellLayoutStore(s => s.set)
+  const store = useSharedStoreApi()
   return useCallback(
     () =>
-      set(state => {
+      store.setState(state => {
         const sideCollapsed = !state.sideCollapsed
         persistSideCollapsed(sideCollapsed)
         return { sideCollapsed }
       }),
-    [set],
+    [store],
   )
 }
 
 export const useSetConversationCollapsed = (): ((collapsed: boolean) => void) => {
-  const set = useShellLayoutStore(s => s.set)
+  const store = useSharedStoreApi()
   return useCallback(
     conversationCollapsed =>
-      set(state => {
+      store.setState(state => {
         if (state.conversationCollapsed === conversationCollapsed) return state
         persistConversationCollapsed(conversationCollapsed)
         return { conversationCollapsed }
       }),
-    [set],
+    [store],
   )
 }

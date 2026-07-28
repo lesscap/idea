@@ -37,7 +37,7 @@ by what it happens to contain.
 ;; deliberate act rather than a side effect.
 (def may-import
   {:ui       #{}                                   ; generic React primitives
-   :core     #{:ui}                                ; mechanism: i18n engine, session store
+   :core     #{:ui}                                ; mechanism: i18n, shared store + domain adapters
    :i18n     #{:core}                              ; message bundles
    :parts    #{:ui :core :i18n}                    ; shared components that know this product
    :features #{:ui :core :i18n :parts}             ; leaf capabilities
@@ -51,7 +51,9 @@ by what it happens to contain.
   (empty? (intersection (imports component) #{:core :i18n :shared})))
 ```
 
-A feature reaching back into the shell means the shell should pass it a prop.
+A feature must not import shell implementation. Cross-feature state coordination
+goes through a focused core adapter such as `core/layout`; other shell behavior
+is passed as a prop.
 
 ## Database
 

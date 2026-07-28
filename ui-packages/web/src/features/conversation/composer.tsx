@@ -17,9 +17,9 @@ import type { PendingInput } from './use-conversation'
 const MIN = '2.5rem'
 const MAX_PX = 160
 
-// Grow with the content up to a ceiling, then scroll inside. Someone dictating a
-// requirement types paragraphs, and a fixed one-line box makes them do it through
-// a slot.
+// Grow with the content up to a ceiling, then scroll inside. This must finish
+// before paint: an ordinary effect would draw the previous height for one frame
+// after every input, visibly moving the composer and transcript.
 const useAutosize = (ref: RefObject<HTMLTextAreaElement | null>, value: string) => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `value` is the trigger; the effect reads the DOM, not the prop
   useLayoutEffect(() => {
