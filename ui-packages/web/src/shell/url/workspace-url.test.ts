@@ -18,6 +18,10 @@ describe('the grammar round-trips', () => {
     expect(buildWorkspaceUrl(at(url))).toBe(url)
   })
 
+  it('keeps the local new-conversation sentinel in the URL', () => {
+    expect(buildWorkspaceUrl(at('/?cid=new'))).toBe('/?cid=new')
+  })
+
   // Percent-encoding is cosmetic on the way out and irrelevant on the way in.
   // That asymmetry is what lets the generator emit readable URLs without making
   // every other producer of a link match its style.

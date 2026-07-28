@@ -1,4 +1,4 @@
-import { PanelLeftOpen } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { Activity } from 'react'
 import { useLocale } from '../../i18n'
 import { matchResource } from '../resources'
@@ -18,10 +18,12 @@ import { TabBar } from './tab-bar'
 // than its own, and nothing would throw.
 export const ContentColumn = ({
   workspace,
+  hasConversation,
   conversationCollapsed,
   onExpandConversation,
 }: {
   workspace: Workspace
+  hasConversation: boolean
   conversationCollapsed: boolean
   onExpandConversation: () => void
 }) => {
@@ -36,11 +38,11 @@ export const ContentColumn = ({
       data-active={url.active ?? ''}
       data-tab-count={url.tabs.length}
     >
-      {(conversationCollapsed || url.tabs.length > 0) && (
+      {((hasConversation && conversationCollapsed) || url.tabs.length > 0) && (
         <div className="flex h-10 shrink-0 items-stretch border-border border-b bg-muted/30">
           {/* Dragging the separator all the way in leaves no way back on screen.
               This is that way back. */}
-          {conversationCollapsed && (
+          {hasConversation && conversationCollapsed && (
             <button
               type="button"
               className="px-2 text-muted-foreground hover:bg-background [&_svg]:size-4"
@@ -48,7 +50,7 @@ export const ContentColumn = ({
               aria-label={__('shell.expandConversation')}
               onClick={onExpandConversation}
             >
-              <PanelLeftOpen />
+              <MessageSquare />
             </button>
           )}
           <TabBar workspace={workspace} />

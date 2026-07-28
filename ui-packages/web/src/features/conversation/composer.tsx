@@ -43,18 +43,22 @@ export const Composer = ({
 }) => {
   const __ = useLocale()
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
   useAutosize(ref, draft)
 
-  const canSend = draft.trim() !== ''
+  const canSend = draft.trim() !== '' && !sending
 
   const submit = () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || sending) return
     // Cleared immediately. Waiting for the round trip makes the interface feel
     // like it missed the keystroke; restored if the send actually failed.
     setDraft('')
-    void onSend(text).catch(() => setDraft(text))
+    setSending(true)
+    void onSend(text)
+      .catch(() => setDraft(text))
+      .finally(() => setSending(false))
   }
 
   return (
@@ -98,6 +102,7 @@ export const Composer = ({
             placeholder={__('shell.composerPlaceholder')}
             data-testid="composer"
             value={draft}
+            disabled={sending}
             onChange={event => setDraft(event.target.value)}
             // Sending while a turn is running is allowed on purpose: the server
             // holds it and merges it with whatever else arrives before that turn

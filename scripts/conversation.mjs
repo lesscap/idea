@@ -65,7 +65,7 @@ await post('/session', { username, password })
 
 const conversation = conversationId
   ? { id: Number(conversationId) }
-  : await post('/conversations', {})
+  : await post('/conversations', { text: message })
 
 process.stdout.write(`conversation ${conversation.id} ← ${message}\n\n`)
 
@@ -73,11 +73,13 @@ process.stdout.write(`conversation ${conversation.id} ← ${message}\n\n`)
 // ends in a completed turn, and watching from the beginning would see that one
 // and declare victory before the new answer had even begun.
 const before = await call(`/conversations/${conversation.id}/events`)
-let seen = before.items.at(-1)?.sequence ?? -1
+let seen = conversationId ? (before.items.at(-1)?.sequence ?? -1) : -1
 
-const sent = await post(`/conversations/${conversation.id}/messages`, { text: message })
-if (!sent.started)
-  process.stdout.write('(a turn was already running — this will merge into the next one)\n')
+if (conversationId) {
+  const sent = await post(`/conversations/${conversation.id}/messages`, { text: message })
+  if (!sent.started)
+    process.stdout.write('(a turn was already running — this will merge into the next one)\n')
+}
 
 // Polling rather than the event stream: this script is the check that the
 // plumbing works, so it should depend on as little of it as possible.

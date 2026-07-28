@@ -162,24 +162,18 @@ model App {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id])
-  conversations Conversation[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
   @@map("apps")
 }
 
-// A conversation with the agent. Independent of any one resource: it is told
-// which app it concerns so it can read that project's context, but it belongs to
-// no requirement inside it — which is why the panel showing it survives the main
-// area changing underneath.
+// A conversation with the agent. It belongs to a workspace, but no single app
+// or requirement: one conversation may eventually concern several of either.
+// Those associations need their own model once their semantics are known.
 model Conversation {
   id          Int    @id @default(autoincrement())
   workspaceId Int
-  // Null for a conversation not yet about anything in particular. It still gets
-  // a worktree — off a workspace-level scratch repo — so one code path serves
-  // both cases.
-  appId       Int?
   createdById Int
   // Null until the first turn is claimed, then stamped with whichever worker
   // took it — and fixed from then on. Nobody has to choose a backend in advance;
@@ -206,7 +200,6 @@ model Conversation {
   lastActiveAt DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  app       App?      @relation(fields: [appId], references: [id], onDelete: SetNull)
   createdBy User      @relation(fields: [createdById], references: [id])
   provider  Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
   events    ConversationEvent[]
@@ -214,7 +207,6 @@ model Conversation {
   turns     Turn[]
 
   @@index([workspaceId, lastActiveAt])
-  @@index([appId])
   @@map("conversations")
 }
 

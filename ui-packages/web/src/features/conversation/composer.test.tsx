@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
@@ -19,12 +19,13 @@ const draw = (onSend = vi.fn().mockResolvedValue(undefined)) => {
 }
 
 describe('sending with the keyboard', () => {
-  it('sends on Enter', () => {
+  it('sends on Enter', async () => {
     const { box, onSend } = draw()
 
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(onSend).toHaveBeenCalledWith('你好')
+    await waitFor(() => expect(screen.getByTestId('composer')).not.toBeDisabled())
   })
 
   // Enter also confirms a candidate in a Chinese IME. Sending there ships half a
@@ -44,6 +45,24 @@ describe('sending with the keyboard', () => {
     fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
 
     expect(onSend).not.toHaveBeenCalled()
+  })
+
+  it('does not submit the same draft twice while the request is pending', async () => {
+    let resolve: (() => void) | undefined
+    const onSend = vi.fn(
+      () =>
+        new Promise<void>(done => {
+          resolve = done
+        }),
+    )
+    const { box } = draw(onSend)
+
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    expect(onSend).toHaveBeenCalledTimes(1)
+    resolve?.()
+    await waitFor(() => expect(screen.getByTestId('composer')).not.toBeDisabled())
   })
 })
 

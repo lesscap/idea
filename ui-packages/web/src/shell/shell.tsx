@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect } from 'react'
 import {
   Group,
   Panel,
@@ -10,9 +10,15 @@ import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/s
 import { ConversationPanel } from '../features/conversation/conversation-panel'
 import { useLocaleControl } from '../i18n'
 import { ContentColumn } from './content'
+import { ShellLayoutProvider } from './layout/store'
+import {
+  useConversationCollapsed,
+  useSetConversationCollapsed,
+  useSideCollapsed,
+  useToggleSide,
+} from './layout/use-shell-layout'
 import { SideColumn } from './side'
 import { useWorkspaceUrl } from './url/use-workspace-url'
-import { useSideCollapsed } from './use-side-collapsed'
 
 // side ｜ conversation ｜ content. The three are orthogonal: the path says which
 // resource fills the main area, `?cid=` says which conversation is attached, and
@@ -24,11 +30,13 @@ import { useSideCollapsed } from './use-side-collapsed'
 // within the tree whenever a conversation opened or closed, remounting it and
 // discarding every tab's state — the exact loss this layout exists to prevent,
 // arriving through a side door.
-export const Shell = () => {
+const ShellFrame = () => {
   const workspace = useWorkspaceUrl()
-  const [sideCollapsed, toggleSide] = useSideCollapsed()
+  const sideCollapsed = useSideCollapsed()
+  const toggleSide = useToggleSide()
+  const conversationCollapsed = useConversationCollapsed()
+  const setConversationCollapsed = useSetConversationCollapsed()
   const [conversationHandle, conversationRef] = usePanelCallbackRef()
-  const [conversationCollapsed, setConversationCollapsed] = useState(false)
   // Panel widths persist themselves; nothing here has to watch or store them.
   //
   // onlySaveAfterUserInteractions keeps constraint recomputes and mount-time
@@ -46,6 +54,22 @@ export const Shell = () => {
   const workspaceId = useCurrentWorkspaceId()
   const role = useCurrentRole()
   const { url } = workspace
+  const hasConversation = url.conversationId !== null
+  const conversationHidden = !hasConversation || conversationCollapsed
+
+  // URL presence and layout preference are deliberately independent. With no
+  // cid the panel disappears without overwriting the remembered preference;
+  // with one, that preference alone decides whether the panel is open.
+  useLayoutEffect(() => {
+    if (!conversationHandle) return
+    if (conversationHidden && !conversationHandle.isCollapsed()) conversationHandle.collapse()
+    else if (!conversationHidden && conversationHandle.isCollapsed()) conversationHandle.expand()
+  }, [conversationHandle, conversationHidden])
+
+  const showConversation = (id: string) => {
+    setConversationCollapsed(false)
+    workspace.showConversation(id)
+  }
 
   return (
     // The whole situation published on one element so automation can read it in
@@ -62,13 +86,26 @@ export const Shell = () => {
       data-tab-count={url.tabs.length}
       data-conversation-id={url.conversationId ?? ''}
     >
-      <SideColumn workspace={workspace} collapsed={sideCollapsed} onToggle={toggleSide} />
+      <SideColumn
+        workspace={workspace}
+        collapsed={sideCollapsed}
+        onToggle={toggleSide}
+        onShowConversation={showConversation}
+      />
 
       <Group
         orientation="horizontal"
         className="min-h-0 min-w-0 flex-1"
         defaultLayout={defaultLayout}
-        onLayoutChanged={onLayoutChanged}
+        onLayoutChanged={(layout, meta) => {
+          if (
+            meta.isUserInteraction &&
+            hasConversation &&
+            conversationHandle &&
+            !conversationHandle.isCollapsed()
+          )
+            onLayoutChanged(layout, meta)
+        }}
       >
         <Panel
           id="conversation"
@@ -78,29 +115,44 @@ export const Shell = () => {
           collapsedSize={0}
           groupResizeBehavior="preserve-pixel-size"
           panelRef={conversationRef}
-          // One-way: the panel reports its size, and that is the only source of
-          // "is it collapsed". Mirroring it into an intent flag is what makes the
-          // two disagree and forces a sync effect to referee them.
-          onResize={size => setConversationCollapsed(size.inPixels < 1)}
+          onResize={(size, _, previous) => {
+            if (!hasConversation || previous === undefined) return
+            setConversationCollapsed(size.inPixels < 1)
+          }}
           className="flex min-h-0 min-w-0 flex-col"
         >
           <ConversationPanel
             conversationId={url.conversationId}
             context={url.active}
-            onCollapse={() => conversationHandle?.collapse()}
+            hidden={conversationHidden}
+            onConversationCreated={workspace.replaceConversation}
+            onCollapse={() => setConversationCollapsed(true)}
           />
         </Panel>
 
-        <Separator className="-mx-[3px] relative z-10 w-[7px] cursor-col-resize transition-colors hover:bg-accent/20" />
+        <Separator
+          className={
+            conversationHidden
+              ? 'pointer-events-none w-0'
+              : '-mx-[3px] relative z-10 w-[7px] cursor-col-resize transition-colors hover:bg-accent/20'
+          }
+        />
 
         <Panel id="content" minSize="320px" className="flex min-h-0 min-w-0 flex-col">
           <ContentColumn
             workspace={workspace}
+            hasConversation={hasConversation}
             conversationCollapsed={conversationCollapsed}
-            onExpandConversation={() => conversationHandle?.expand()}
+            onExpandConversation={() => setConversationCollapsed(false)}
           />
         </Panel>
       </Group>
     </div>
   )
 }
+
+export const Shell = () => (
+  <ShellLayoutProvider>
+    <ShellFrame />
+  </ShellLayoutProvider>
+)

@@ -34,7 +34,11 @@ export const mergeEvents = (existing: WireStored[], incoming: WireStored[]): Wir
 
 type Page = { items: WireStored[]; pending: PendingInput[] }
 
-export const useConversation = (conversationId: string | null) => {
+export const useConversation = (
+  conversationId: string | null,
+  onConversationCreated?: (id: string) => void,
+) => {
+  const persistedId = conversationId === 'new' ? null : conversationId
   const [events, setEvents] = useState<WireStored[]>([])
   const [pending, setPending] = useState<PendingInput[]>([])
   const [status, setStatus] = useState<Status>('connecting')
@@ -43,7 +47,7 @@ export const useConversation = (conversationId: string | null) => {
   const lastSeq = useRef(-1)
 
   useEffect(() => {
-    if (conversationId === null) {
+    if (persistedId === null) {
       setEvents([])
       setPending([])
       setStatus('closed')
@@ -68,7 +72,7 @@ export const useConversation = (conversationId: string | null) => {
       })
 
     const backfill = (query: string) =>
-      get<Page>(`/conversations/${conversationId}/events${query}`)
+      get<Page>(`/conversations/${persistedId}/events${query}`)
         .then(page => {
           if (!alive) return
           apply(page.items)
@@ -84,7 +88,7 @@ export const useConversation = (conversationId: string | null) => {
         })
 
     const openStream = (): EventSource => {
-      const source = new EventSource(`/api/web/conversations/${conversationId}/stream`)
+      const source = new EventSource(`/api/web/conversations/${persistedId}/stream`)
 
       source.onopen = () => {
         setStatus('open')
@@ -131,25 +135,30 @@ export const useConversation = (conversationId: string | null) => {
       window.removeEventListener('pageshow', onPageShow)
       stream.close()
     }
-  }, [conversationId])
+  }, [persistedId])
 
   // Not wrapped in useCallback: the panel re-renders whenever a message arrives,
   // so a stable identity buys nothing and costs a dependency array to keep right.
   const refreshPending = async () => {
-    if (conversationId === null) return
-    const page = await get<Page>(`/conversations/${conversationId}/events?after=${lastSeq.current}`)
+    if (persistedId === null) return
+    const page = await get<Page>(`/conversations/${persistedId}/events?after=${lastSeq.current}`)
     setPending(page.pending)
   }
 
   const send = async (text: string) => {
-    if (conversationId === null) return
-    await post(`/conversations/${conversationId}/messages`, { text })
+    if (conversationId === 'new') {
+      const created = await post<{ id: number }>('/conversations', { text })
+      onConversationCreated?.(String(created.id))
+      return
+    }
+    if (persistedId === null) return
+    await post(`/conversations/${persistedId}/messages`, { text })
     await refreshPending()
   }
 
   const withdraw = async (inputId: number) => {
-    if (conversationId === null) return
-    await del(`/conversations/${conversationId}/pending/${inputId}`)
+    if (persistedId === null) return
+    await del(`/conversations/${persistedId}/pending/${inputId}`)
     await refreshPending()
   }
 

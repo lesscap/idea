@@ -9,12 +9,10 @@ import { appLayout, ensureRepo, ensureWorktree } from './worktree.ts'
 // reaper takes the turn and runs it a second time.
 const HEARTBEAT_MS = 20_000
 
-// Which directory backs a conversation. An app it belongs to gets its own; one
-// that belongs to nothing yet works in a scratch area, because a conversation
-// often starts before the app it is about exists — someone says "I need expense
-// approval" and there is nothing to attach it to yet.
-const appKey = (conversation: Conversation): string =>
-  conversation.appId === null ? '_scratch' : `app-${conversation.appId}`
+// Conversations belong directly to a workspace. Their future associations with
+// apps and requirements are not single-valued, so until those have their own
+// model every conversation branches from the workspace scratch repository.
+const WORKSPACE_REPO = '_scratch'
 
 export const runTurn = async (
   client: WorkerClient,
@@ -38,10 +36,9 @@ export const runTurn = async (
       sourceSequence: claimed.userEventSequence,
     })
 
-    const key = appKey(conversation)
-    ensureRepo(root, key, null)
-    const worktree = ensureWorktree(root, key, conversation.id)
-    const { sessions } = appLayout(root, key)
+    ensureRepo(root, WORKSPACE_REPO, null)
+    const worktree = ensureWorktree(root, WORKSPACE_REPO, conversation.id)
+    const { sessions } = appLayout(root, WORKSPACE_REPO)
 
     const events = await client.events(claimed.id)
     const said = events.find(

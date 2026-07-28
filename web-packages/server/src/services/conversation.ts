@@ -18,7 +18,6 @@ import type { Service } from '../types.ts'
 export type Conversation = {
   readonly id: Id
   readonly workspaceId: Id
-  readonly appId: Id | null
   // Null until a worker has claimed the first turn. Nobody chooses a backend in
   // advance — whichever worker reaches it decides, and it is fixed from then on.
   readonly agentKind: string | null
@@ -33,7 +32,7 @@ export type Conversation = {
 export type AppendHook = (tx: Prisma.TransactionClient, sequence: number) => Promise<void>
 
 export type ConversationService = {
-  create: (input: { workspaceId: Id; appId: Id | null; createdById: Id }) => Promise<Conversation>
+  start: (input: { workspaceId: Id; createdById: Id; text: string }) => Promise<Conversation>
   listForWorkspace: (workspaceId: Id) => Promise<Conversation[]>
   get: (id: Id) => Promise<Conversation | null>
   events: (conversationId: Id, after?: number) => Promise<StoredEvent[]>
@@ -58,7 +57,6 @@ const isUniqueViolation = (error: unknown): boolean =>
 const view = (row: {
   id: number
   workspaceId: number
-  appId: number | null
   agentKind: string | null
   providerSessionId: string | null
   title: string | null
@@ -66,7 +64,6 @@ const view = (row: {
 }): Conversation => ({
   id: row.id,
   workspaceId: row.workspaceId,
-  appId: row.appId,
   agentKind: row.agentKind,
   providerSessionId: row.providerSessionId,
   title: row.title,
@@ -76,7 +73,6 @@ const view = (row: {
 const SELECT = {
   id: true,
   workspaceId: true,
-  appId: true,
   agentKind: true,
   providerSessionId: true,
   title: true,
@@ -153,6 +149,41 @@ export const createConversationService: Service<ConversationService> = app => {
   return {
     appendEvent,
 
+    start: async ({ workspaceId, createdById, text }) => {
+      const event: ConversationEvent = { type: 'user_message', text }
+      const { conversation, stored } = await app.$prisma.$transaction(async tx => {
+        const conversation = view(
+          await tx.conversation.create({
+            data: { workspaceId, createdById },
+            select: SELECT,
+          }),
+        )
+        const row = await tx.conversationEvent.create({
+          data: {
+            conversationId: conversation.id,
+            sequence: 0,
+            type: event.type,
+            payload: event as unknown as Prisma.InputJsonValue,
+          },
+          select: { id: true, sequence: true, createdAt: true },
+        })
+        await tx.turn.create({
+          data: { conversationId: conversation.id, userEventSequence: row.sequence },
+        })
+        return {
+          conversation,
+          stored: {
+            id: row.id,
+            sequence: row.sequence,
+            event,
+            createdAt: row.createdAt.toISOString(),
+          },
+        }
+      })
+      app.$events.publish(conversation.id, stored)
+      return conversation
+    },
+
     rememberSession: async (conversationId, providerSessionId) => {
       await app.$prisma.conversation.update({
         where: { id: conversationId },
@@ -160,18 +191,10 @@ export const createConversationService: Service<ConversationService> = app => {
       })
     },
 
-    create: async ({ workspaceId, appId, createdById }) =>
-      view(
-        await app.$prisma.conversation.create({
-          data: { workspaceId, appId, createdById },
-          select: SELECT,
-        }),
-      ),
-
     listForWorkspace: async workspaceId =>
       (
         await app.$prisma.conversation.findMany({
-          where: { workspaceId },
+          where: { workspaceId, events: { some: { type: 'user_message' } } },
           orderBy: { lastActiveAt: 'desc' },
           select: SELECT,
         })

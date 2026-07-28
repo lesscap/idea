@@ -4,7 +4,7 @@ import { notFound, sendOk } from '../../../../http.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
 import { isResponse, requireCurrentWorkspace } from '../../middleware/workspace.ts'
-import { CreateConversationBody, IdParam } from '../../schema/index.ts'
+import { IdParam, StartConversationBody } from '../../schema/index.ts'
 import { scopedConversation } from './scoped.ts'
 
 // The conversation as a resource: list it, start one, read what was said.
@@ -15,21 +15,21 @@ export const registerRead: Controller = app => {
     return sendOk(c, { items: await app.$conversation.listForWorkspace(access.workspaceId) })
   })
 
-  // No backend is chosen here. Whichever worker claims the first turn decides,
-  // and the conversation is fixed to it from then on — so starting one needs no
-  // decision from anybody.
-  app.post('/', zValidator('json', CreateConversationBody), async c => {
+  // Creation and the first message are one operation. A click on "new" is only
+  // a draft in the browser; persisting before anyone says anything leaves empty
+  // conversations in the list, while separate create/send requests can leave
+  // one behind when only the second fails.
+  app.post('/', zValidator('json', StartConversationBody), async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    return sendOk(
-      c,
-      await app.$conversation.create({
-        workspaceId: access.workspaceId,
-        appId: c.req.valid('json').appId ?? null,
-        createdById: session(c).userId,
-      }),
-    )
+    const conversation = await app.$conversation.start({
+      workspaceId: access.workspaceId,
+      createdById: session(c).userId,
+      text: c.req.valid('json').text,
+    })
+    app.$commands.broadcast({ type: 'work_available' })
+    return sendOk(c, conversation)
   })
 
   // The whole transcript, or just what came after a sequence the caller already

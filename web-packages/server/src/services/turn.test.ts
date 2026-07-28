@@ -26,7 +26,10 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
   afterAll(async () => db?.close())
 
   const conversation = (workspaceId = db.workspaceId) =>
-    db.app.$conversation.create({ workspaceId, appId: null, createdById: db.userId })
+    db.prisma.conversation.create({
+      data: { workspaceId, createdById: db.userId },
+      select: { id: true },
+    })
 
   const provider = async (name: string) =>
     db.prisma.provider.upsert({

@@ -1,8 +1,6 @@
-import { MessageSquarePlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from '../../i18n'
-import { get, post } from '../../lib/request'
-import { Button } from '../../ui'
+import { get } from '../../lib/request'
 
 // The conversations in this workspace.
 //
@@ -31,34 +29,19 @@ export const ConversationList = ({
     [],
   )
 
-  // Read once on mount, and again explicitly after creating one — enough to
-  // keep the list current without polling it.
+  // A successful first send replaces `new` with the persisted id. That change
+  // picks up the newly created row without polling; there cannot be a new row
+  // while the selection is still the local sentinel.
   useEffect(() => {
-    void load()
-  }, [load])
-
-  const start = async () => {
-    const created = await post<{ id: number }>('/conversations', {})
-    await load()
-    onSelect(String(created.id))
-  }
+    if (conversationId !== 'new') void load()
+  }, [conversationId, load])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1 px-2 pb-2" data-testid="conversation-list">
-      <div className="flex items-center justify-between pt-2 pl-2">
+      <div className="flex items-center pt-2 pl-2">
         <span className="font-medium text-muted-foreground text-xs">
           {__('resource.conversations')}
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="px-1.5"
-          data-testid="conversation-new"
-          aria-label={__('shell.newConversation')}
-          onClick={() => void start()}
-        >
-          <MessageSquarePlus />
-        </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

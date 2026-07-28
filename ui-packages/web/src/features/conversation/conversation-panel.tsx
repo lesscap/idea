@@ -1,4 +1,4 @@
-import { PanelLeftClose } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
 import { Button, Markdown } from '../../ui'
@@ -89,14 +89,21 @@ const Drawn = ({ item }: { item: StreamItem }) => {
 export const ConversationPanel = ({
   conversationId,
   context,
+  hidden,
+  onConversationCreated,
   onCollapse,
 }: {
   conversationId: string | null
   context: string | null
+  hidden: boolean
+  onConversationCreated: (id: string) => void
   onCollapse: () => void
 }) => {
   const __ = useLocale()
-  const { bubbles, pending, working, status, send, withdraw } = useConversation(conversationId)
+  const { bubbles, pending, working, status, send, withdraw } = useConversation(
+    conversationId,
+    onConversationCreated,
+  )
   const bottom = useRef<HTMLDivElement>(null)
 
   const stream = useMemo(() => groupActivity(bubbles, working), [bubbles, working])
@@ -111,7 +118,11 @@ export const ConversationPanel = ({
 
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col border-border border-r bg-background"
+      className={`flex min-h-0 min-w-0 flex-1 flex-col border-border border-r bg-background ${
+        hidden ? 'invisible' : ''
+      }`}
+      inert={hidden}
+      aria-hidden={hidden}
       data-testid="conversation-column"
       data-conversation-id={conversationId ?? ''}
       data-context={context ?? ''}
@@ -120,7 +131,7 @@ export const ConversationPanel = ({
     >
       <div className="flex h-10 shrink-0 items-center justify-between border-border border-b px-3">
         <span className="truncate font-medium text-sm">
-          {conversationId === null ? __('resource.conversations') : __('shell.newConversation')}
+          {conversationId === 'new' ? __('shell.newConversation') : __('resource.conversations')}
         </span>
         <Button
           variant="ghost"
@@ -130,7 +141,7 @@ export const ConversationPanel = ({
           aria-label={__('shell.collapseConversation')}
           onClick={onCollapse}
         >
-          <PanelLeftClose />
+          <ChevronLeft />
         </Button>
       </div>
 
@@ -157,7 +168,7 @@ export const ConversationPanel = ({
             <div ref={bottom} />
           </div>
 
-          <Composer pending={pending} onSend={send} onWithdraw={withdraw} />
+          <Composer key={conversationId} pending={pending} onSend={send} onWithdraw={withdraw} />
         </>
       )}
     </div>
