@@ -17,9 +17,9 @@ import type { PendingInput } from './use-conversation'
 const MIN = '2.5rem'
 const MAX_PX = 160
 
-// Grow with the content up to a ceiling, then scroll inside. Someone dictating a
-// requirement types paragraphs, and a fixed one-line box makes them do it through
-// a slot.
+// Grow with the content up to a ceiling, then scroll inside. This must finish
+// before paint: an ordinary effect would draw the previous height for one frame
+// after every input, visibly moving the composer and transcript.
 const useAutosize = (ref: RefObject<HTMLTextAreaElement | null>, value: string) => {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `value` is the trigger; the effect reads the DOM, not the prop
   useLayoutEffect(() => {
@@ -48,6 +48,11 @@ export const Composer = ({
 
   const canSend = draft.trim() !== ''
 
+  // No "sending" flag gating this. Clearing the draft synchronously is what
+  // stops a double submit — the next keystroke event sees an empty box, since
+  // each one re-renders before the following one arrives. An in-flight flag
+  // would additionally block the case this panel exists to allow: adding a
+  // second thought while the first is still on the wire.
   const submit = () => {
     const text = draft.trim()
     if (!text) return

@@ -1,7 +1,14 @@
-// Normalization rules for the two identifiers users type by hand. Pure, and
-// shared deliberately: the browser validates as you type and the server
-// normalizes before writing, and they must agree — a rule that exists in only
-// one of the two places is a rule that gets bypassed.
+// Normalization rules for the two identifiers users type by hand.
+//
+// These sat in @idea/shared on the expectation that the browser would validate
+// as you type while the server normalized before writing, so the two had to
+// agree. That never happened — nothing in the web package ever imported them —
+// and the only caller is the request schema two directories down.
+//
+// If the browser does grow live validation, do not move them back: @idea/shared
+// is the interface contract between the runtimes and carries types only. Expose
+// a check through the API, or keep a second copy and say so. A rule that lives
+// in one place while looking shared is the worse of the two.
 
 export const USERNAME_MIN = 3
 export const USERNAME_MAX = 32

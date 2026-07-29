@@ -45,6 +45,19 @@ describe('sending with the keyboard', () => {
 
     expect(onSend).not.toHaveBeenCalled()
   })
+
+  // What stops the second Enter is the draft being cleared synchronously, not an
+  // in-flight flag — the box is still enabled and still accepts typing, which is
+  // the point: a second thought may be added while the first is on the wire.
+  it('does not submit the same draft twice while the request is pending', () => {
+    const onSend = vi.fn(() => new Promise<void>(() => {}))
+    const { box } = draw(onSend)
+
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    expect(onSend).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('the arrow', () => {

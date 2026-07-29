@@ -1,6 +1,7 @@
 import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
+import { extractSeed, generateTitle } from './claude/title.ts'
 import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
-import { appLayout, ensureRepo, ensureWorktree } from './worktree.ts'
+import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 
 // Running one turn: prepare the context, talk to the agent, close the turn.
 
@@ -9,12 +10,10 @@ import { appLayout, ensureRepo, ensureWorktree } from './worktree.ts'
 // reaper takes the turn and runs it a second time.
 const HEARTBEAT_MS = 20_000
 
-// Which directory backs a conversation. An app it belongs to gets its own; one
-// that belongs to nothing yet works in a scratch area, because a conversation
-// often starts before the app it is about exists — someone says "I need expense
-// approval" and there is nothing to attach it to yet.
-const appKey = (conversation: Conversation): string =>
-  conversation.appId === null ? '_scratch' : `app-${conversation.appId}`
+// Conversations belong directly to a workspace. Their future associations with
+// apps and requirements are not single-valued, so until those have their own
+// model every conversation branches from the workspace scratch repository.
+const WORKSPACE_REPO = '_scratch'
 
 export const runTurn = async (
   client: WorkerClient,
@@ -38,10 +37,9 @@ export const runTurn = async (
       sourceSequence: claimed.userEventSequence,
     })
 
-    const key = appKey(conversation)
-    ensureRepo(root, key, null)
-    const worktree = ensureWorktree(root, key, conversation.id)
-    const { sessions } = appLayout(root, key)
+    ensureRepo(root, WORKSPACE_REPO, null)
+    const worktree = ensureWorktree(root, WORKSPACE_REPO, conversation.id)
+    const { sessions } = repoLayout(root, WORKSPACE_REPO)
 
     const events = await client.events(claimed.id)
     const said = events.find(
@@ -75,6 +73,12 @@ export const runTurn = async (
     }
 
     await client.finish(claimed.id, 'completed')
+
+    // Name it after the opening turn. The transcript read below may also contain
+    // follow-up input queued while that turn ran; that still describes the same
+    // opening subject and is useful context rather than a boundary to reconstruct.
+    if (claimed.userEventSequence === 0 && conversation.title === null)
+      await nameConversation(client, claimed.id, { provider, worktree, sessions }, log)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log(`turn ${claimed.id} failed: ${message}`)
@@ -85,5 +89,34 @@ export const runTurn = async (
   } finally {
     clearInterval(renewing)
     controller.abort()
+  }
+}
+
+// Never throws. It runs inside the same `try` as the turn, and the catch there
+// writes a `turn.failed` event — so an exception escaping here would put a
+// failure at the end of a conversation that actually went fine, for no reason
+// worse than a summariser timing out.
+//
+// Reads the transcript back rather than collecting from the stream on the way
+// past: what gets summarised is exactly what was stored at naming time, and the
+// loop above keeps doing one thing.
+const nameConversation = async (
+  client: WorkerClient,
+  turnId: number,
+  where: { provider: ProviderConfig; worktree: string; sessions: string },
+  log: (message: string) => void,
+): Promise<void> => {
+  try {
+    const seed = extractSeed(await client.events(turnId))
+    if (!seed) return log(`turn ${turnId}: too little said to name the conversation`)
+
+    const outcome = await generateTitle({ ...where, seed })
+    if (outcome.kind === 'error') return log(`turn ${turnId}: naming failed — ${outcome.reason}`)
+    if (outcome.kind === 'declined') return log(`turn ${turnId}: nothing worth naming yet`)
+
+    const named = await client.setTitle(turnId, outcome.title)
+    log(named ? `✎ named conversation → ${outcome.title}` : `turn ${turnId}: already named`)
+  } catch (error) {
+    log(`turn ${turnId}: naming failed — ${error instanceof Error ? error.message : String(error)}`)
   }
 }

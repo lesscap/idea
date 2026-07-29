@@ -5,9 +5,9 @@ import { dirname, join } from 'node:path'
 // The project context a conversation happens in.
 //
 // Requirements are described against a system that already exists, so the agent
-// needs to see it. Every conversation gets a worktree — one with a repository
-// behind it when the app has one, and one off an empty local repository when it
-// does not, so there is a single path rather than two.
+// needs to see it. Every conversation gets its own worktree, branched from the
+// repository named by a key. A conversation belongs to a workspace and to no
+// single app, so today there is exactly one key — nothing here has to choose.
 //
 // A worktree is a CACHE. What is durable is the branch it points at; the
 // directory can be removed and rebuilt from that branch at any time, which is
@@ -22,7 +22,7 @@ const git = (cwd: string, ...args: string[]) => {
   }
 }
 
-// Everything belonging to one application, under one directory.
+// Everything belonging to one repository key, under one directory.
 //
 // `sessions` is what the agent SDK is pointed at (CLAUDE_CONFIG_DIR). It sits
 // beside the worktrees rather than inside them, which is the point: reclaiming a
@@ -31,17 +31,21 @@ const git = (cwd: string, ...args: string[]) => {
 // sessions by working directory inside there, so conversations stay isolated
 // without us inventing a key.
 //
-// It also means removing an application is one `rm -rf` rather than a hunt
-// through a directory the SDK owns and sweeps on its own schedule.
-export type AppLayout = {
+// It also means discarding a key's whole working area is one `rm -rf` rather
+// than a hunt through a directory the SDK owns and sweeps on its own schedule.
+export type RepoLayout = {
   root: string
   repo: string
   sessions: string
   worktrees: string
 }
 
-export const appLayout = (root: string, appKey: string): AppLayout => {
-  const base = join(root, 'apps', appKey)
+export const repoLayout = (root: string, repoKey: string): RepoLayout => {
+  // The `apps` segment is older than conversations losing their app. It stays:
+  // `sessions` below is the one thing here that is NOT a cache, so moving the
+  // path would throw away the agent's memory of every conversation on this
+  // worker to make a directory name read better.
+  const base = join(root, 'apps', repoKey)
   return {
     root: base,
     repo: join(base, 'repo'),
@@ -50,7 +54,7 @@ export const appLayout = (root: string, appKey: string): AppLayout => {
   }
 }
 
-// An app with no remote still needs somewhere to work, and an app that has one
+// A key with no remote still needs somewhere to work, and one that has a remote
 // needs it fetched. Both end with a repository at the same path.
 //
 // The empty case needs one extra step. `git init` alone leaves an unborn HEAD,
@@ -64,10 +68,10 @@ export const appLayout = (root: string, appKey: string): AppLayout => {
 // initial commit gives it something to point at.)
 export const ensureRepo = (
   root: string,
-  appKey: string,
+  repoKey: string,
   remote: string | null,
 ): { path: string; created: boolean } => {
-  const path = appLayout(root, appKey).repo
+  const path = repoLayout(root, repoKey).repo
   if (existsSync(join(path, '.git'))) {
     if (remote) git(path, 'fetch', '--quiet', 'origin')
     return { path, created: false }
@@ -99,8 +103,8 @@ export const branchName = (conversationId: number): string => `idea/c${conversat
 // half-removed, or already there. `git worktree prune` first because a directory
 // deleted by hand leaves the repository still believing it exists, and the add
 // then fails on a worktree nobody can see.
-export const ensureWorktree = (root: string, appKey: string, conversationId: number): string => {
-  const { repo: repoPath, worktrees } = appLayout(root, appKey)
+export const ensureWorktree = (root: string, repoKey: string, conversationId: number): string => {
+  const { repo: repoPath, worktrees } = repoLayout(root, repoKey)
   const path = join(worktrees, String(conversationId))
   if (existsSync(path)) return path
 

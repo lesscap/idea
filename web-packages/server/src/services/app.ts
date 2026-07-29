@@ -1,5 +1,5 @@
 import type { App, AppStatus, Id, Paged, PageQuery } from '@idea/shared'
-import { paged, toOffset } from '@idea/shared'
+import { paged, toOffset } from '../paging.ts'
 import type { Service } from '../types.ts'
 
 export type AppCreate = {

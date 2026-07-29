@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, useRoutes } from 'react-router-dom'
-import { SessionStoreProvider } from '../core/session/store'
+import { readLayoutState } from '../core/layout/storage'
 import { useLoadSession } from '../core/session/use-session'
+import { SharedStoreProvider } from '../core/store'
 import { detectLocale, LocaleProvider } from '../i18n'
 import { routes } from './routes'
 
@@ -19,12 +20,19 @@ const Routed = () => {
 // Locale is resolved before first paint from localStorage or the browser, so the
 // login screen is already in the right language — the one screen where a wrong
 // language is most costly, since someone who cannot read it cannot get past it.
-export const Root = () => (
-  <LocaleProvider initial={detectLocale()}>
-    <SessionStoreProvider>
-      <BrowserRouter>
-        <Routed />
-      </BrowserRouter>
-    </SessionStoreProvider>
-  </LocaleProvider>
-)
+export const Root = () => {
+  // Lazy rather than called inline: the provider builds its store from this once
+  // and ignores it afterwards, so an inline call would read Local Storage on
+  // every render for a value nobody looks at.
+  const [initialLayout] = useState(readLayoutState)
+
+  return (
+    <LocaleProvider initial={detectLocale()}>
+      <SharedStoreProvider initial={initialLayout}>
+        <BrowserRouter>
+          <Routed />
+        </BrowserRouter>
+      </SharedStoreProvider>
+    </LocaleProvider>
+  )
+}

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   buildWorkspaceUrl,
@@ -19,17 +20,27 @@ export const useWorkspaceUrl = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const url = parseWorkspaceUrl(location)
+  const latestUrl = useRef(url)
+  latestUrl.current = url
 
   // push rather than replace, which makes going back the way to undo closing a
   // tab. Panel widths live in localStorage precisely so they cannot fill this
   // history with entries nobody wants to step through.
-  const go = (next: WorkspaceUrl) => navigate(buildWorkspaceUrl(next))
+  const go = (next: WorkspaceUrl, replace = false) => navigate(buildWorkspaceUrl(next), { replace })
 
   return {
     url,
     open: (ref: string) => go(openTab(url, ref)),
     close: (ref: string) => go(closeTab(url, ref)),
     showConversation: (conversationId: string | null) => go({ ...url, conversationId }),
+    replaceConversation: (conversationId: string) => {
+      // The request can finish after the person has moved to another tab or
+      // conversation. Keep their latest resource state, and never let a stale
+      // draft completion take over a conversation they selected meanwhile.
+      const latest = latestUrl.current
+      if (latest.conversationId !== 'new') return
+      go({ ...latest, conversationId }, true)
+    },
   }
 }
 

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEventBus } from '../event-bus.ts'
-import { createConversationService } from './conversation.ts'
+import { createConversationService } from './conversation/index.ts'
 import { createPendingInputService } from './pending-input.ts'
 import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 import { type Claimant, createTurnService } from './turn.ts'
@@ -26,7 +26,10 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
   afterAll(async () => db?.close())
 
   const conversation = (workspaceId = db.workspaceId) =>
-    db.app.$conversation.create({ workspaceId, appId: null, createdById: db.userId })
+    db.prisma.conversation.create({
+      data: { workspaceId, createdById: db.userId },
+      select: { id: true },
+    })
 
   const provider = async (name: string) =>
     db.prisma.provider.upsert({
@@ -365,7 +368,7 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
       for (const text of ['a', 'b', 'c'])
         await db.app.$conversation.appendEvent(c.id, { type: 'user_message', text })
 
-      const missed = await db.app.$conversation.events(c.id, 0)
+      const missed = await db.app.$conversation.events(c.id, { after: 0 })
 
       expect(missed.map(e => e.sequence)).toEqual([1, 2])
     })

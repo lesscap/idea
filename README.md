@@ -138,7 +138,9 @@ ui-packages/web/src/
 │   ├── badge/index.tsx   dialog/index.tsx  dropdown-menu/index.tsx
 │   └── preview/index.tsx component gallery, mounted at /dev/ui
 ├── core/            application-level infrastructure
-│   └── session/     the session store (state + provider + hooks) and its API
+│   ├── store.tsx    the single shared state container (data only)
+│   ├── session/     session selectors, actions and API
+│   └── layout/      layout selectors, actions and preference persistence
 ├── parts/           shared components that know this product (locale switch)
 ├── i18n/            message bundles and the assembly that binds them
 ├── features/        leaf features — they consume the layers above, never declare shared state
@@ -212,11 +214,15 @@ it.
 
 ## State (zustand)
 
-One store: the current session (`user` + `workspaceId`). It qualifies because it
-is read on most screens **and** has definite moments at which it goes stale —
-sign in, sign out, switch workspace. That pairing is the bar for anything else
-proposed for a store. An app list has no such moment, so it lives in the page
-that shows it.
+One shared store holds the small set of facts needed across otherwise independent
+features: current session context and shell layout preferences today, perhaps a
+current app id later. It is a state container, not a home for operations. Each
+domain builds named selectors and actions around it under `core/session`,
+`core/layout`, or another focused module.
+
+Data still needs a definite invalidation point to enter the store. An app list
+has no single moment at which every consumer can know it is stale, so it stays in
+the page that owns the query rather than becoming global state.
 
 Rules, each protecting against a specific failure:
 
@@ -227,16 +233,19 @@ Rules, each protecting against a specific failure:
 - **The base hook always takes a selector.** Subscribing to the whole store
   re-renders every consumer on any field change. It never errors — it just gets
   slower — so it has to be impossible rather than caught in review.
-- **Named accessor hooks** (`useCurrentUser`) over inline selectors at call
-  sites. A typo in an inline selector yields `undefined` silently; a wrong hook
-  name does not compile.
-- **State file holds state only.** `core/session/store.tsx` has the shape, the
-  store, the provider, and the base hook. Accessors and actions live in
-  `use-session.ts`.
-- **Dependencies run store → api → request**, never backwards.
+- **Named domain hooks** (`useCurrentUser`, `useConversationCollapsed`) over
+  inline selectors at call sites. A typo in an inline selector yields
+  `undefined` silently; a wrong hook name does not compile.
+- **The store holds data only.** `core/store.tsx` has the shape, construction,
+  provider and base selector hook. Session and layout operations live in their
+  own modules, so adding one does not turn the shared store into a service.
+- **Domains depend on the store, never the reverse.** Store initialization takes
+  plain data; layout reads its Local Storage preferences before passing them in.
 - **The session is not persisted.** The httpOnly cookie is the source of truth
   for being signed in; mirroring it into localStorage lets the two disagree once
   the cookie expires, and puts identity where page scripts can read it.
+- **Layout preferences are persisted.** They carry no identity or authorization,
+  and their layout module owns both read and write policy.
 
 No TanStack Query yet. It earns its place once several interrelated views start
 needing "changing A must refresh B"; today that problem does not exist.

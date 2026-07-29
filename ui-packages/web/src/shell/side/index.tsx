@@ -1,4 +1,4 @@
-import { PanelLeft, PanelLeftClose } from 'lucide-react'
+import { PanelLeft, PanelLeftOpen, SquarePen } from 'lucide-react'
 import { ConversationList } from '../../features/conversation/conversation-list'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
@@ -20,10 +20,12 @@ export const SideColumn = ({
   workspace,
   collapsed,
   onToggle,
+  onShowConversation,
 }: {
   workspace: Workspace
   collapsed: boolean
   onToggle: () => void
+  onShowConversation: (id: string) => void
 }) => {
   const __ = useLocale()
   const { url, open } = workspace
@@ -46,9 +48,26 @@ export const SideColumn = ({
           aria-label={__(collapsed ? 'shell.expandSide' : 'shell.collapseSide')}
           onClick={onToggle}
         >
-          {collapsed ? <PanelLeft /> : <PanelLeftClose />}
+          {collapsed ? <PanelLeftOpen /> : <PanelLeft />}
         </Button>
       </div>
+
+      <button
+        type="button"
+        className={`mx-2 mb-1 flex h-9 items-center rounded-md text-sm transition-colors hover:bg-background ${
+          collapsed ? 'w-8 justify-center' : 'gap-2 px-2'
+        } ${url.conversationId === 'new' ? 'bg-background font-medium' : ''}`}
+        data-testid="conversation-new"
+        data-active={url.conversationId === 'new'}
+        // The label is always there, because collapsed this is an icon with no
+        // text beside it. `title` is the hover hint, not a substitute.
+        aria-label={__('shell.newConversation')}
+        title={collapsed ? __('shell.newConversation') : undefined}
+        onClick={() => onShowConversation('new')}
+      >
+        <SquarePen className="size-4 shrink-0" />
+        {!collapsed && <span>{__('shell.newConversation')}</span>}
+      </button>
 
       <nav className="flex flex-col gap-0.5 p-2" data-testid="side-nav">
         {NAV.map(kind => {
@@ -79,10 +98,7 @@ export const SideColumn = ({
       </nav>
 
       {!collapsed && (
-        <ConversationList
-          conversationId={url.conversationId}
-          onSelect={workspace.showConversation}
-        />
+        <ConversationList conversationId={url.conversationId} onSelect={onShowConversation} />
       )}
 
       <Identity collapsed={collapsed} />

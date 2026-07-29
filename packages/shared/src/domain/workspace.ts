@@ -23,5 +23,3 @@ export type WorkspaceMember = User & {
   readonly role: Role
   readonly joinedAt: string
 }
-
-export const isAdmin = (role: Role): boolean => role === 'admin'

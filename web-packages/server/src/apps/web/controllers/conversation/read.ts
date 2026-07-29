@@ -1,50 +1,76 @@
 import { zValidator } from '@hono/zod-validator'
-import { toWireEvent } from '@idea/shared'
 import { notFound, sendOk } from '../../../../http.ts'
+import { parsePageQuery } from '../../../../paging.ts'
+import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
 import { isResponse, requireCurrentWorkspace } from '../../middleware/workspace.ts'
-import { CreateConversationBody, IdParam } from '../../schema/index.ts'
+import { IdParam, StartConversationBody } from '../../schema/index.ts'
+import { toWireEvent } from '../../wire.ts'
 import { scopedConversation } from './scoped.ts'
+
+// Beyond this a transcript read stops being a window. Nothing in the interface
+// asks for more; a caller that does gets the ceiling rather than an error.
+const MAX_WINDOW = 1000
+
+const wholeNumber = (raw: string | undefined): number | undefined => {
+  if (raw === undefined) return undefined
+  const value = Number(raw)
+  return Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+// `limit` is clamped rather than rejected, for the reason parsePageQuery clamps
+// pageSize: it becomes a SQL LIMIT, so leaving it open is a full-table read for
+// the asking. Unreadable values fall away instead of failing the request — a
+// transcript that will not open is worse than one that opens wider than asked.
+const windowFrom = (query: Record<string, string | undefined>): EventWindow => {
+  const after = wholeNumber(query.after)
+  const before = wholeNumber(query.before)
+  const limit = wholeNumber(query.limit)
+  return {
+    ...(after === undefined ? {} : { after }),
+    ...(before === undefined ? {} : { before }),
+    ...(limit === undefined ? {} : { limit: Math.min(Math.max(limit, 1), MAX_WINDOW) }),
+  }
+}
 
 // The conversation as a resource: list it, start one, read what was said.
 export const registerRead: Controller = app => {
   app.get('/', async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
-    return sendOk(c, { items: await app.$conversation.listForWorkspace(access.workspaceId) })
+
+    const query = parsePageQuery(c.req.query())
+    return sendOk(c, await app.$conversation.listForWorkspace(access.workspaceId, query))
   })
 
-  // No backend is chosen here. Whichever worker claims the first turn decides,
-  // and the conversation is fixed to it from then on — so starting one needs no
-  // decision from anybody.
-  app.post('/', zValidator('json', CreateConversationBody), async c => {
+  // Creation and the first message are one operation. A click on "new" is only
+  // a draft in the browser; persisting before anyone says anything leaves empty
+  // conversations in the list, while separate create/send requests can leave
+  // one behind when only the second fails.
+  app.post('/', zValidator('json', StartConversationBody), async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    return sendOk(
-      c,
-      await app.$conversation.create({
-        workspaceId: access.workspaceId,
-        appId: c.req.valid('json').appId ?? null,
-        createdById: session(c).userId,
-      }),
-    )
+    const conversation = await app.$conversation.start({
+      workspaceId: access.workspaceId,
+      createdById: session(c).userId,
+      text: c.req.valid('json').text,
+    })
+    app.$commands.broadcast({ type: 'work_available' })
+    return sendOk(c, conversation)
   })
 
-  // The whole transcript, or just what came after a sequence the caller already
-  // holds. Paired with `pending`, because what has been typed but not sent is
-  // part of what the interface has to show and is deliberately not in the log.
+  // A window of the transcript: the most recent `limit`, or the stretch before a
+  // sequence, or everything after one the caller already holds. Paired with
+  // `pending`, because what has been typed but not sent is part of what the
+  // interface has to show and is deliberately not in the log.
   app.get('/:id/events', zValidator('param', IdParam), async c => {
     const found = await scopedConversation(app, c, c.req.valid('param').id)
     if (isResponse(found)) return found
     if (!found) return notFound(c, 'conversation not found')
 
-    const after = c.req.query('after')
-    const events = await app.$conversation.events(
-      found.id,
-      after === undefined ? undefined : Number(after),
-    )
+    const events = await app.$conversation.events(found.id, windowFrom(c.req.query()))
 
     return sendOk(c, {
       items: events.map(stored => ({

@@ -71,6 +71,8 @@ export const zh = {
     expandConversation: '展开会话',
     newConversation: '新会话',
     noConversation: '选一个会话，或新建一个',
+    loadMore: '查看更多',
+    loadEarlier: '加载更早的消息',
     thinking: '正在思考…',
     withdraw: '撤回',
     composerPlaceholder: '说说你想要什么…  Enter 发送',

@@ -1,4 +1,4 @@
-import { type ApiFailure, type ApiResponse, isOk } from '@idea/shared'
+import type { ApiFailure, ApiResponse } from '@idea/shared'
 import { Hono } from 'hono'
 import type { Controller, ServiceApplication, WebApplication } from '../../types.ts'
 import { requireSession, type SessionData } from './middleware/session.ts'
@@ -57,7 +57,8 @@ export const json = (body: unknown): RequestInit => ({
 // assertion is noise that also hides which half of the envelope a test expects.
 export const okData = async <T>(res: Response): Promise<T> => {
   const body = (await res.json()) as ApiResponse<T>
-  if (!isOk(body)) throw new Error(`expected success, got ${body.code}: ${body.message}`)
+  // `success` is the discriminant, so this narrows on its own — no guard needed.
+  if (!body.success) throw new Error(`expected success, got ${body.code}: ${body.message}`)
   return body.data
 }
 
