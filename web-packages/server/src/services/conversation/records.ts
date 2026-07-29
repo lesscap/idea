@@ -36,7 +36,7 @@ const SELECT = {
 
 type ConversationRecords = Pick<
   ConversationService,
-  'start' | 'rememberSession' | 'listForWorkspace' | 'get'
+  'start' | 'rememberSession' | 'nameIfUnnamed' | 'listForWorkspace' | 'get'
 >
 
 export const createConversationRecords: Service<ConversationRecords> = app => ({
@@ -69,6 +69,22 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
       where: { id: conversationId },
       data: { providerSessionId },
     })
+  },
+
+  // Conditional rather than a plain update, because the name arrives from a
+  // worker some seconds after the exchange it describes. In that gap the person
+  // may have named the conversation themselves, and a summary does not get to
+  // overwrite a deliberate choice — which is the whole job of `titleLocked`.
+  nameIfUnnamed: async (conversationId, title) => {
+    const named = await app.$prisma.conversation.updateMany({
+      where: {
+        id: conversationId,
+        titleLocked: false,
+        OR: [{ title: null }, { title: '' }],
+      },
+      data: { title },
+    })
+    return named.count === 1
   },
 
   // Most recently active first, which is also the order the sidebar wants. That

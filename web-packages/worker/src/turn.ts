@@ -1,4 +1,5 @@
 import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
+import { extractSeed, generateTitle } from './claude/title.ts'
 import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
 import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 
@@ -72,6 +73,12 @@ export const runTurn = async (
     }
 
     await client.finish(claimed.id, 'completed')
+
+    // Name it after the opening turn. The transcript read below may also contain
+    // follow-up input queued while that turn ran; that still describes the same
+    // opening subject and is useful context rather than a boundary to reconstruct.
+    if (claimed.userEventSequence === 0 && conversation.title === null)
+      await nameConversation(client, claimed.id, { provider, worktree, sessions }, log)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log(`turn ${claimed.id} failed: ${message}`)
@@ -82,5 +89,34 @@ export const runTurn = async (
   } finally {
     clearInterval(renewing)
     controller.abort()
+  }
+}
+
+// Never throws. It runs inside the same `try` as the turn, and the catch there
+// writes a `turn.failed` event — so an exception escaping here would put a
+// failure at the end of a conversation that actually went fine, for no reason
+// worse than a summariser timing out.
+//
+// Reads the transcript back rather than collecting from the stream on the way
+// past: what gets summarised is exactly what was stored at naming time, and the
+// loop above keeps doing one thing.
+const nameConversation = async (
+  client: WorkerClient,
+  turnId: number,
+  where: { provider: ProviderConfig; worktree: string; sessions: string },
+  log: (message: string) => void,
+): Promise<void> => {
+  try {
+    const seed = extractSeed(await client.events(turnId))
+    if (!seed) return log(`turn ${turnId}: too little said to name the conversation`)
+
+    const outcome = await generateTitle({ ...where, seed })
+    if (outcome.kind === 'error') return log(`turn ${turnId}: naming failed — ${outcome.reason}`)
+    if (outcome.kind === 'declined') return log(`turn ${turnId}: nothing worth naming yet`)
+
+    const named = await client.setTitle(turnId, outcome.title)
+    log(named ? `✎ named conversation → ${outcome.title}` : `turn ${turnId}: already named`)
+  } catch (error) {
+    log(`turn ${turnId}: naming failed — ${error instanceof Error ? error.message : String(error)}`)
   }
 }

@@ -72,3 +72,51 @@ describe.skipIf(!databaseUrl)('conversation persistence', () => {
     expect(opened[0]?.event.type).toBe('turn.started')
   })
 })
+
+// A name is worked out by a worker and arrives seconds after the exchange it
+// describes. What these protect is that gap.
+describe.skipIf(!databaseUrl)('naming a conversation', () => {
+  let db: TestDb
+
+  beforeAll(async () => {
+    db = await setupTestDb(app => ({
+      $events: createEventBus(),
+      $conversation: createConversationService(app),
+    }))
+  }, 60_000)
+
+  afterAll(async () => db?.close())
+
+  const start = (text: string) =>
+    db.app.$conversation.start({ workspaceId: db.workspaceId, createdById: db.userId, text })
+
+  it('names one that has none', async () => {
+    const conversation = await start('我想做一个报销审批系统')
+
+    expect(await db.app.$conversation.nameIfUnnamed(conversation.id, '报销审批流程')).toBe(true)
+    expect((await db.app.$conversation.get(conversation.id))?.title).toBe('报销审批流程')
+  })
+
+  // The person got there first. Their choice is not something a summary may
+  // overwrite — the entire reason `titleLocked` exists.
+  it('leaves a name a person chose', async () => {
+    const conversation = await start('我想做一个报销审批系统')
+    await db.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { title: '我自己起的', titleLocked: true },
+    })
+
+    expect(await db.app.$conversation.nameIfUnnamed(conversation.id, '报销审批流程')).toBe(false)
+    expect((await db.app.$conversation.get(conversation.id))?.title).toBe('我自己起的')
+  })
+
+  // A turn reclaimed by the reaper runs its first exchange a second time, and
+  // names it a second time. The first name is the one people have already seen.
+  it('does not rename on a second attempt', async () => {
+    const conversation = await start('我想做一个报销审批系统')
+    await db.app.$conversation.nameIfUnnamed(conversation.id, '第一次')
+
+    expect(await db.app.$conversation.nameIfUnnamed(conversation.id, '第二次')).toBe(false)
+    expect((await db.app.$conversation.get(conversation.id))?.title).toBe('第一次')
+  })
+})

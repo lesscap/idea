@@ -109,10 +109,15 @@ export const ConversationList = ({
             data-active={conversationId === String(item.id)}
             onClick={() => onSelect(String(item.id))}
           >
-            {/* Until a conversation is named, its first line is the only thing
-                that distinguishes it — and naming it automatically is a separate
-                job that needs the transcript. */}
-            {item.title ?? `${__('shell.newConversation')} #${item.id}`}
+            {/* The name comes from the conversation itself: the worker
+                summarises its first exchange once that exchange exists. Until
+                then — and for the few that had too little said to summarise —
+                the id is all there is.
+
+                Deliberately not translated. A name is data; the same
+                conversation must not be called one thing in Chinese and another
+                in English. */}
+            {item.title ?? `#${item.id}`}
           </button>
         ))}
 

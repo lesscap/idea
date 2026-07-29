@@ -3,7 +3,7 @@ import type { ConversationEvent } from '@idea/shared'
 import { badRequest, notFound, sendOk } from '../../../http.ts'
 import type { Controller } from '../../../types.ts'
 import { currentWorker } from '../middleware/auth.ts'
-import { AppendEventBody, ClaimTurnParams, FinishTurnBody } from '../schema/index.ts'
+import { AppendEventBody, ClaimTurnParams, FinishTurnBody, SetTitleBody } from '../schema/index.ts'
 
 // What a worker does with a turn: take it, read the conversation so far, write
 // what happens, and close it.
@@ -115,5 +115,27 @@ export const TurnsController: Controller = app => {
     }
 
     return sendOk(c, { finished })
+  })
+
+  // A name for the conversation, worked out from its first exchange once that
+  // exchange exists. Addressed by turn rather than by conversation so the same
+  // ownership check covers it: a worker may name what it has actually run, and
+  // nothing else.
+  //
+  // Answers `named: false` rather than an error when the conversation already
+  // has a name — losing to a person who named it first is an ordinary outcome,
+  // not a failure the worker should retry.
+  app.post('/:id/title', zValidator('param', ClaimTurnParams), async c => {
+    const worker = currentWorker(c)
+    const { id } = c.req.valid('param')
+    const turn = await holds(id, worker.id)
+    if (!turn) return notFound(c, 'turn not found')
+
+    const body = await c.req.json().catch(() => null)
+    const parsed = SetTitleBody.safeParse(body)
+    if (!parsed.success) return badRequest(c, 'a title needs some text')
+
+    const named = await app.$conversation.nameIfUnnamed(turn.conversationId, parsed.data.title)
+    return sendOk(c, { named })
   })
 }

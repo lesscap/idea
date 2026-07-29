@@ -48,6 +48,9 @@ export type WorkerClient = {
   emit: (turnId: number, event: ConversationEvent) => Promise<void>
   heartbeat: (turnId: number) => Promise<boolean>
   finish: (turnId: number, outcome: 'completed' | 'failed' | 'aborted') => Promise<void>
+  // Names the conversation this turn belongs to. False means it already had a
+  // name — a person got there first — which is an outcome to log, not retry.
+  setTitle: (turnId: number, title: string) => Promise<boolean>
   // The watchdog's ping. Rejects when the server cannot be reached, which is the
   // signal the daemon uses to exit.
   ping: () => Promise<void>
@@ -132,6 +135,9 @@ export const createClient = (server: string, token?: string): WorkerClient => {
     finish: async (turnId, outcome) => {
       await post(`/turns/${turnId}/finish`, { outcome })
     },
+
+    setTitle: async (turnId, title) =>
+      (await post<{ named?: boolean }>(`/turns/${turnId}/title`, { title })).named === true,
 
     ping: async () => {
       await post('/workers/heartbeat')

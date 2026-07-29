@@ -42,4 +42,7 @@ export type ConversationService = {
   // The provider's own handle for this conversation, so a later turn can resume
   // rather than start over.
   rememberSession: (conversationId: Id, providerSessionId: string) => Promise<void>
+  // Names a conversation, but only while it has no name. False means someone got
+  // there first — which the caller reports rather than retries.
+  nameIfUnnamed: (conversationId: Id, title: string) => Promise<boolean>
 }

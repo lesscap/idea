@@ -31,3 +31,9 @@ export const AppendEventBody = z.object({ type: z.string().min(1) }).passthrough
 export const FinishTurnBody = z.object({
   outcome: z.enum(['completed', 'failed', 'aborted']),
 })
+
+// The worker has already trimmed this to something sidebar-sized; the cap here
+// is the outer bound on what a caller may store, not the length anyone expects.
+export const SetTitleBody = z.object({
+  title: z.string().trim().min(1).max(120),
+})
