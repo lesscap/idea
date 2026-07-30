@@ -1,9 +1,11 @@
-import { PanelLeft, PanelLeftOpen, SquarePen } from 'lucide-react'
+import type { App } from '@idea/shared'
+import { Home, PanelLeft, PanelLeftOpen, SquarePen } from 'lucide-react'
 import { ConversationList } from '../../features/conversation/conversation-list'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
 import { RESOURCES, type ResourceKind } from '../resources'
 import type { Workspace } from '../url/use-workspace-url'
+import { AppSwitcher } from './app-switcher'
 import { Identity } from './identity'
 
 // Which resources get a permanent entry, in order. Kept as an explicit list
@@ -14,15 +16,17 @@ import { Identity } from './identity'
 // Every entry must be a parameterless path — the ref below is the pattern with
 // its slash stripped, so listing 'requirement' (/requirements/:code) would open
 // a tab literally called `requirements/:code`.
-const NAV: ResourceKind[] = ['requirements', 'apps', 'members', 'settings']
+const NAV: ResourceKind[] = ['requirements']
 
 export const SideColumn = ({
   workspace,
+  app,
   collapsed,
   onToggle,
   onShowConversation,
 }: {
   workspace: Workspace
+  app: App
   collapsed: boolean
   onToggle: () => void
   onShowConversation: (id: string) => void
@@ -52,6 +56,8 @@ export const SideColumn = ({
         </Button>
       </div>
 
+      <AppSwitcher current={app} collapsed={collapsed} />
+
       <button
         type="button"
         className={`mx-2 mb-1 flex h-9 items-center rounded-md text-sm transition-colors hover:bg-background ${
@@ -70,6 +76,22 @@ export const SideColumn = ({
       </button>
 
       <nav className="flex flex-col gap-0.5 p-2" data-testid="side-nav">
+        <button
+          type="button"
+          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm [&_svg]:size-4 ${
+            url.active === null
+              ? 'bg-background font-medium'
+              : 'text-muted-foreground hover:bg-background/60'
+          } ${collapsed ? 'justify-center' : ''}`}
+          data-testid="nav-home"
+          data-active={url.active === null}
+          title={collapsed ? __('resource.home') : undefined}
+          onClick={workspace.home}
+        >
+          <Home />
+          {!collapsed && __('resource.home')}
+        </button>
+
         {NAV.map(kind => {
           const def = RESOURCES[kind]
           const ref = def.path.slice(1)
@@ -98,7 +120,11 @@ export const SideColumn = ({
       </nav>
 
       {!collapsed && (
-        <ConversationList conversationId={url.conversationId} onSelect={onShowConversation} />
+        <ConversationList
+          slug={url.slug}
+          conversationId={url.conversationId}
+          onSelect={onShowConversation}
+        />
       )}
 
       <Identity collapsed={collapsed} />

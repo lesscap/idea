@@ -39,7 +39,7 @@ export const WorkspaceSwitcher = () => {
   // other, and it runs one way only: the store changes, the URL resets.
   const choose = async (id: number) => {
     await chooseWorkspace(id)
-    navigate('/', { replace: true })
+    navigate('/apps', { replace: true })
   }
 
   // Renders nothing below two workspaces. With only one, "which workspace am I

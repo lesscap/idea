@@ -1,7 +1,6 @@
-import { zValidator } from '@hono/zod-validator'
 import { badRequest, notFound, sendOk } from '../../../../http.ts'
 import type { Controller } from '../../../../types.ts'
-import { IdParam, SendMessageBody } from '../../schema/index.ts'
+import { SendMessageBody } from '../../schema/index.ts'
 import { isResponse, scopedConversation } from './scoped.ts'
 
 // Saying something, and taking it back before it goes.
@@ -10,8 +9,8 @@ export const registerMessages: Controller = app => {
   // a turn is in flight it waits and merges with whatever else arrives before
   // that turn ends, so a thought delivered in three bursts gets one considered
   // reply rather than three partial ones.
-  app.post('/:id/messages', zValidator('param', IdParam), async c => {
-    const found = await scopedConversation(app, c, c.req.valid('param').id)
+  app.post('/:cid/messages', async c => {
+    const found = await scopedConversation(app, c, c.req.param('cid'))
     if (isResponse(found)) return found
     if (!found) return notFound(c, 'conversation not found')
 
@@ -33,8 +32,8 @@ export const registerMessages: Controller = app => {
   // Possible only because what has been typed is kept out of the transcript.
   // Once something is history it stays — editing it would make the log a
   // record of what someone currently wishes they had said.
-  app.delete('/:id/pending/:inputId', zValidator('param', IdParam), async c => {
-    const found = await scopedConversation(app, c, c.req.valid('param').id)
+  app.delete('/:cid/pending/:inputId', async c => {
+    const found = await scopedConversation(app, c, c.req.param('cid'))
     if (isResponse(found)) return found
     if (!found) return notFound(c, 'conversation not found')
 

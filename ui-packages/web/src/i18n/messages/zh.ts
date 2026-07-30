@@ -53,6 +53,7 @@ export const zh = {
   // Names of the things the main area can show. Keyed by resource kind, so the
   // registry in shell/resources can label a tab from data alone.
   resource: {
+    home: '首页',
     requirements: '需求',
     apps: '应用',
     conversations: '会话',
@@ -74,9 +75,16 @@ export const zh = {
     loadMore: '查看更多',
     loadEarlier: '加载更早的消息',
     thinking: '正在思考…',
-    withdraw: '撤回',
+    withdrawQueued: '撤回这条排队消息',
+    withdrawQueuedFailed: '撤回失败，请重试',
+    queued: '排队中 · {0}',
     composerPlaceholder: '说说你想要什么…  Enter 发送',
     send: '发送',
+    allApps: '全部应用',
+    yesterday: '昨天',
+    dashboardEmpty: '应用首页',
+    appNotFound: '找不到这个应用',
+    backToApps: '返回全部应用',
   },
 
   // The transcript's own vocabulary: what a folded group of the agent's
@@ -97,6 +105,9 @@ export const zh = {
     noneHint: '请联系管理员邀请你加入。收到邀请链接后打开即可进入。',
     admin: '管理员',
     member: '成员',
+    management: '空间管理',
+    backToWorkbench: '返回工作台',
+    membersPlaceholder: '成员列表将在后续任务中实现',
   },
 
   app: {
@@ -106,6 +117,8 @@ export const zh = {
     empty: '还没有应用',
     name: '名称',
     namePlaceholder: '例如：报销审批',
+    slug: 'URL 标识',
+    slugPlaceholder: '例如：expense-approval',
     description: '简介（选填）',
     descriptionPlaceholder: '这个应用是给谁用的、解决什么问题',
     createdAt: '创建于 {0}',
@@ -117,7 +130,8 @@ export const zh = {
     error: {
       // Keyed by the envelope's `code`, so the same conflict reads correctly in
       // each context rather than showing the server's English sentence.
-      conflict: '已存在同名应用',
+      app_name_taken: '已存在同名应用',
+      app_slug_taken: '该 URL 标识已被占用',
       forbidden: '你没有权限执行这个操作',
       not_found: '应用不存在',
       fallback: '创建失败，请重试',

@@ -1,4 +1,5 @@
-import { useLayoutEffect } from 'react'
+import type { App } from '@idea/shared'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import {
   Group,
   Panel,
@@ -6,6 +7,7 @@ import {
   useDefaultLayout,
   usePanelCallbackRef,
 } from 'react-resizable-panels'
+import { Link } from 'react-router-dom'
 import {
   useConversationCollapsed,
   useSetConversationCollapsed,
@@ -13,8 +15,10 @@ import {
   useToggleSide,
 } from '../core/layout/use-layout'
 import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/session/use-session'
+import { getApp } from '../features/app/api'
 import { ConversationPanel } from '../features/conversation/conversation-panel'
-import { useLocaleControl } from '../i18n'
+import { useLocale, useLocaleControl } from '../i18n'
+import { Button } from '../ui'
 import { ContentColumn } from './content'
 import { SideColumn } from './side'
 import { useWorkspaceUrl } from './url/use-workspace-url'
@@ -31,6 +35,8 @@ import { useWorkspaceUrl } from './url/use-workspace-url'
 // arriving through a side door.
 export const Shell = () => {
   const workspace = useWorkspaceUrl()
+  const __ = useLocale()
+  const [app, setApp] = useState<App | null | undefined>(undefined)
   const sideCollapsed = useSideCollapsed()
   const toggleSide = useToggleSide()
   const conversationCollapsed = useConversationCollapsed()
@@ -67,6 +73,34 @@ export const Shell = () => {
     else if (!conversationHidden && conversationHandle.isCollapsed()) conversationHandle.expand()
   }, [conversationHandle, conversationHidden])
 
+  useEffect(() => {
+    let current = true
+    setApp(undefined)
+    getApp(url.slug)
+      .then(found => {
+        if (current) setApp(found)
+      })
+      .catch(() => {
+        if (current) setApp(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [url.slug])
+
+  if (app === undefined) return null
+  if (app === null)
+    return (
+      <div className="flex h-dvh items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-muted-foreground text-sm">{__('shell.appNotFound')}</p>
+          <Button asChild variant="outline">
+            <Link to="/apps">{__('shell.backToApps')}</Link>
+          </Button>
+        </div>
+      </div>
+    )
+
   const showConversation = (id: string) => {
     setConversationCollapsed(false)
     workspace.showConversation(id)
@@ -82,6 +116,7 @@ export const Shell = () => {
       data-username={user?.username}
       data-role={role ?? 'none'}
       data-workspace-id={workspaceId ?? ''}
+      data-app-slug={app.slug}
       data-locale={locale}
       data-active={url.active ?? ''}
       data-tab-count={url.tabs.length}
@@ -89,6 +124,7 @@ export const Shell = () => {
     >
       <SideColumn
         workspace={workspace}
+        app={app}
         collapsed={sideCollapsed}
         onToggle={toggleSide}
         onShowConversation={showConversation}
@@ -145,8 +181,8 @@ export const Shell = () => {
           className="flex min-h-0 min-w-0 flex-col"
         >
           <ConversationPanel
+            slug={url.slug}
             conversationId={url.conversationId}
-            context={url.active}
             hidden={conversationHidden}
             onConversationCreated={workspace.replaceConversation}
             onCollapse={() => setConversationCollapsed(true)}
@@ -164,6 +200,7 @@ export const Shell = () => {
         <Panel id="content" minSize="320px" className="flex min-h-0 min-w-0 flex-col">
           <ContentColumn
             workspace={workspace}
+            app={app}
             hasConversation={hasConversation}
             conversationCollapsed={conversationCollapsed}
             onExpandConversation={() => setConversationCollapsed(false)}

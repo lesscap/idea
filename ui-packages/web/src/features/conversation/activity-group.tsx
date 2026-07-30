@@ -12,13 +12,7 @@ import {
   toolSummary,
 } from './activity'
 
-// The agent's working-out, drawn as one openable block.
-//
-// Everything here hangs off a single vertical rule with a dot per step, rather
-// than each step carrying its own border. Boxes inside boxes read as a list of
-// separate things; one rule reads as one process, and the dots make the shape
-// of that process — which step wrote something, which one broke — legible
-// before any of the text is.
+// Consecutive steps hang off one timeline; a lone step is a plain disclosure.
 
 const TONE_DOT: Record<NodeTone, string> = {
   // Amber for anything with a side effect, so a run that changed the working
@@ -31,7 +25,12 @@ const TONE_DOT: Record<NodeTone, string> = {
   thinking: 'border border-muted-foreground/40',
 }
 
-export const Step = ({ item }: { item: ProcessBubble }) => {
+type StepProps = {
+  item: ProcessBubble
+  grouped?: boolean
+}
+
+export const Step = ({ item, grouped = false }: StepProps) => {
   const __ = useLocale()
   const [open, setOpen] = useState(false)
   const tone = toneOf(item)
@@ -42,24 +41,43 @@ export const Step = ({ item }: { item: ProcessBubble }) => {
 
   return (
     <div
-      className="relative pl-4 text-muted-foreground text-xs"
+      className="relative min-w-0 text-muted-foreground text-xs"
       data-testid={`step-${item.kind}`}
       data-tone={tone}
     >
-      {/* The step carries its own indent and dot, so it reads the same whether
-          it is hanging off a group's rule or standing on its own. */}
-      <span className={cn('absolute top-[0.45rem] left-1 size-1.5 rounded-full', TONE_DOT[tone])} />
+      {grouped && (
+        <span
+          aria-hidden="true"
+          className="absolute top-3 -left-4 flex size-2 items-center justify-center"
+        >
+          <span className={cn('size-1.5 rounded-full', TONE_DOT[tone])} />
+        </span>
+      )}
       <button
         type="button"
-        className="flex w-full items-baseline gap-2 text-left hover:text-foreground"
+        className="flex min-h-8 w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="step-toggle"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
+        <ChevronRight
+          aria-hidden="true"
+          className={cn('size-3 shrink-0 transition-transform duration-150', open && 'rotate-90')}
+        />
         <span className="shrink-0 font-medium text-foreground/70">{label}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{detail}</span>
+        {(item.kind !== 'thinking' || !open) && (
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate',
+              item.kind === 'tool' && 'font-mono text-[11px]',
+            )}
+          >
+            {detail}
+          </span>
+        )}
       </button>
       {open && (
-        <div className="mt-1 mb-2 text-foreground/80">
+        <div className="mt-0.5 mb-2 ml-5 min-w-0 text-foreground/80">
           {item.kind === 'thinking' ? (
             // Deliberately not rendered as markdown, though it sometimes
             // contains some. Reasoning is the model talking to itself, not a
@@ -95,12 +113,15 @@ export const ActivityBlock = ({ group }: { group: ActivityGroup }) => {
     >
       <button
         type="button"
-        className="flex items-center gap-1.5 hover:text-foreground [&_svg]:size-3"
+        className="flex min-h-8 max-w-full min-w-0 items-center gap-1.5 rounded-sm px-1 text-left hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="activity-toggle"
-        aria-label={__(open ? 'transcript.collapseActivity' : 'transcript.expandActivity')}
+        aria-expanded={open}
         onClick={() => setChoice(!open)}
       >
-        <ChevronRight className={cn('transition-transform', open && 'rotate-90')} />
+        <ChevronRight
+          aria-hidden="true"
+          className={cn('size-3 shrink-0 transition-transform duration-150', open && 'rotate-90')}
+        />
         <span>{__(steps === 1 ? 'transcript.step' : 'transcript.steps', String(steps))}</span>
         {parts.map(part => (
           <span key={part} className="before:mr-1.5 before:content-['·']">
@@ -121,9 +142,9 @@ export const ActivityBlock = ({ group }: { group: ActivityGroup }) => {
       </button>
 
       {open && (
-        <div className="mt-1.5 ml-[0.3rem] space-y-1 border-border border-l">
+        <div className="relative mt-1.5 space-y-1 pl-4 before:absolute before:inset-y-4 before:left-[3px] before:border-border before:border-l">
           {group.items.map(item => (
-            <Step key={item.key} item={item} />
+            <Step key={item.key} item={item} grouped />
           ))}
         </div>
       )}

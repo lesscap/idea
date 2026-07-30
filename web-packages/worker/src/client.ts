@@ -13,7 +13,8 @@ export type ClaimedTurn = {
 
 export type Conversation = {
   id: number
-  workspaceId: number
+  cid: string
+  appId: number
   agentKind: string | null
   // The provider's handle for this conversation. Null before the first turn, or
   // after one had to start a new session.

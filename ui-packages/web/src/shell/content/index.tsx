@@ -1,5 +1,7 @@
+import type { App } from '@idea/shared'
 import { MessageSquare } from 'lucide-react'
 import { Activity } from 'react'
+import { AppDashboard } from '../../features/app/app-dashboard'
 import { useLocale } from '../../i18n'
 import { matchResource } from '../resources'
 import type { Workspace } from '../url/use-workspace-url'
@@ -18,11 +20,13 @@ import { TabBar } from './tab-bar'
 // than its own, and nothing would throw.
 export const ContentColumn = ({
   workspace,
+  app,
   hasConversation,
   conversationCollapsed,
   onExpandConversation,
 }: {
   workspace: Workspace
+  app: App
   hasConversation: boolean
   conversationCollapsed: boolean
   onExpandConversation: () => void
@@ -75,12 +79,9 @@ export const ContentColumn = ({
         })}
 
         {url.active === null && (
-          <p
-            className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm"
-            data-testid="content-empty"
-          >
-            {__('shell.emptyMain')}
-          </p>
+          <div className="absolute inset-0" data-testid="content-empty">
+            <AppDashboard app={app} />
+          </div>
         )}
 
         {url.active !== null && activeMatch === null && (

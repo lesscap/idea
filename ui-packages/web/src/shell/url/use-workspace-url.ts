@@ -1,10 +1,12 @@
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   buildWorkspaceUrl,
   closeTab,
   openTab,
   parseWorkspaceUrl,
+  showConversation,
+  showHome,
   type WorkspaceUrl,
 } from './workspace-url'
 
@@ -20,8 +22,18 @@ export const useWorkspaceUrl = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const url = parseWorkspaceUrl(location)
-  const latestUrl = useRef(url)
-  latestUrl.current = url
+  const draftScope = url.conversationId === 'new' ? url.slug : null
+  const draftToken = useMemo(() => (draftScope === null ? null : Symbol(draftScope)), [draftScope])
+  const latest = useRef({ url, draftToken })
+  const mounted = useRef(false)
+  latest.current = { url, draftToken }
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   // push rather than replace, which makes going back the way to undo closing a
   // tab. Panel widths live in localStorage precisely so they cannot fill this
@@ -32,14 +44,12 @@ export const useWorkspaceUrl = () => {
     url,
     open: (ref: string) => go(openTab(url, ref)),
     close: (ref: string) => go(closeTab(url, ref)),
-    showConversation: (conversationId: string | null) => go({ ...url, conversationId }),
+    home: () => go(showHome(url)),
+    showConversation: (conversationId: string | null) => go(showConversation(url, conversationId)),
     replaceConversation: (conversationId: string) => {
-      // The request can finish after the person has moved to another tab or
-      // conversation. Keep their latest resource state, and never let a stale
-      // draft completion take over a conversation they selected meanwhile.
-      const latest = latestUrl.current
-      if (latest.conversationId !== 'new') return
-      go({ ...latest, conversationId }, true)
+      const current = latest.current
+      if (!mounted.current || draftToken === null || current.draftToken !== draftToken) return
+      go({ ...current.url, conversationId }, true)
     },
   }
 }

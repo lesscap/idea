@@ -52,6 +52,7 @@ export const en: typeof zh = {
   },
 
   resource: {
+    home: 'Home',
     requirements: 'Requirements',
     apps: 'Apps',
     conversations: 'Conversations',
@@ -73,9 +74,16 @@ export const en: typeof zh = {
     loadMore: 'Load more',
     loadEarlier: 'Load earlier',
     thinking: 'Thinking…',
-    withdraw: 'Withdraw',
+    withdrawQueued: 'Withdraw this queued message',
+    withdrawQueuedFailed: 'Could not withdraw. Try again.',
+    queued: 'Queued · {0}',
     composerPlaceholder: 'Describe what you need…  Enter to send',
     send: 'Send',
+    allApps: 'All apps',
+    yesterday: 'Yesterday',
+    dashboardEmpty: 'App home',
+    appNotFound: 'This app does not exist',
+    backToApps: 'Back to all apps',
   },
 
   // The transcript's own vocabulary: what a folded group of the agent's
@@ -96,6 +104,9 @@ export const en: typeof zh = {
     noneHint: 'Ask an administrator to invite you. Opening their link brings you in.',
     admin: 'Admin',
     member: 'Member',
+    management: 'Workspace management',
+    backToWorkbench: 'Back to workbench',
+    membersPlaceholder: 'The member list will be implemented in a follow-up',
   },
 
   app: {
@@ -105,6 +116,8 @@ export const en: typeof zh = {
     empty: 'No apps yet',
     name: 'Name',
     namePlaceholder: 'e.g. Expense approval',
+    slug: 'URL identifier',
+    slugPlaceholder: 'e.g. expense-approval',
     description: 'Description (optional)',
     descriptionPlaceholder: 'Who is it for, and what problem does it solve',
     createdAt: 'Created {0}',
@@ -114,7 +127,8 @@ export const en: typeof zh = {
       archived: 'Archived',
     },
     error: {
-      conflict: 'An app with that name already exists',
+      app_name_taken: 'An app with that name already exists',
+      app_slug_taken: 'That URL identifier is already in use',
       forbidden: 'You do not have permission to do that',
       not_found: 'App not found',
       fallback: 'Could not create the app',

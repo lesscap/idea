@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useCurrentUser, useSignIn } from '../../core/session/use-session'
 import { useLocale } from '../../i18n'
 import { LocaleSwitch } from '../../parts/locale-switch'
@@ -10,13 +10,15 @@ export const LoginPage = () => {
   const user = useCurrentUser()
   const signIn = useSignIn()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: string } | null)?.from ?? '/apps'
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (user) return <Navigate to="/" replace />
+  if (user) return <Navigate to="/apps" replace />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -24,7 +26,7 @@ export const LoginPage = () => {
     setError(null)
     try {
       await signIn(username, password)
-      navigate('/', { replace: true })
+      navigate(from, { replace: true })
     } catch {
       // One message for every failure. The server refuses to distinguish an
       // unknown username from a wrong password — spelling out which it was here

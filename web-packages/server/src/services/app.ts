@@ -1,32 +1,52 @@
-import type { App, AppStatus, Id, Paged, PageQuery } from '@idea/shared'
+import type { AppStatus, Id, Paged, PageQuery } from '@idea/shared'
 import { paged, toOffset } from '../paging.ts'
 import type { Service } from '../types.ts'
 
+export type AppRecord = {
+  readonly id: Id
+  readonly workspaceId: Id
+  readonly slug: string
+  readonly name: string
+  readonly description: string | null
+  readonly status: AppStatus
+  readonly createdById: Id
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export type AppCreate = {
   readonly workspaceId: Id
+  readonly slug: string
   readonly name: string
   readonly description: string | null
   readonly createdById: Id
 }
 
 export type AppPatch = {
+  readonly slug?: string
   readonly name?: string
   readonly description?: string | null
   readonly status?: AppStatus
 }
 
+export type AppWriteResult =
+  | { readonly kind: 'ok'; readonly app: AppRecord }
+  | { readonly kind: 'name_taken' }
+  | { readonly kind: 'slug_taken' }
+
+export type AppUpdateResult = AppWriteResult | { readonly kind: 'not_found' }
+
 export type AppService = {
-  listInWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<App>>
-  // Takes the workspace as well as the id: scoping belongs in the query, not in
-  // a caller-side check after the fact.
-  getInWorkspace: (workspaceId: Id, id: Id) => Promise<App | null>
-  create: (input: AppCreate) => Promise<App | 'name_taken'>
-  update: (workspaceId: Id, id: Id, patch: AppPatch) => Promise<App | null | 'name_taken'>
+  listInWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<AppRecord>>
+  getBySlugInWorkspace: (workspaceId: Id, slug: string) => Promise<AppRecord | null>
+  create: (input: AppCreate) => Promise<AppWriteResult>
+  update: (workspaceId: Id, currentSlug: string, patch: AppPatch) => Promise<AppUpdateResult>
 }
 
 type Row = {
   id: number
   workspaceId: number
+  slug: string
   name: string
   description: string | null
   status: AppStatus
@@ -35,64 +55,106 @@ type Row = {
   updatedAt: Date
 }
 
-const toApp = (row: Row): App => ({
+const toApp = (row: Row): AppRecord => ({
   ...row,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 })
 
-// Prisma throws P2002 when a unique constraint is violated. Here that is always
-// the (workspaceId, name) pair.
-const isUniqueViolation = (err: unknown): boolean =>
-  typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2002'
+const hasPrismaCode = (error: unknown, code: string): boolean =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === code
 
-export const createAppService: Service<AppService> = app => ({
-  // Every read is filtered by workspaceId in the WHERE clause. Fetching and
-  // then filtering in memory would work until the day someone forgets the
-  // second step, and that day it silently returns another tenant's data.
-  listInWorkspace: async (workspaceId, query) => {
-    const { offset, limit } = toOffset(query)
-    const [rows, total] = await Promise.all([
-      app.$prisma.app.findMany({
-        where: { workspaceId },
-        orderBy: { updatedAt: 'desc' },
-        skip: offset,
-        take: limit,
-      }),
-      app.$prisma.app.count({ where: { workspaceId } }),
-    ])
-    return paged(rows.map(toApp), total, query)
-  },
+type ConflictCandidate = {
+  readonly slug?: string
+  readonly name?: string
+}
 
-  getInWorkspace: async (workspaceId, id) => {
-    const row = await app.$prisma.app.findFirst({ where: { id, workspaceId } })
-    return row ? toApp(row) : null
-  },
+type AppConflict = { readonly kind: 'name_taken' } | { readonly kind: 'slug_taken' }
 
-  create: async input => {
-    try {
-      return toApp(await app.$prisma.app.create({ data: input }))
-    } catch (err) {
-      if (isUniqueViolation(err)) return 'name_taken'
-      throw err
-    }
-  },
+export const createAppService: Service<AppService> = app => {
+  const findConflict = async (
+    workspaceId: Id,
+    candidate: ConflictCandidate,
+    excludeId?: Id,
+  ): Promise<AppConflict | null> => {
+    const id = excludeId === undefined ? undefined : { not: excludeId }
 
-  update: async (workspaceId, id, patch) => {
-    // updateMany rather than update, so the workspace filter is part of the
-    // statement: update() keys on id alone and would happily edit another
-    // tenant's row.
-    try {
-      const { count } = await app.$prisma.app.updateMany({
-        where: { id, workspaceId },
-        data: patch,
-      })
-      if (count === 0) return null
-      const row = await app.$prisma.app.findFirst({ where: { id, workspaceId } })
+    if (
+      candidate.slug !== undefined &&
+      (await app.$prisma.app.findFirst({
+        where: { workspaceId, slug: candidate.slug, id },
+        select: { id: true },
+      }))
+    )
+      return { kind: 'slug_taken' }
+
+    if (
+      candidate.name !== undefined &&
+      (await app.$prisma.app.findFirst({
+        where: { workspaceId, name: candidate.name, id },
+        select: { id: true },
+      }))
+    )
+      return { kind: 'name_taken' }
+
+    return null
+  }
+
+  return {
+    // Every read is filtered by workspaceId in the WHERE clause. Fetching and
+    // then filtering in memory would work until the day someone forgets the
+    // second step, and that day it silently returns another tenant's data.
+    listInWorkspace: async (workspaceId, query) => {
+      const { offset, limit } = toOffset(query)
+      const [rows, total] = await Promise.all([
+        app.$prisma.app.findMany({
+          where: { workspaceId },
+          orderBy: { updatedAt: 'desc' },
+          skip: offset,
+          take: limit,
+        }),
+        app.$prisma.app.count({ where: { workspaceId } }),
+      ])
+      return paged(rows.map(toApp), total, query)
+    },
+
+    getBySlugInWorkspace: async (workspaceId, slug) => {
+      const row = await app.$prisma.app.findFirst({ where: { workspaceId, slug } })
       return row ? toApp(row) : null
-    } catch (err) {
-      if (isUniqueViolation(err)) return 'name_taken'
-      throw err
-    }
-  },
-})
+    },
+
+    create: async input => {
+      try {
+        return { kind: 'ok', app: toApp(await app.$prisma.app.create({ data: input })) }
+      } catch (error) {
+        if (!hasPrismaCode(error, 'P2002')) throw error
+        const conflict = await findConflict(input.workspaceId, input)
+        if (conflict) return conflict
+        throw error
+      }
+    },
+
+    update: async (workspaceId, currentSlug, patch) => {
+      try {
+        const row = await app.$prisma.app.update({
+          where: { workspaceId_slug: { workspaceId, slug: currentSlug } },
+          data: patch,
+        })
+        return { kind: 'ok', app: toApp(row) }
+      } catch (error) {
+        if (hasPrismaCode(error, 'P2025')) return { kind: 'not_found' }
+        if (!hasPrismaCode(error, 'P2002')) throw error
+
+        const current = await app.$prisma.app.findUnique({
+          where: { workspaceId_slug: { workspaceId, slug: currentSlug } },
+          select: { id: true },
+        })
+        if (!current) return { kind: 'not_found' }
+
+        const conflict = await findConflict(workspaceId, patch, current.id)
+        if (conflict) return conflict
+        throw error
+      }
+    },
+  }
+}

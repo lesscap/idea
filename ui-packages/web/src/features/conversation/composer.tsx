@@ -1,4 +1,4 @@
-import { ArrowUp, X } from 'lucide-react'
+import { ArrowUp, Clock3, X } from 'lucide-react'
 import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
@@ -6,16 +6,21 @@ import type { PendingInput } from './use-conversation'
 
 // Where someone says what they want.
 //
-// One card is the whole control. The textarea has no border and no ground of its
-// own, the queued messages sit above it, and the arrow sits inside — so the
-// bottom of the panel is a single object rather than a box, a button and two
-// horizontal rules stacked in a corner.
+// The queued messages sit above the input surface. The textarea and arrow remain
+// one control, while queue changes do not resize its border.
 //
 // Shape taken from baton's composer (`channel-room/composer.tsx`), minus the
 // parts we have no mechanism for yet: attachments, slash commands, plan mode.
 
 const MIN = '2.5rem'
 const MAX_PX = 160
+
+type Withdrawal = { id: number; status: 'pending' | 'failed' } | null
+
+const resize = (el: HTMLTextAreaElement) => {
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, MAX_PX)}px`
+}
 
 // Grow with the content up to a ceiling, then scroll inside. This must finish
 // before paint: an ordinary effect would draw the previous height for one frame
@@ -25,75 +30,121 @@ const useAutosize = (ref: RefObject<HTMLTextAreaElement | null>, value: string) 
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    // Reset first: scrollHeight only shrinks back if the element is not already
-    // holding the taller height open.
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_PX)}px`
+    resize(el)
   }, [ref, value])
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      const nextWidth = el.clientWidth
+      if (nextWidth === width) return
+      width = nextWidth
+      resize(el)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref])
 }
 
 export const Composer = ({
   pending,
   onSend,
   onWithdraw,
+  exclusiveSubmit,
 }: {
   pending: readonly PendingInput[]
   onSend: (text: string) => Promise<unknown>
   onWithdraw: (id: number) => Promise<unknown>
+  exclusiveSubmit: boolean
 }) => {
   const __ = useLocale()
   const [draft, setDraft] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [withdrawal, setWithdrawal] = useState<Withdrawal>(null)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const submittingRef = useRef(false)
   useAutosize(ref, draft)
 
   const canSend = draft.trim() !== ''
 
-  // No "sending" flag gating this. Clearing the draft synchronously is what
-  // stops a double submit — the next keystroke event sees an empty box, since
-  // each one re-renders before the following one arrives. An in-flight flag
-  // would additionally block the case this panel exists to allow: adding a
-  // second thought while the first is still on the wire.
   const submit = () => {
     const text = draft.trim()
-    if (!text) return
+    if (!text || (exclusiveSubmit && submittingRef.current)) return
+
+    if (exclusiveSubmit) {
+      submittingRef.current = true
+      setSubmitting(true)
+    }
+
     // Cleared immediately. Waiting for the round trip makes the interface feel
     // like it missed the keystroke; restored if the send actually failed.
     setDraft('')
-    void onSend(text).catch(() => setDraft(text))
+    void onSend(text)
+      .catch(() => setDraft(current => (current ? `${text}\n\n${current}` : text)))
+      .finally(() => {
+        if (!exclusiveSubmit) return
+        submittingRef.current = false
+        setSubmitting(false)
+      })
+  }
+
+  const withdraw = async (id: number) => {
+    setWithdrawal({ id, status: 'pending' })
+    try {
+      await onWithdraw(id)
+      setWithdrawal(null)
+    } catch {
+      setWithdrawal({ id, status: 'failed' })
+    }
   }
 
   return (
     <div className="shrink-0 border-border border-t px-3 py-2.5">
-      <div className="rounded-xl border border-border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-        {/* Typed and queued, but not answered yet. Inside the card because it is
-            the same act as the text below it — everything here is about to be
-            said, and until it is, it can be taken back. */}
-        {pending.length > 0 && (
-          <div className="space-y-0.5 px-3 pt-2 pb-1" data-testid="pending-list">
+      {pending.length > 0 && (
+        <section
+          className="mb-2 rounded-lg bg-muted/50 p-2"
+          data-testid="pending-list"
+          aria-label={__('shell.queued', pending.length)}
+        >
+          <div className="flex items-center gap-1.5 px-1 font-medium text-[11px] text-muted-foreground">
+            <Clock3 className="size-3" />
+            <span>{__('shell.queued', pending.length)}</span>
+          </div>
+          <div className="mt-1 space-y-0.5">
             {pending.map(item => (
               <div
                 key={item.id}
-                // Darker than the placeholder below it. Both are muted grey at
-                // the same size otherwise, and a queued line then reads as a
-                // second line of the hint rather than as something said.
-                className="flex items-start gap-2 text-foreground/75 text-sm"
+                className="flex min-h-8 min-w-0 items-center gap-2 rounded-md px-1.5 text-sm hover:bg-muted"
                 data-testid={`pending-${item.id}`}
               >
-                <span className="min-w-0 flex-1 truncate">{item.text}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-foreground/80">{item.text}</span>
+                  {withdrawal?.id === item.id && withdrawal.status === 'failed' && (
+                    <span className="block text-destructive text-xs" role="status">
+                      {__('shell.withdrawQueuedFailed')}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
-                  className="shrink-0 hover:text-foreground [&_svg]:size-3.5"
-                  aria-label={__('shell.withdraw')}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5"
+                  aria-label={__('shell.withdrawQueued')}
                   data-testid={`pending-withdraw-${item.id}`}
-                  onClick={() => void onWithdraw(item.id)}
+                  disabled={withdrawal?.status === 'pending'}
+                  onClick={() => void withdraw(item.id)}
                 >
                   <X />
                 </button>
               </div>
             ))}
           </div>
-        )}
+        </section>
+      )}
 
+      <div className="rounded-xl border border-border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
         <div className="flex items-end gap-2 p-2">
           <textarea
             ref={ref}
@@ -103,6 +154,7 @@ export const Composer = ({
             placeholder={__('shell.composerPlaceholder')}
             data-testid="composer"
             value={draft}
+            disabled={exclusiveSubmit && submitting}
             onChange={event => setDraft(event.target.value)}
             // Sending while a turn is running is allowed on purpose: the server
             // holds it and merges it with whatever else arrives before that turn
@@ -126,7 +178,7 @@ export const Composer = ({
             className="size-8 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
             aria-label={__('shell.send')}
             data-testid="composer-send"
-            disabled={!canSend}
+            disabled={!canSend || (exclusiveSubmit && submitting)}
             onClick={submit}
           >
             <ArrowUp />

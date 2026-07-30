@@ -67,14 +67,24 @@ export const SetRoleBody = z.object({
   role: z.enum(['admin', 'member']),
 })
 
+const slug = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(48)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+
 export const CreateAppBody = z.object({
   name: z.string().trim().min(1).max(64),
+  slug,
   description: z.string().trim().max(2000).nullish(),
 })
 
 export const UpdateAppBody = z
   .object({
     name: z.string().trim().min(1).max(64).optional(),
+    slug: slug.optional(),
     description: z.string().trim().max(2000).nullish(),
     status: z.enum(['draft', 'active', 'archived']).optional(),
   })
@@ -87,8 +97,4 @@ export const StartConversationBody = z.object({
 
 export const SendMessageBody = z.object({
   text: z.string().trim().min(1).max(20_000),
-})
-
-export const IdParam = z.object({
-  id: z.coerce.number().int().positive(),
 })

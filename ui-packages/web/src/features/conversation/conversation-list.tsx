@@ -1,6 +1,6 @@
-import type { Paged } from '@idea/shared'
+import type { ConversationSummary, Paged } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocale } from '../../i18n'
+import { useLocale, useLocaleControl } from '../../i18n'
 import { get } from '../../lib/request'
 
 // The conversations in this workspace.
@@ -8,8 +8,6 @@ import { get } from '../../lib/request'
 // Takes the selection as plain props rather than the shell's Workspace object:
 // importing that type would point a feature back at the shell, and the reason
 // this lives under features/ is that the shell composes it, not the reverse.
-
-type Summary = { id: number; title: string | null; lastActiveAt: string }
 
 // Appends a page without letting a row arrive twice.
 //
@@ -21,9 +19,9 @@ type Summary = { id: number; title: string | null; lastActiveAt: string }
 // its last value, which is what this wants: the row stays where the reader
 // already saw it, holding whatever is newer.
 export const mergeConversations = (
-  prev: readonly Summary[],
-  next: readonly Summary[],
-): Summary[] => [...new Map([...prev, ...next].map(item => [item.id, item])).values()]
+  prev: readonly ConversationSummary[],
+  next: readonly ConversationSummary[],
+): ConversationSummary[] => [...new Map([...prev, ...next].map(item => [item.cid, item])).values()]
 
 type PageInfo = { total: number; page: number; pageSize: number }
 
@@ -34,19 +32,24 @@ type PageInfo = { total: number; page: number; pageSize: number }
 const UNREAD: PageInfo = { total: 0, page: 0, pageSize: 0 }
 
 export const ConversationList = ({
+  slug,
   conversationId,
   onSelect,
 }: {
+  slug: string
   conversationId: string | null
   onSelect: (id: string) => void
 }) => {
   const __ = useLocale()
-  const [items, setItems] = useState<Summary[]>([])
+  const { locale } = useLocaleControl()
+  const [items, setItems] = useState<ConversationSummary[]>([])
   const [info, setInfo] = useState<PageInfo>(UNREAD)
 
   const fetchPage = useCallback(
     (page: number) =>
-      get<Paged<Summary>>(`/conversations?page=${page}`)
+      get<Paged<ConversationSummary>>(
+        `/apps/${encodeURIComponent(slug)}/conversations?page=${page}`,
+      )
         .then(data => {
           // Page 1 is a re-read and replaces; anything beyond it is "load more"
           // and appends.
@@ -57,13 +60,15 @@ export const ConversationList = ({
           // A list that failed to refresh is better left showing what it had
           // than emptied: the selection in the URL still resolves either way.
         }),
-    [],
+    [slug],
   )
 
   // The first page, once. `fetchPage` is stable, so this does not re-run when
   // the selection changes — including when the selection is the local `new`
   // sentinel, which is not a row here but does not stop the list having rows.
   useEffect(() => {
+    setItems([])
+    setInfo(UNREAD)
     void fetchPage(1)
   }, [fetchPage])
 
@@ -81,6 +86,27 @@ export const ConversationList = ({
   // fetched — `items.length` would never catch up and the button would stay
   // pressable forever.
   const hasMore = info.page > 0 && info.page * info.pageSize < info.total
+  const formatActivity = (iso: string) => {
+    const date = new Date(iso)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const language = locale === 'zh' ? 'zh-CN' : 'en-GB'
+
+    if (date >= today)
+      return new Intl.DateTimeFormat(language, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(date)
+    if (date >= yesterday) return __('shell.yesterday')
+    return new Intl.DateTimeFormat(language, {
+      ...(date.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }),
+      month: 'numeric',
+      day: 'numeric',
+    }).format(date)
+  }
 
   return (
     <div
@@ -98,26 +124,23 @@ export const ConversationList = ({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.map(item => (
           <button
-            key={item.id}
+            key={item.cid}
             type="button"
-            className={`w-full truncate rounded-md px-2 py-1.5 text-left text-sm ${
-              conversationId === String(item.id)
+            className={`w-full rounded-md px-2 py-1.5 text-left ${
+              conversationId === item.cid
                 ? 'bg-background font-medium'
                 : 'text-muted-foreground hover:bg-background/60'
             }`}
-            data-testid={`conversation-${item.id}`}
-            data-active={conversationId === String(item.id)}
-            onClick={() => onSelect(String(item.id))}
+            data-testid={`conversation-${item.cid}`}
+            data-active={conversationId === item.cid}
+            onClick={() => onSelect(item.cid)}
           >
-            {/* The name comes from the conversation itself: the worker
-                summarises its first exchange once that exchange exists. Until
-                then — and for the few that had too little said to summarise —
-                the id is all there is.
-
-                Deliberately not translated. A name is data; the same
-                conversation must not be called one thing in Chinese and another
-                in English. */}
-            {item.title ?? `#${item.id}`}
+            <span className="block truncate text-sm">
+              {item.title ?? `${__('shell.newConversation')} #${item.cid.slice(0, 6)}`}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {formatActivity(item.lastActiveAt)}
+            </span>
           </button>
         ))}
 

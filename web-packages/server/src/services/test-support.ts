@@ -51,6 +51,7 @@ export type TestDb = {
   prisma: PrismaClient
   // Rows every test can hang things off, created once with the schema.
   workspaceId: number
+  appId: number
   userId: number
   close: () => Promise<void>
 }
@@ -89,11 +90,21 @@ export const setupTestDb = async (
     data: { name: 'test', users: { create: { userId: user.id, role: 'admin' } } },
     select: { id: true },
   })
+  const appRecord = await prisma.app.create({
+    data: {
+      workspaceId: workspace.id,
+      slug: 'test-app',
+      name: 'Test app',
+      createdById: user.id,
+    },
+    select: { id: true },
+  })
 
   return {
     app,
     prisma,
     workspaceId: workspace.id,
+    appId: appRecord.id,
     userId: user.id,
     close: async () => {
       // The one piece of raw SQL here, and it is teardown rather than schema

@@ -53,7 +53,7 @@ const Pre = ({ children, ...props }: ComponentProps<'pre'>) => {
 export const Markdown = ({ text }: { text: string }) => (
   <div
     className={[
-      'prose prose-sm dark:prose-invert max-w-none break-words',
+      'prose prose-sm max-w-none break-words',
       // Tightened from the article defaults: this is a chat panel, not a page,
       // and prose's generous vertical rhythm leaves a short answer looking lost.
       'prose-headings:font-semibold prose-headings:text-[0.95em]',

@@ -59,9 +59,11 @@ type TranscriptPage = { items: WireStored[]; pending: PendingInput[] }
 // it would send the first message into a conversation the URL never learns about,
 // and the draft would sit there looking unsent. That should not compile.
 export const useConversation = (
+  slug: string,
   conversationId: string | null,
   onConversationCreated: (id: string) => void,
 ) => {
+  const base = `/apps/${encodeURIComponent(slug)}/conversations`
   const persistedId = conversationId === 'new' ? null : conversationId
   const [events, setEvents] = useState<WireStored[]>([])
   const [pending, setPending] = useState<PendingInput[]>([])
@@ -75,6 +77,7 @@ export const useConversation = (
   // flight when the reader switches away must not splice one transcript into
   // another.
   const boundId = useRef<string | null>(persistedId)
+  const pendingRequest = useRef(0)
   const fetchingOlder = useRef(false)
 
   const apply = useCallback(
@@ -92,6 +95,7 @@ export const useConversation = (
 
   useEffect(() => {
     boundId.current = persistedId
+    pendingRequest.current++
     if (persistedId === null) {
       setEvents([])
       setPending([])
@@ -109,12 +113,14 @@ export const useConversation = (
     let opened = false
     let loaded = false
 
-    const backfill = (query: string) =>
-      get<TranscriptPage>(`/conversations/${persistedId}/events${query}`)
+    const backfill = (query: string) => {
+      const request = ++pendingRequest.current
+      return get<TranscriptPage>(`${base}/${persistedId}/events${query}`)
         .then(page => {
           if (!alive) return
           apply(page.items)
-          setPending(page.pending)
+          if (boundId.current === persistedId && pendingRequest.current === request)
+            setPending(page.pending)
           loaded = true
           if (stream.readyState === EventSource.OPEN) setStatus('open')
         })
@@ -124,9 +130,10 @@ export const useConversation = (
           // so the next reconnect asks for the same gap again.
           if (alive) setStatus('error')
         })
+    }
 
     const openStream = (): EventSource => {
-      const source = new EventSource(`/api/web/conversations/${persistedId}/stream`)
+      const source = new EventSource(`/api/web${base}/${persistedId}/stream`)
 
       source.onopen = () => {
         setStatus('open')
@@ -139,7 +146,12 @@ export const useConversation = (
 
       source.onmessage = message => {
         try {
-          apply([JSON.parse(message.data) as WireStored])
+          const incoming = JSON.parse(message.data) as WireStored
+          apply([incoming])
+          // A queued batch is deleted in the same transaction that writes its
+          // user_message. Read the authoritative queue after that commit rather
+          // than clearing locally: newer input may already be waiting.
+          if (incoming.event.type === 'user_message') void backfill(`?after=${incoming.sequence}`)
         } catch {
           // A frame that will not parse is not worth tearing the stream down for.
         }
@@ -174,7 +186,7 @@ export const useConversation = (
       window.removeEventListener('pageshow', onPageShow)
       stream.close()
     }
-  }, [persistedId, apply])
+  }, [persistedId, apply, base])
 
   // Walks back from the oldest event held. Guarded by a ref rather than the
   // rendered flag, because two clicks land before a re-render.
@@ -186,7 +198,7 @@ export const useConversation = (
     setLoadingOlder(true)
     try {
       const page = await get<TranscriptPage>(
-        `/conversations/${persistedId}/events?before=${before}&limit=${OLDER_PAGE}`,
+        `${base}/${persistedId}/events?before=${before}&limit=${OLDER_PAGE}`,
       )
       if (boundId.current === persistedId) apply(page.items)
     } catch {
@@ -195,33 +207,35 @@ export const useConversation = (
       fetchingOlder.current = false
       setLoadingOlder(false)
     }
-  }, [persistedId, apply])
+  }, [persistedId, apply, base])
 
   // Not wrapped in useCallback: the panel re-renders whenever a message arrives,
   // so a stable identity buys nothing and costs a dependency array to keep right.
   const refreshPending = async () => {
     if (persistedId === null) return
-    const page = await get<TranscriptPage>(
-      `/conversations/${persistedId}/events?after=${lastSeq.current}`,
-    )
-    setPending(page.pending)
+    const request = ++pendingRequest.current
+    const page = await get<TranscriptPage>(`${base}/${persistedId}/events?after=${lastSeq.current}`)
+    if (boundId.current === persistedId && pendingRequest.current === request)
+      setPending(page.pending)
   }
 
   const send = async (text: string) => {
     if (conversationId === 'new') {
-      const created = await post<{ id: number }>('/conversations', { text })
-      onConversationCreated(String(created.id))
+      const created = await post<{ cid: string }>(base, { text })
+      onConversationCreated(created.cid)
       return
     }
     if (persistedId === null) return
-    await post(`/conversations/${persistedId}/messages`, { text })
+    await post(`${base}/${persistedId}/messages`, { text })
     await refreshPending()
   }
 
   const withdraw = async (inputId: number) => {
     if (persistedId === null) return
-    await del(`/conversations/${persistedId}/pending/${inputId}`)
-    await refreshPending()
+    await del(`${base}/${persistedId}/pending/${inputId}`)
+    pendingRequest.current++
+    if (boundId.current === persistedId)
+      setPending(current => current.filter(item => item.id !== inputId))
   }
 
   return {

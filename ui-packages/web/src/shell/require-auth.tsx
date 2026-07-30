@@ -23,7 +23,7 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
 
   if (!user) {
     // Remember where they were headed so login can return them there.
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   }
 
   // Signing in always resolves a workspace, so reaching here without one means

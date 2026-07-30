@@ -111,7 +111,7 @@ export const createTurnService: Service<TurnService> = app => {
         where: {
           status: 'queued',
           conversation: {
-            workspaceId: worker.workspaceId,
+            app: { workspaceId: worker.workspaceId },
             OR: [{ providerId: null }, { providerId: worker.providerId }],
           },
         },

@@ -35,8 +35,12 @@ if (/prod/i.test(url)) {
 
 const DEMO = {
   workspace: '演示空间',
-  member: { username: 'demo.member', password: 'demo@2026', name: '演示成员' },
-  app: { name: '请假申请', description: '演示用：一个还没开始澄清需求的应用' },
+  member: { username: 'admin', password: 'admin@2026', name: '演示成员' },
+  app: {
+    slug: 'leave-request',
+    name: '请假申请',
+    description: '演示用：一个还没开始澄清需求的应用',
+  },
 }
 
 const [prisma, disconnect] = createPrisma(url)
@@ -75,11 +79,12 @@ try {
       done.push('joined demo workspace as member')
     }
 
-    const app = await tx.app.findFirst({ where: { workspaceId: ws.id, name: DEMO.app.name } })
+    const app = await tx.app.findFirst({ where: { workspaceId: ws.id, slug: DEMO.app.slug } })
     if (!app) {
       await tx.app.create({
         data: {
           workspaceId: ws.id,
+          slug: DEMO.app.slug,
           name: DEMO.app.name,
           description: DEMO.app.description,
           createdById: member.id,
