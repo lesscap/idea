@@ -6,16 +6,16 @@ import { mergeConversations } from './conversation-list'
 // during a live workspace is EXPECTED to overlap, and the overlap must not show
 // the same conversation twice — nor move a row the reader is already looking at.
 describe('appending a page of conversations', () => {
-  const at = (id: number, lastActiveAt: string) => ({ id, title: null, lastActiveAt })
+  const at = (cid: string, lastActiveAt: string) => ({ cid, title: null, lastActiveAt })
 
   it('keeps a repeated row in place while taking its newer contents', () => {
-    const held = [at(1, 'monday'), at(2, 'tuesday')]
-    const next = [at(2, 'friday'), at(3, 'wednesday')]
+    const held = [at('one', 'monday'), at('two', 'tuesday')]
+    const next = [at('two', 'friday'), at('three', 'wednesday')]
 
     expect(mergeConversations(held, next)).toEqual([
-      at(1, 'monday'),
-      at(2, 'friday'),
-      at(3, 'wednesday'),
+      at('one', 'monday'),
+      at('two', 'friday'),
+      at('three', 'wednesday'),
     ])
   })
 })

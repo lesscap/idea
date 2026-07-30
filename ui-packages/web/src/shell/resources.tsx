@@ -1,7 +1,6 @@
-import { Boxes, FileText, type LucideIcon, Settings, Users } from 'lucide-react'
+import { FileText, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
-import { AppListPage } from '../features/app/app-list-page'
 import type { Translate } from '../i18n'
 import { Placeholder } from './content/placeholder'
 
@@ -39,12 +38,6 @@ const RequirementDetail = ({ params }: { params: ResourceParams }) => (
   <Placeholder titleKey="resource.requirements" detail={params.code} />
 )
 
-const ConversationList = () => <Placeholder titleKey="resource.conversations" />
-
-const MemberList = () => <Placeholder titleKey="resource.members" />
-
-const SettingsPage = () => <Placeholder titleKey="resource.settings" />
-
 export const RESOURCES = {
   requirements: {
     path: '/requirements',
@@ -60,30 +53,6 @@ export const RESOURCES = {
     // "R-1" — which is what people say out loud anyway.
     title: (_, params) => params.code ?? '',
     Content: RequirementDetail,
-  },
-  apps: {
-    path: '/apps',
-    icon: Boxes,
-    title: __ => __('resource.apps'),
-    Content: AppListPage,
-  },
-  conversations: {
-    path: '/conversations',
-    icon: FileText,
-    title: __ => __('resource.conversations'),
-    Content: ConversationList,
-  },
-  members: {
-    path: '/members',
-    icon: Users,
-    title: __ => __('resource.members'),
-    Content: MemberList,
-  },
-  settings: {
-    path: '/settings',
-    icon: Settings,
-    title: __ => __('resource.settings'),
-    Content: SettingsPage,
   },
 } satisfies Record<string, ResourceDef>
 

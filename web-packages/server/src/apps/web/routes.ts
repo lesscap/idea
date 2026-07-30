@@ -30,6 +30,6 @@ export const Routes: Record<string, Controller> = {
   '/session': SessionController,
   '/invites': InvitesController,
   '/workspaces': guarded(WorkspacesController),
+  '/apps/:slug/conversations': guarded(ConversationsController),
   '/apps': guarded(AppsController),
-  '/conversations': guarded(ConversationsController),
 }

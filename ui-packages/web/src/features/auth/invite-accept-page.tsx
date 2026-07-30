@@ -57,7 +57,7 @@ export const InviteAcceptPage = () => {
         user ? undefined : { username, password, name, phone: phone || undefined },
       )
       await refresh()
-      navigate('/', { replace: true })
+      navigate('/apps', { replace: true })
     } catch (err) {
       setError(errorMessage(err))
     } finally {

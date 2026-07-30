@@ -1,4 +1,4 @@
-import type { App, Id, Paged } from '@idea/shared'
+import type { App, Paged } from '@idea/shared'
 import { get, patch, post } from '../../lib/request'
 
 // No workspaceId anywhere: these all act on the workspace currently selected in
@@ -6,10 +6,15 @@ import { get, patch, post } from '../../lib/request'
 
 export const listApps = (page = 1): Promise<Paged<App>> => get<Paged<App>>(`/apps?page=${page}`)
 
-export const createApp = (name: string, description?: string): Promise<App> =>
-  post<App>('/apps', { name, description: description || null })
+export const getApp = (slug: string): Promise<App> => get<App>(`/apps/${encodeURIComponent(slug)}`)
+
+export const createApp = (input: {
+  name: string
+  slug: string
+  description?: string
+}): Promise<App> => post<App>('/apps', { ...input, description: input.description || null })
 
 export const updateApp = (
-  id: Id,
-  patchBody: Partial<Pick<App, 'name' | 'description' | 'status'>>,
-) => patch<App>(`/apps/${id}`, patchBody)
+  currentSlug: string,
+  patchBody: Partial<Pick<App, 'slug' | 'name' | 'description' | 'status'>>,
+) => patch<App>(`/apps/${encodeURIComponent(currentSlug)}`, patchBody)

@@ -17,7 +17,7 @@ describe.skipIf(!databaseUrl)('conversation persistence', () => {
 
   const start = (text: string) =>
     db.app.$conversation.start({
-      workspaceId: db.workspaceId,
+      appId: db.appId,
       createdById: db.userId,
       text,
     })
@@ -88,7 +88,7 @@ describe.skipIf(!databaseUrl)('naming a conversation', () => {
   afterAll(async () => db?.close())
 
   const start = (text: string) =>
-    db.app.$conversation.start({ workspaceId: db.workspaceId, createdById: db.userId, text })
+    db.app.$conversation.start({ appId: db.appId, createdById: db.userId, text })
 
   it('names one that has none', async () => {
     const conversation = await start('我想做一个报销审批系统')

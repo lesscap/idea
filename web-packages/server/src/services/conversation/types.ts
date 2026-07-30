@@ -3,7 +3,8 @@ import type { ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea
 
 export type Conversation = {
   readonly id: Id
-  readonly workspaceId: Id
+  readonly cid: string
+  readonly appId: Id
   // Null until a worker has claimed the first turn. Nobody chooses a backend in
   // advance — whichever worker reaches it decides, and it is fixed from then on.
   readonly agentKind: string | null
@@ -30,8 +31,9 @@ export type EventWindow = {
 }
 
 export type ConversationService = {
-  start: (input: { workspaceId: Id; createdById: Id; text: string }) => Promise<Conversation>
-  listForWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<Conversation>>
+  start: (input: { appId: Id; createdById: Id; text: string }) => Promise<Conversation>
+  listForApp: (appId: Id, query: PageQuery) => Promise<Paged<Conversation>>
+  getByCid: (appId: Id, cid: string) => Promise<Conversation | null>
   get: (id: Id) => Promise<Conversation | null>
   events: (conversationId: Id, window?: EventWindow) => Promise<StoredEvent[]>
   appendEvent: (

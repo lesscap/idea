@@ -1,10 +1,21 @@
 import { zValidator } from '@hono/zod-validator'
-import { badRequest, conflict, notFound, sendOk } from '../../../http.ts'
+import type { App } from '@idea/shared'
+import { failWith, notFound, sendOk } from '../../../http.ts'
 import { parsePageQuery } from '../../../paging.ts'
+import type { AppRecord } from '../../../services/app.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
 import { isResponse, requireCurrentWorkspace } from '../middleware/workspace.ts'
 import { CreateAppBody, UpdateAppBody } from '../schema/index.ts'
+
+const toPublicApp = ({
+  slug,
+  name,
+  description,
+  status,
+  createdAt,
+  updatedAt,
+}: AppRecord): App => ({ slug, name, description, status, createdAt, updatedAt })
 
 // Everything here is scoped to the workspace currently selected in the session,
 // which is why no endpoint takes a workspaceId. Membership is re-checked on each
@@ -20,53 +31,58 @@ export const AppsController: Controller = app => {
     if (isResponse(access)) return access
 
     const query = parsePageQuery(c.req.query())
-    return sendOk(c, await app.$app.listInWorkspace(access.workspaceId, query))
+    const page = await app.$app.listInWorkspace(access.workspaceId, query)
+    return sendOk(c, { ...page, items: page.items.map(toPublicApp) })
   })
 
   app.post('/', zValidator('json', CreateAppBody), async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    const { name, description } = c.req.valid('json')
+    const { name, slug, description } = c.req.valid('json')
     const created = await app.$app.create({
       workspaceId: access.workspaceId,
+      slug,
       name,
       description: description ?? null,
       createdById: session(c).userId,
     })
-    return created === 'name_taken'
-      ? conflict(c, 'an app with that name already exists in this workspace')
-      : sendOk(c, created)
+    if (created.kind === 'name_taken') {
+      return failWith(c, 409, 'app_name_taken', 'an app with that name already exists')
+    }
+    if (created.kind === 'slug_taken') {
+      return failWith(c, 409, 'app_slug_taken', 'an app with that slug already exists')
+    }
+    return sendOk(c, toPublicApp(created.app))
   })
 
-  app.get('/:id', async c => {
+  app.get('/:slug', async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    const id = Number(c.req.param('id'))
-    if (!Number.isFinite(id)) return badRequest(c, 'invalid app id')
-
-    const found = await app.$app.getInWorkspace(access.workspaceId, id)
+    const found = await app.$app.getBySlugInWorkspace(access.workspaceId, c.req.param('slug'))
     // An app in someone else's workspace is reported as missing, not forbidden.
-    return found ? sendOk(c, found) : notFound(c, 'app not found')
+    return found ? sendOk(c, toPublicApp(found)) : notFound(c, 'app not found')
   })
 
-  app.patch('/:id', zValidator('json', UpdateAppBody), async c => {
+  app.patch('/:slug', zValidator('json', UpdateAppBody), async c => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
-
-    const id = Number(c.req.param('id'))
-    if (!Number.isFinite(id)) return badRequest(c, 'invalid app id')
 
     const patch = c.req.valid('json')
-    const updated = await app.$app.update(access.workspaceId, id, {
+    const updated = await app.$app.update(access.workspaceId, c.req.param('slug'), {
       ...patch,
       description: patch.description === undefined ? undefined : (patch.description ?? null),
     })
 
-    if (updated === 'name_taken') {
-      return conflict(c, 'an app with that name already exists in this workspace')
+    if (updated.kind === 'name_taken') {
+      return failWith(c, 409, 'app_name_taken', 'an app with that name already exists')
     }
-    return updated ? sendOk(c, updated) : notFound(c, 'app not found')
+    if (updated.kind === 'slug_taken') {
+      return failWith(c, 409, 'app_slug_taken', 'an app with that slug already exists')
+    }
+    return updated.kind === 'ok'
+      ? sendOk(c, toPublicApp(updated.app))
+      : notFound(c, 'app not found')
   })
 }

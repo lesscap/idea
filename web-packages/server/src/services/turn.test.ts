@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createEventBus } from '../event-bus.ts'
 import { createConversationService } from './conversation/index.ts'
@@ -25,11 +26,23 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
 
   afterAll(async () => db?.close())
 
-  const conversation = (workspaceId = db.workspaceId) =>
-    db.prisma.conversation.create({
-      data: { workspaceId, createdById: db.userId },
+  const conversation = async (workspaceId = db.workspaceId) => {
+    const app = await db.prisma.app.upsert({
+      where: { workspaceId_slug: { workspaceId, slug: 'turn-tests' } },
+      update: {},
+      create: {
+        workspaceId,
+        slug: 'turn-tests',
+        name: 'Turn tests',
+        createdById: db.userId,
+      },
       select: { id: true },
     })
+    return db.prisma.conversation.create({
+      data: { cid: nanoid(12), appId: app.id, createdById: db.userId },
+      select: { id: true },
+    })
+  }
 
   const provider = async (name: string) =>
     db.prisma.provider.upsert({

@@ -1,4 +1,4 @@
-import { LogOut, UserPlus } from 'lucide-react'
+import { LogOut, Settings, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -9,7 +9,7 @@ import {
 } from '../../core/session/use-session'
 import { InviteDialog } from '../../features/workspace/invite-dialog'
 import { useLocale } from '../../i18n'
-import { LocaleSwitch } from '../../parts/locale-switch'
+import { LocaleMenu } from '../../parts/locale-switch'
 import {
   Avatar,
   Button,
@@ -45,14 +45,25 @@ export const Identity = ({ collapsed }: { collapsed: boolean }) => {
   }
 
   return (
-    <div className="shrink-0 border-border border-t p-2" data-testid="identity">
+    <div className="mt-auto shrink-0 border-border border-t p-2" data-testid="identity">
       {!collapsed && <WorkspaceSwitcher />}
 
-      <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'justify-between'}`}>
+      <div className="flex items-center justify-between">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 px-2" data-testid="user-menu">
-              <Avatar name={user?.name ?? '?'} seed={user?.username ?? ''} />
+            <Button
+              variant="ghost"
+              size="sm"
+              className={collapsed ? 'size-8 p-0' : 'gap-2 px-2'}
+              data-testid="user-menu"
+              aria-label={collapsed ? (user?.name ?? user?.username) : undefined}
+              title={collapsed ? (user?.name ?? user?.username) : undefined}
+            >
+              <Avatar
+                name={user?.name ?? '?'}
+                seed={user?.username ?? ''}
+                className={collapsed ? 'size-6' : undefined}
+              />
               {!collapsed && user?.name}
             </Button>
           </DropdownMenuTrigger>
@@ -75,14 +86,19 @@ export const Identity = ({ collapsed }: { collapsed: boolean }) => {
               </>
             )}
 
+            <DropdownMenuItem data-testid="menu-workspace" onSelect={() => navigate('/workspace')}>
+              <Settings />
+              {__('workspace.management')}
+            </DropdownMenuItem>
+            <LocaleMenu />
+            <DropdownMenuSeparator />
+
             <DropdownMenuItem data-testid="menu-signout" onSelect={leave}>
               <LogOut />
               {__('auth.signOut')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <LocaleSwitch compact={collapsed} />
       </div>
 
       {workspaceId !== null && (

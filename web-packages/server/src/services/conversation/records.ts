@@ -1,4 +1,5 @@
 import type { ConversationEvent } from '@idea/shared'
+import { nanoid } from 'nanoid'
 import { paged, toOffset } from '../../paging.ts'
 import type { Service } from '../../types.ts'
 import { writeEvent } from './event-log.ts'
@@ -11,14 +12,16 @@ const FIRST_SEQUENCE = 0
 
 const view = (row: {
   id: number
-  workspaceId: number
+  cid: string
+  appId: number
   agentKind: string | null
   providerSessionId: string | null
   title: string | null
   lastActiveAt: Date
 }): Conversation => ({
   id: row.id,
-  workspaceId: row.workspaceId,
+  cid: row.cid,
+  appId: row.appId,
   agentKind: row.agentKind,
   providerSessionId: row.providerSessionId,
   title: row.title,
@@ -27,7 +30,8 @@ const view = (row: {
 
 const SELECT = {
   id: true,
-  workspaceId: true,
+  cid: true,
+  appId: true,
   agentKind: true,
   providerSessionId: true,
   title: true,
@@ -36,7 +40,7 @@ const SELECT = {
 
 type ConversationRecords = Pick<
   ConversationService,
-  'start' | 'rememberSession' | 'nameIfUnnamed' | 'listForWorkspace' | 'get'
+  'start' | 'rememberSession' | 'nameIfUnnamed' | 'listForApp' | 'getByCid' | 'get'
 >
 
 export const createConversationRecords: Service<ConversationRecords> = app => ({
@@ -47,12 +51,12 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
   //
   // Nothing is published: the id has not left this function yet, so there is no
   // subscriber to tell.
-  start: async ({ workspaceId, createdById, text }) => {
+  start: async ({ appId, createdById, text }) => {
     const event: ConversationEvent = { type: 'user_message', text }
     return app.$prisma.$transaction(async tx => {
       const conversation = view(
         await tx.conversation.create({
-          data: { workspaceId, createdById },
+          data: { cid: nanoid(12), appId, createdById },
           select: SELECT,
         }),
       )
@@ -91,19 +95,24 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
   // makes the sort key one that MOVES: saying anything reorders the list under a
   // reader who is paging through it, so the browser deduplicates by id when it
   // appends — see mergeConversations.
-  listForWorkspace: async (workspaceId, query) => {
+  listForApp: async (appId, query) => {
     const { offset, limit } = toOffset(query)
     const [rows, total] = await Promise.all([
       app.$prisma.conversation.findMany({
-        where: { workspaceId },
+        where: { appId },
         orderBy: { lastActiveAt: 'desc' },
         skip: offset,
         take: limit,
         select: SELECT,
       }),
-      app.$prisma.conversation.count({ where: { workspaceId } }),
+      app.$prisma.conversation.count({ where: { appId } }),
     ])
     return paged(rows.map(view), total, query)
+  },
+
+  getByCid: async (appId, cid) => {
+    const row = await app.$prisma.conversation.findFirst({ where: { appId, cid }, select: SELECT })
+    return row ? view(row) : null
   },
 
   get: async id => {

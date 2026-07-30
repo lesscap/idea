@@ -16,13 +16,14 @@ import { createApp } from './api'
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: () => void
+  onCreated: (app: Awaited<ReturnType<typeof createApp>>) => void
 }
 
 export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
   const __ = useLocale()
   const errorMessage = useErrorMessage()
   const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -32,10 +33,11 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
     setBusy(true)
     setError(null)
     try {
-      await createApp(name, description)
+      const app = await createApp({ name, slug, description })
       setName('')
+      setSlug('')
       setDescription('')
-      onCreated()
+      onCreated(app)
       onOpenChange(false)
     } catch (err) {
       // Translated from the envelope's `code`, scoped to this feature so a
@@ -69,6 +71,20 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
                 placeholder={__('app.namePlaceholder')}
                 required
                 autoFocus
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="app-slug">{__('app.slug')}</Label>
+              <Input
+                id="app-slug"
+                data-testid="app-slug"
+                value={slug}
+                onChange={e => setSlug(e.target.value)}
+                placeholder={__('app.slugPlaceholder')}
+                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                minLength={3}
+                maxLength={48}
+                required
               />
             </div>
             <div className="flex flex-col gap-2">

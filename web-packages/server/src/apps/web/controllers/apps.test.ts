@@ -2,12 +2,13 @@ import type { PageQuery } from '@idea/shared'
 import { describe, expect, it, vi } from 'vitest'
 import { paged } from '../../../paging.ts'
 import type { ServiceApplication } from '../../../types.ts'
-import { failure, json, mountController } from '../test-support.ts'
+import { failure, json, mountController, okData } from '../test-support.ts'
 import { AppsController } from './apps.ts'
 
 const anApp = {
   id: 1,
   workspaceId: 1,
+  slug: 'expense-approval',
   name: '报销审批',
   description: null,
   status: 'draft' as const,
@@ -23,9 +24,9 @@ const services = (
   $workspace: { roleOf: async () => roleOf, listForUser: async () => [] } as never,
   $app: {
     listInWorkspace: async (_ws, q) => paged([anApp], 1, q),
-    getInWorkspace: async () => anApp,
-    create: async () => anApp,
-    update: async () => anApp,
+    getBySlugInWorkspace: async () => anApp,
+    create: async () => ({ kind: 'ok', app: anApp }),
+    update: async () => ({ kind: 'ok', app: anApp }),
     ...appOver,
   },
 })
@@ -78,9 +79,20 @@ describe('workspace scoping', () => {
       { guarded: true },
     )
 
-    await app.request('/')
+    const response = await app.request('/')
 
     expect(listInWorkspace).toHaveBeenCalledWith(42, expect.objectContaining({ page: 1 }))
+    const data = await okData<{ items: unknown[] }>(response)
+    expect(data.items).toEqual([
+      {
+        slug: anApp.slug,
+        name: anApp.name,
+        description: null,
+        status: 'draft',
+        createdAt: '',
+        updatedAt: '',
+      },
+    ])
   })
 
   // pageSize reaches the database as a LIMIT, so an unclamped value is a free
@@ -114,7 +126,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/', json({ name: '报销审批' }))
+    const res = await app.request('/', json({ name: '报销审批', slug: 'expense-approval' }))
 
     expect(res.status).toBe(200)
   })
@@ -122,14 +134,29 @@ describe('app writes', () => {
   it('reports a duplicate name as a conflict, not a crash', async () => {
     const app = mountController(
       AppsController,
-      services('member', { create: async () => 'name_taken' }),
+      services('member', { create: async () => ({ kind: 'name_taken' }) }),
       { userId: 1, workspaceId: 1 },
       { guarded: true },
     )
 
-    const res = await app.request('/', json({ name: '报销审批' }))
+    const res = await app.request('/', json({ name: '报销审批', slug: 'expense-approval' }))
 
     expect(res.status).toBe(409)
+    expect((await failure(res)).code).toBe('app_name_taken')
+  })
+
+  it('reports a duplicate slug separately from a duplicate name', async () => {
+    const app = mountController(
+      AppsController,
+      services('member', { create: async () => ({ kind: 'slug_taken' }) }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/', json({ name: '另一个应用', slug: 'expense-approval' }))
+
+    expect(res.status).toBe(409)
+    expect((await failure(res)).code).toBe('app_slug_taken')
   })
 
   it('rejects an empty patch rather than pretending it succeeded', async () => {
@@ -140,7 +167,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/1', { ...json({}), method: 'PATCH' })
+    const res = await app.request('/expense-approval', { ...json({}), method: 'PATCH' })
 
     expect(res.status).toBe(400)
   })
@@ -148,12 +175,15 @@ describe('app writes', () => {
   it('reports updating an app outside the workspace as missing', async () => {
     const app = mountController(
       AppsController,
-      services('member', { update: async () => null }),
+      services('member', { update: async () => ({ kind: 'not_found' }) }),
       { userId: 1, workspaceId: 1 },
       { guarded: true },
     )
 
-    const res = await app.request('/1', { ...json({ name: 'x' }), method: 'PATCH' })
+    const res = await app.request('/expense-approval', {
+      ...json({ name: 'x' }),
+      method: 'PATCH',
+    })
 
     expect(res.status).toBe(404)
   })

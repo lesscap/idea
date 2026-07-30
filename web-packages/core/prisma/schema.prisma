@@ -122,7 +122,6 @@ model Workspace {
   apps        App[]
   invites     Invite[]
   preferredBy UserPreference[]
-  conversations Conversation[]
   workers     Worker[]
   enrolments  WorkerEnrolment[]
 
@@ -153,6 +152,7 @@ model UserWorkspace {
 model App {
   id          Int       @id @default(autoincrement())
   workspaceId Int
+  slug        String
   name        String
   description String?
   status      AppStatus @default(draft)
@@ -160,20 +160,22 @@ model App {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy User      @relation(fields: [createdById], references: [id])
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy     User           @relation(fields: [createdById], references: [id])
+  conversations Conversation[]
 
+  @@unique([workspaceId, slug])
   @@unique([workspaceId, name])
   @@index([workspaceId])
   @@map("apps")
 }
 
-// A conversation with the agent. It belongs to a workspace, but no single app
-// or requirement: one conversation may eventually concern several of either.
-// Those associations need their own model once their semantics are known.
+// A conversation with the agent. It belongs to one app; associations with
+// requirements and other resources stay separate until their semantics exist.
 model Conversation {
   id          Int    @id @default(autoincrement())
-  workspaceId Int
+  cid         String @unique
+  appId       Int
   createdById Int
   // Null until the first turn is claimed, then stamped with whichever worker
   // took it — and fixed from then on. Nobody has to choose a backend in advance;
@@ -199,14 +201,14 @@ model Conversation {
   // activity and a long conversation as idle. This is the honest "last spoke".
   lastActiveAt DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  app       App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id])
   provider  Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
   events    ConversationEvent[]
   pending   PendingInput[]
   turns     Turn[]
 
-  @@index([workspaceId, lastActiveAt])
+  @@index([appId, lastActiveAt])
   @@map("conversations")
 }
 

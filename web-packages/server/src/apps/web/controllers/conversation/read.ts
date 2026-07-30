@@ -4,10 +4,9 @@ import { parsePageQuery } from '../../../../paging.ts'
 import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
-import { isResponse, requireCurrentWorkspace } from '../../middleware/workspace.ts'
-import { IdParam, StartConversationBody } from '../../schema/index.ts'
+import { StartConversationBody } from '../../schema/index.ts'
 import { toWireEvent } from '../../wire.ts'
-import { scopedConversation } from './scoped.ts'
+import { isResponse, scopedApp, scopedConversation } from './scoped.ts'
 
 // Beyond this a transcript read stops being a window. Nothing in the interface
 // asks for more; a caller that does gets the ceiling rather than an error.
@@ -37,11 +36,16 @@ const windowFrom = (query: Record<string, string | undefined>): EventWindow => {
 // The conversation as a resource: list it, start one, read what was said.
 export const registerRead: Controller = app => {
   app.get('/', async c => {
-    const access = await requireCurrentWorkspace(app, c)
-    if (isResponse(access)) return access
+    const currentApp = await scopedApp(app, c)
+    if (isResponse(currentApp)) return currentApp
+    if (!currentApp) return notFound(c, 'app not found')
 
     const query = parsePageQuery(c.req.query())
-    return sendOk(c, await app.$conversation.listForWorkspace(access.workspaceId, query))
+    const page = await app.$conversation.listForApp(currentApp.id, query)
+    return sendOk(c, {
+      ...page,
+      items: page.items.map(({ cid, title, lastActiveAt }) => ({ cid, title, lastActiveAt })),
+    })
   })
 
   // Creation and the first message are one operation. A click on "new" is only
@@ -49,24 +53,26 @@ export const registerRead: Controller = app => {
   // conversations in the list, while separate create/send requests can leave
   // one behind when only the second fails.
   app.post('/', zValidator('json', StartConversationBody), async c => {
-    const access = await requireCurrentWorkspace(app, c)
-    if (isResponse(access)) return access
+    const currentApp = await scopedApp(app, c)
+    if (isResponse(currentApp)) return currentApp
+    if (!currentApp) return notFound(c, 'app not found')
 
     const conversation = await app.$conversation.start({
-      workspaceId: access.workspaceId,
+      appId: currentApp.id,
       createdById: session(c).userId,
       text: c.req.valid('json').text,
     })
     app.$commands.broadcast({ type: 'work_available' })
-    return sendOk(c, conversation)
+    const { cid, title, lastActiveAt } = conversation
+    return sendOk(c, { cid, title, lastActiveAt })
   })
 
   // A window of the transcript: the most recent `limit`, or the stretch before a
   // sequence, or everything after one the caller already holds. Paired with
   // `pending`, because what has been typed but not sent is part of what the
   // interface has to show and is deliberately not in the log.
-  app.get('/:id/events', zValidator('param', IdParam), async c => {
-    const found = await scopedConversation(app, c, c.req.valid('param').id)
+  app.get('/:cid/events', async c => {
+    const found = await scopedConversation(app, c, c.req.param('cid'))
     if (isResponse(found)) return found
     if (!found) return notFound(c, 'conversation not found')
 

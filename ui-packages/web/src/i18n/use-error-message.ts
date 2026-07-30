@@ -10,10 +10,9 @@ import { useLocale } from '.'
 // Chinese interface. The envelope's `code` is the part meant for branching, so
 // that is what gets translated.
 //
-// `scope` narrows the wording: a `conflict` when creating an app is "that name
-// is taken", while the same code elsewhere means something else entirely. Falls
-// back to the generic phrasing for that code, then to a catch-all, so an
-// unmapped code degrades to vague rather than to blank.
+// `scope` narrows domain codes such as app name and slug conflicts. Falls back
+// to the generic phrasing for that code, then to a catch-all, so an unmapped code
+// degrades to vague rather than to blank.
 export const useErrorMessage = () => {
   const __ = useLocale()
 

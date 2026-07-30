@@ -1,16 +1,32 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
+import type { PendingInput } from './use-conversation'
 
 // One rule is worth pinning here: what Enter does. It is the only send path
 // most people will use, and the case that breaks it — an IME candidate being
 // confirmed — cannot be produced by a real keyboard in a test.
 
-const draw = (onSend = vi.fn().mockResolvedValue(undefined)) => {
+const draw = ({
+  onSend = vi.fn().mockResolvedValue(undefined),
+  onWithdraw = vi.fn().mockResolvedValue(undefined),
+  pending = [],
+  exclusiveSubmit = false,
+}: {
+  onSend?: ReturnType<typeof vi.fn>
+  onWithdraw?: ReturnType<typeof vi.fn>
+  pending?: readonly PendingInput[]
+  exclusiveSubmit?: boolean
+} = {}) => {
   render(
     <LocaleProvider>
-      <Composer pending={[]} onSend={onSend} onWithdraw={vi.fn()} />
+      <Composer
+        pending={pending}
+        onSend={onSend}
+        onWithdraw={onWithdraw}
+        exclusiveSubmit={exclusiveSubmit}
+      />
     </LocaleProvider>,
   )
   const box = screen.getByTestId('composer')
@@ -46,17 +62,44 @@ describe('sending with the keyboard', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
-  // What stops the second Enter is the draft being cleared synchronously, not an
-  // in-flight flag — the box is still enabled and still accepts typing, which is
-  // the point: a second thought may be added while the first is on the wire.
-  it('does not submit the same draft twice while the request is pending', () => {
-    const onSend = vi.fn(() => new Promise<void>(() => {}))
-    const { box } = draw(onSend)
+  it('locks a new conversation until creation finishes and restores a failed message', async () => {
+    let rejectRequest: (error: Error) => void = () => undefined
+    const request = new Promise<void>((_, reject) => {
+      rejectRequest = reject
+    })
+    const onSend = vi.fn(() => request)
+    const { box } = draw({ onSend, exclusiveSubmit: true })
 
-    fireEvent.keyDown(box, { key: 'Enter' })
     fireEvent.keyDown(box, { key: 'Enter' })
 
     expect(onSend).toHaveBeenCalledTimes(1)
+    expect(box).toBeDisabled()
+
+    await act(async () => {
+      rejectRequest(new Error('failed'))
+      await request.catch(() => undefined)
+    })
+
+    expect(box).not.toBeDisabled()
+    expect(box).toHaveValue('你好')
+  })
+
+  it('keeps a newer draft when an earlier send fails', async () => {
+    let rejectRequest: (error: Error) => void = () => undefined
+    const request = new Promise<void>((_, reject) => {
+      rejectRequest = reject
+    })
+    const { box } = draw({ onSend: vi.fn(() => request) })
+
+    fireEvent.keyDown(box, { key: 'Enter' })
+    fireEvent.change(box, { target: { value: '第二条' } })
+
+    await act(async () => {
+      rejectRequest(new Error('failed'))
+      await request.catch(() => undefined)
+    })
+
+    expect(box).toHaveValue('你好\n\n第二条')
   })
 })
 
@@ -70,5 +113,34 @@ describe('the arrow', () => {
     fireEvent.change(box, { target: { value: '   ' } })
 
     expect(screen.getByTestId('composer-send')).toBeDisabled()
+  })
+})
+
+describe('withdrawing queued input', () => {
+  it('blocks duplicate withdrawal and leaves a failed item available to retry', async () => {
+    let rejectRequest: (error: Error) => void = () => undefined
+    const request = new Promise<void>((_, reject) => {
+      rejectRequest = reject
+    })
+    const onWithdraw = vi.fn(() => request)
+    draw({
+      onWithdraw,
+      pending: [{ id: 7, text: '补充说明', createdAt: '2026-07-29T00:01:00.000Z' }],
+    })
+    const button = screen.getByTestId('pending-withdraw-7')
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    expect(onWithdraw).toHaveBeenCalledTimes(1)
+    expect(button).toBeDisabled()
+
+    await act(async () => {
+      rejectRequest(new Error('failed'))
+      await request.catch(() => undefined)
+    })
+
+    expect(button).not.toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('撤回失败，请重试')
   })
 })

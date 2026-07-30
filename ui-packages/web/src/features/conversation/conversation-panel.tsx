@@ -33,17 +33,19 @@ const Said = ({ text }: { text: string }) => {
       className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
       data-testid="bubble-them"
     >
-      <span className="mr-2 select-none font-mono text-[11px] text-muted-foreground">
-        {__('transcript.you')}›
+      <span className="mb-1 block select-none font-medium text-muted-foreground text-xs">
+        {__('transcript.you')}
       </span>
-      {paragraphs.map((paragraph, index) => (
-        <p
-          key={paragraph}
-          className={index === 0 ? 'inline whitespace-pre-wrap' : 'mt-2 whitespace-pre-wrap'}
-        >
-          {paragraph}
-        </p>
-      ))}
+      <div className="min-w-0">
+        {paragraphs.map((paragraph, index) => (
+          <p
+            key={index}
+            className={index === 0 ? 'whitespace-pre-wrap' : 'mt-2 whitespace-pre-wrap'}
+          >
+            {paragraph}
+          </p>
+        ))}
+      </div>
     </div>
   )
 }
@@ -87,21 +89,21 @@ const Drawn = ({ item }: { item: StreamItem }) => {
 }
 
 export const ConversationPanel = ({
+  slug,
   conversationId,
-  context,
   hidden,
   onConversationCreated,
   onCollapse,
 }: {
+  slug: string
   conversationId: string | null
-  context: string | null
   hidden: boolean
   onConversationCreated: (id: string) => void
   onCollapse: () => void
 }) => {
   const __ = useLocale()
   const { bubbles, pending, working, status, hasOlder, loadingOlder, loadOlder, send, withdraw } =
-    useConversation(conversationId, onConversationCreated)
+    useConversation(slug, conversationId, onConversationCreated)
   const bottom = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   // The scroll height recorded just before a "load earlier" read, consumed by
@@ -146,7 +148,6 @@ export const ConversationPanel = ({
       aria-hidden={hidden}
       data-testid="conversation-column"
       data-conversation-id={conversationId ?? ''}
-      data-context={context ?? ''}
       data-working={working}
       data-status={status}
     >
@@ -204,7 +205,13 @@ export const ConversationPanel = ({
             <div ref={bottom} />
           </div>
 
-          <Composer key={conversationId} pending={pending} onSend={send} onWithdraw={withdraw} />
+          <Composer
+            key={conversationId}
+            pending={pending}
+            onSend={send}
+            onWithdraw={withdraw}
+            exclusiveSubmit={conversationId === 'new'}
+          />
         </>
       )}
     </div>

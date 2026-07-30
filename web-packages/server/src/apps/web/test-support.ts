@@ -36,14 +36,14 @@ export const mountController = (
   controller: Controller,
   services: Partial<ServiceApplication>,
   sessionData: SessionStub = null,
-  { guarded = false }: { guarded?: boolean } = {},
+  { guarded = false, prefix = '/' }: { guarded?: boolean; prefix?: string } = {},
 ): Hono => {
   const root = new Hono()
   root.use('*', fakeSession(sessionData) as never)
   const scoped = Object.assign(new Hono(), services) as WebApplication
   if (guarded) scoped.use('*', requireSession)
   controller(scoped)
-  root.route('/', scoped)
+  root.route(prefix, scoped)
   return root
 }
 
