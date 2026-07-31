@@ -10,7 +10,7 @@ import type { Context } from 'hono'
 //
 // Pairing code and status in one factory per failure is what stops `not_found`
 // from going out as a 400 in one controller and a 404 in the next.
-type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 500
+type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500 | 503
 
 const ok = <T>(data: T): ApiSuccess<T> => ({ success: true, data })
 

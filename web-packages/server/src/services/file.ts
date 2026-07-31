@@ -1,0 +1,146 @@
+import type { FileStatus, Id, PostUploadTarget } from '@idea/shared'
+import { nanoid } from 'nanoid'
+import type { Service } from '../types.ts'
+
+export type FileRecord = {
+  readonly id: Id
+  readonly fid: string
+  readonly appId: Id
+  readonly uploadedById: Id
+  readonly filename: string
+  readonly contentType: string
+  readonly size: number
+  readonly storageKey: string
+  readonly status: FileStatus
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export type FileCreate = {
+  readonly workspaceId: Id
+  readonly appId: Id
+  readonly uploadedById: Id
+  readonly filename: string
+  readonly contentType: string
+  readonly size: number
+}
+
+export type FileCreateResult =
+  | {
+      readonly kind: 'ok'
+      readonly file: FileRecord
+      readonly upload: PostUploadTarget
+    }
+  | { readonly kind: 'storage_unavailable' }
+
+export type FileConfirmResult =
+  | { readonly kind: 'ok'; readonly file: FileRecord }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'not_uploaded' }
+  | { readonly kind: 'size_mismatch' }
+  | { readonly kind: 'storage_unavailable' }
+
+export type FileService = {
+  createUpload: (input: FileCreate) => Promise<FileCreateResult>
+  confirm: (userId: Id, fid: string) => Promise<FileConfirmResult>
+  getForMember: (userId: Id, fid: string) => Promise<FileRecord | null>
+}
+
+type Row = {
+  id: number
+  fid: string
+  appId: number
+  uploadedById: number
+  filename: string
+  contentType: string
+  size: number
+  storageKey: string
+  status: FileStatus
+  createdAt: Date
+  updatedAt: Date
+}
+
+const toFile = (row: Row): FileRecord => ({
+  ...row,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
+})
+
+const reportStorageError = (operation: string, error: unknown): void => {
+  globalThis.console.error(`OSS ${operation} failed`, error)
+}
+
+export const createFileService: Service<FileService> = app => ({
+  createUpload: async input => {
+    const storage = app.$storage
+    if (!storage) return { kind: 'storage_unavailable' }
+
+    const fid = nanoid(12)
+    const storageKey = storage.keyFor(input.workspaceId, input.appId, fid)
+    let upload: PostUploadTarget
+    try {
+      upload = storage.signPost(storageKey, input.contentType, input.size)
+    } catch (error) {
+      reportStorageError('signPost', error)
+      return { kind: 'storage_unavailable' }
+    }
+
+    const file = await app.$prisma.file.create({
+      data: {
+        fid,
+        appId: input.appId,
+        uploadedById: input.uploadedById,
+        filename: input.filename,
+        contentType: input.contentType,
+        size: input.size,
+        storageKey,
+      },
+    })
+    return { kind: 'ok', file: toFile(file), upload }
+  },
+
+  confirm: async (userId, fid) => {
+    const row = await app.$prisma.file.findFirst({
+      where: {
+        fid,
+        uploadedById: userId,
+        app: { workspace: { users: { some: { userId } } } },
+      },
+    })
+    if (!row) return { kind: 'not_found' }
+    if (row.status === 'ready') return { kind: 'ok', file: toFile(row) }
+
+    const storage = app.$storage
+    if (!storage) return { kind: 'storage_unavailable' }
+
+    let object: { readonly size: number } | null
+    try {
+      object = await storage.head(row.storageKey)
+    } catch (error) {
+      reportStorageError('head', error)
+      return { kind: 'storage_unavailable' }
+    }
+    if (!object) return { kind: 'not_uploaded' }
+    if (object.size !== row.size) return { kind: 'size_mismatch' }
+
+    return {
+      kind: 'ok',
+      file: toFile(
+        await app.$prisma.file.update({
+          where: { id: row.id },
+          data: { status: 'ready' },
+        }),
+      ),
+    }
+  },
+
+  getForMember: async (userId, fid) => {
+    const row = await app.$prisma.file.findFirst({
+      where: {
+        fid,
+        app: { workspace: { users: { some: { userId } } } },
+      },
+    })
+    return row ? toFile(row) : null
+  },
+})

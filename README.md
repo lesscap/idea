@@ -503,10 +503,17 @@ The production database URL is recorded in `.env` **as a comment**. Do not
 uncomment it locally: migrations and seeds hit whichever URL is active.
 Deployments inject it from the environment.
 
-Object storage (Tencent COS) credentials are recorded but **not wired up** — no
-upload feature exists yet. When one arrives, note that `COS_UPLOAD_PATH` and
-`ASSET_URL_SIGNING_SECRET` must differ from other products, or object prefixes
-collide and signed URLs become valid across products.
+Private file uploads use AliCloud OSS. The server signs a five-minute V4
+PostObject policy, the browser uploads directly to the bucket, and the server
+confirms the object with HEAD before making it readable. Objects live below the
+fixed `idea/files` prefix and are reached through authenticated
+`/api/web/files/:fid` URLs rather than permanent OSS URLs.
+
+Production requires `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_BUCKET`
+and `OSS_REGION`; `OSS_ENDPOINT` defaults from the region. The bucket must be
+private, and its CORS rules must allow the application's origins to use POST,
+GET and HEAD. The RAM identity needs only `oss:PutObject` and `oss:GetObject`
+under `upivot-s2/idea/files/*`; do not grant `oss:PutObjectAcl`.
 
 ## Not built yet
 

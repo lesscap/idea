@@ -98,3 +98,9 @@ export const StartConversationBody = z.object({
 export const SendMessageBody = z.object({
   text: z.string().trim().min(1).max(20_000),
 })
+
+export const CreateFileBody = z.object({
+  filename: z.string().trim().min(1).max(255),
+  contentType: z.string().trim().min(1).max(128),
+  size: z.number().int().positive(),
+})
