@@ -46,8 +46,6 @@ export const Identity = ({ collapsed }: { collapsed: boolean }) => {
 
   return (
     <div className="mt-auto shrink-0 border-border border-t p-2" data-testid="identity">
-      {!collapsed && <WorkspaceSwitcher />}
-
       <div className="flex items-center justify-between">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -67,29 +65,30 @@ export const Identity = ({ collapsed }: { collapsed: boolean }) => {
               {!collapsed && user?.name}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="min-w-44">
+          <DropdownMenuContent align="start" side="top" className="min-w-52 max-w-64">
             <DropdownMenuLabel className="font-normal text-muted-foreground">
               {user?.username}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
+            <WorkspaceSwitcher />
+
             {/* Only administrators may create invites. Showing the entry to
                 everyone and letting the server answer 403 turns a permission
                 boundary into a dead end found only by walking into it. */}
             {role === 'admin' && (
-              <>
-                <DropdownMenuItem data-testid="menu-invite" onSelect={() => setInviting(true)}>
-                  <UserPlus />
-                  {__('invite.title')}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
+              <DropdownMenuItem data-testid="menu-invite" onSelect={() => setInviting(true)}>
+                <UserPlus />
+                {__('invite.title')}
+              </DropdownMenuItem>
             )}
 
             <DropdownMenuItem data-testid="menu-workspace" onSelect={() => navigate('/workspace')}>
               <Settings />
               {__('workspace.management')}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+
             <LocaleMenu />
             <DropdownMenuSeparator />
 
