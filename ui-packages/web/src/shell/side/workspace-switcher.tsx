@@ -1,16 +1,15 @@
 import type { WorkspaceMembership } from '@idea/shared'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Building2, Check, ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChooseWorkspace, useCurrentWorkspaceId } from '../../core/session/use-session'
 import { listWorkspaces } from '../../features/workspace/api'
 import { useLocale } from '../../i18n'
 import {
-  Button,
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '../../ui'
 
 // Lives in the shell, not in the workspace feature: it reads core session state
@@ -48,19 +47,13 @@ export const WorkspaceSwitcher = () => {
   if (workspaces.length < 2) return null
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-between text-muted-foreground"
-          data-testid="workspace-switcher"
-        >
-          {current?.name ?? __('common.loading')}
-          <ChevronsUpDown />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top">
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="min-w-0" data-testid="workspace-switcher">
+        <Building2 />
+        <span className="min-w-0 flex-1 truncate">{current?.name ?? __('common.loading')}</span>
+        <ChevronRight />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent sideOffset={4} className="min-w-48 max-w-64">
         {workspaces.map(w => (
           <DropdownMenuItem
             key={w.id}
@@ -68,10 +61,10 @@ export const WorkspaceSwitcher = () => {
             onSelect={() => void choose(w.id)}
           >
             {w.id === workspaceId ? <Check /> : <span className="w-4" />}
-            {w.name}
+            <span className="truncate">{w.name}</span>
           </DropdownMenuItem>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }
