@@ -51,10 +51,11 @@ describe('a draft conversation', () => {
     const created = vi.fn()
     const { result } = renderHook(() => useConversation('leave-request', 'new', created))
 
-    await act(() => result.current.send('第一条消息'))
+    await act(() => result.current.send('第一条消息', []))
 
     expect(post).toHaveBeenCalledWith('/apps/leave-request/conversations', {
       text: '第一条消息',
+      attachmentFids: [],
     })
     expect(created).toHaveBeenCalledWith('abc123')
   })
@@ -67,8 +68,13 @@ describe('a persisted conversation', () => {
       .mockResolvedValueOnce({
         items: [said(1, 0, 'Hello')],
         pending: [
-          { id: 7, text: 'hello', createdAt: '2026-07-29T00:01:00.000Z' },
-          { id: 8, text: 'Are you OK', createdAt: '2026-07-29T00:02:00.000Z' },
+          { id: 7, text: 'hello', attachments: [], createdAt: '2026-07-29T00:01:00.000Z' },
+          {
+            id: 8,
+            text: 'Are you OK',
+            attachments: [],
+            createdAt: '2026-07-29T00:02:00.000Z',
+          },
         ],
       })
       .mockResolvedValueOnce({ items: [], pending: [] })

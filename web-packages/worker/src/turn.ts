@@ -1,4 +1,11 @@
-import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
+import { materializeAttachments } from './attachments.ts'
+import {
+  asContext,
+  canResume,
+  type ProviderConfig,
+  runClaude,
+  userPrompt,
+} from './claude/session.ts'
 import { extractSeed, generateTitle } from './claude/title.ts'
 import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
 import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
@@ -10,9 +17,10 @@ import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 // reaper takes the turn and runs it a second time.
 const HEARTBEAT_MS = 20_000
 
-// Conversations belong directly to a workspace. Their future associations with
-// apps and requirements are not single-valued, so until those have their own
-// model every conversation branches from the workspace scratch repository.
+// Conversations belong to Apps, while Agent filesystem access is isolated at
+// the workspace container boundary. All conversations in one workspace branch
+// from its shared scratch repository so their worktrees can intentionally see
+// the same workspace files.
 const WORKSPACE_REPO = '_scratch'
 
 export const runTurn = async (
@@ -45,7 +53,8 @@ export const runTurn = async (
     const said = events.find(
       e => e.sequence === claimed.userEventSequence && e.event.type === 'user_message',
     )
-    const message = said?.event.type === 'user_message' ? said.event.text : ''
+    if (said?.event.type !== 'user_message') throw new Error('turn user message not found')
+    await materializeAttachments(client, worktree, events)
 
     // Resuming keeps the agent's own memory of the conversation. When there is
     // nothing local to resume — another machine ran the earlier turns, or the
@@ -54,7 +63,12 @@ export const runTurn = async (
     const resume = canResume(sessions, conversation.providerSessionId)
       ? conversation.providerSessionId
       : null
-    const prompt = resume ? message : asContext(events, message)
+    const prompt = resume
+      ? userPrompt(said.event)
+      : asContext(
+          events.filter(event => event.sequence < claimed.userEventSequence),
+          said.event,
+        )
     log(`turn ${claimed.id} in ${worktree} (${resume ? 'resuming' : 'new session'})`)
 
     for await (const event of runClaude({

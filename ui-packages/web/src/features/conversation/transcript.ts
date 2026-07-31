@@ -1,4 +1,4 @@
-import type { StoredEvent, WireEvent } from '@idea/shared'
+import type { Attachment, StoredEvent, WireEvent } from '@idea/shared'
 
 // The transcript, folded into what is actually drawn.
 //
@@ -13,7 +13,7 @@ import type { StoredEvent, WireEvent } from '@idea/shared'
 // difference — an id is all this has to go on.
 
 export type Bubble =
-  | { kind: 'them'; key: string; text: string }
+  | { kind: 'them'; key: string; text: string; attachments?: readonly Attachment[] }
   | { kind: 'agent'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string }
   | {
@@ -31,7 +31,13 @@ export type Bubble =
   | { kind: 'note'; key: string; text: string }
 
 const bubbleOf = (event: WireEvent, key: string): Bubble | null => {
-  if (event.type === 'user_message') return { kind: 'them', key, text: event.text }
+  if (event.type === 'user_message')
+    return {
+      kind: 'them',
+      key,
+      text: event.text,
+      ...(event.attachments?.length ? { attachments: event.attachments } : {}),
+    }
 
   if (
     event.type === 'item.started' ||

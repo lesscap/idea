@@ -1,7 +1,13 @@
+import type { UploadedFile } from '@idea/shared'
 import { ArrowUp, Clock3, X } from 'lucide-react'
 import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
+import {
+  ComposerAttachmentButton,
+  ComposerAttachmentTray,
+  useComposerAttachments,
+} from './composer-attachments'
 import type { PendingInput } from './use-conversation'
 
 // Where someone says what they want.
@@ -10,7 +16,7 @@ import type { PendingInput } from './use-conversation'
 // one control, while queue changes do not resize its border.
 //
 // Shape taken from baton's composer (`channel-room/composer.tsx`), minus the
-// parts we have no mechanism for yet: attachments, slash commands, plan mode.
+// parts we have no mechanism for yet: slash commands and plan mode.
 
 const MIN = '2.5rem'
 const MAX_PX = 160
@@ -52,11 +58,13 @@ const useAutosize = (ref: RefObject<HTMLTextAreaElement | null>, value: string) 
 export const Composer = ({
   pending,
   onSend,
+  onUpload,
   onWithdraw,
   exclusiveSubmit,
 }: {
   pending: readonly PendingInput[]
-  onSend: (text: string) => Promise<unknown>
+  onSend: (text: string, attachmentFids: readonly string[]) => Promise<unknown>
+  onUpload: (file: File) => Promise<UploadedFile>
   onWithdraw: (id: number) => Promise<unknown>
   exclusiveSubmit: boolean
 }) => {
@@ -66,26 +74,28 @@ export const Composer = ({
   const [withdrawal, setWithdrawal] = useState<Withdrawal>(null)
   const ref = useRef<HTMLTextAreaElement>(null)
   const submittingRef = useRef(false)
+  const attachments = useComposerAttachments(onUpload)
   useAutosize(ref, draft)
 
-  const canSend = draft.trim() !== ''
+  const canSend = !attachments.unsettled && (draft.trim() !== '' || attachments.ready.length > 0)
 
   const submit = () => {
     const text = draft.trim()
-    if (!text || (exclusiveSubmit && submittingRef.current)) return
+    if (!canSend || submittingRef.current) return
+    const attachmentFids = attachments.ready.map(file => file.fid)
 
-    if (exclusiveSubmit) {
-      submittingRef.current = true
-      setSubmitting(true)
-    }
+    submittingRef.current = true
+    setSubmitting(true)
 
     // Cleared immediately. Waiting for the round trip makes the interface feel
     // like it missed the keystroke; restored if the send actually failed.
     setDraft('')
-    void onSend(text)
-      .catch(() => setDraft(current => (current ? `${text}\n\n${current}` : text)))
+    void onSend(text, attachmentFids)
+      .then(() => attachments.removeUploaded(attachmentFids))
+      .catch(() =>
+        setDraft(current => (text ? (current ? `${text}\n\n${current}` : text) : current)),
+      )
       .finally(() => {
-        if (!exclusiveSubmit) return
         submittingRef.current = false
         setSubmitting(false)
       })
@@ -121,7 +131,14 @@ export const Composer = ({
                 data-testid={`pending-${item.id}`}
               >
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground/80">{item.text}</span>
+                  {item.text && (
+                    <span className="block truncate text-foreground/80">{item.text}</span>
+                  )}
+                  {item.attachments.length > 0 && (
+                    <span className="block truncate text-muted-foreground text-xs">
+                      {item.attachments.map(file => file.filename).join(', ')}
+                    </span>
+                  )}
                   {withdrawal?.id === item.id && withdrawal.status === 'failed' && (
                     <span className="block text-destructive text-xs" role="status">
                       {__('shell.withdrawQueuedFailed')}
@@ -144,8 +161,17 @@ export const Composer = ({
         </section>
       )}
 
-      <div className="rounded-xl border border-border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+      <fieldset
+        className="min-w-0 rounded-xl border border-border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20"
+        onDragOver={event => event.preventDefault()}
+        onDrop={event => {
+          event.preventDefault()
+          attachments.add(event.dataTransfer.files)
+        }}
+      >
+        <ComposerAttachmentTray state={attachments} />
         <div className="flex items-end gap-2 p-2">
+          <ComposerAttachmentButton state={attachments} />
           <textarea
             ref={ref}
             rows={1}
@@ -156,6 +182,11 @@ export const Composer = ({
             value={draft}
             disabled={exclusiveSubmit && submitting}
             onChange={event => setDraft(event.target.value)}
+            onPaste={event => {
+              if (event.clipboardData.files.length === 0) return
+              event.preventDefault()
+              attachments.add(event.clipboardData.files)
+            }}
             // Sending while a turn is running is allowed on purpose: the server
             // holds it and merges it with whatever else arrives before that turn
             // ends, so a thought delivered in pieces gets one reply.
@@ -178,13 +209,13 @@ export const Composer = ({
             className="size-8 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
             aria-label={__('shell.send')}
             data-testid="composer-send"
-            disabled={!canSend || (exclusiveSubmit && submitting)}
+            disabled={!canSend || submitting}
             onClick={submit}
           >
             <ArrowUp />
           </Button>
         </div>
-      </div>
+      </fieldset>
     </div>
   )
 }

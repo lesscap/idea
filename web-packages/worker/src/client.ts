@@ -46,6 +46,7 @@ export type WorkerClient = {
     provider: ProviderConfig | null
   } | null>
   events: (turnId: number, after?: number) => Promise<StoredEvent[]>
+  downloadFile: (fid: string) => Promise<Response>
   emit: (turnId: number, event: ConversationEvent) => Promise<void>
   heartbeat: (turnId: number) => Promise<boolean>
   finish: (turnId: number, outcome: 'completed' | 'failed' | 'aborted') => Promise<void>
@@ -124,6 +125,16 @@ export const createClient = (server: string, token?: string): WorkerClient => {
           `/turns/${turnId}/events${after === undefined ? '' : `?after=${after}`}`,
         )
       ).items,
+
+    downloadFile: async fid => {
+      const response = await fetch(`${base}/files/${encodeURIComponent(fid)}`, {
+        headers: { authorization: `Bearer ${bearer}` },
+      })
+      if (!response.ok || !response.body) {
+        throw new Error(`file ${fid} download failed: ${response.status}`)
+      }
+      return response
+    },
 
     emit: async (turnId, event) => {
       await post(`/turns/${turnId}/events`, event)

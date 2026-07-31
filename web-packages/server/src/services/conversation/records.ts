@@ -51,8 +51,12 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
   //
   // Nothing is published: the id has not left this function yet, so there is no
   // subscriber to tell.
-  start: async ({ appId, createdById, text }) => {
-    const event: ConversationEvent = { type: 'user_message', text }
+  start: async ({ appId, createdById, text, attachments }) => {
+    const event: ConversationEvent = {
+      type: 'user_message',
+      text,
+      ...(attachments?.length ? { attachments } : {}),
+    }
     return app.$prisma.$transaction(async tx => {
       const conversation = view(
         await tx.conversation.create({

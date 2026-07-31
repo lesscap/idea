@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import type { UploadedFile } from '@idea/shared'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
@@ -10,11 +11,13 @@ import type { PendingInput } from './use-conversation'
 
 const draw = ({
   onSend = vi.fn().mockResolvedValue(undefined),
+  onUpload = vi.fn().mockResolvedValue(undefined),
   onWithdraw = vi.fn().mockResolvedValue(undefined),
   pending = [],
   exclusiveSubmit = false,
 }: {
   onSend?: ReturnType<typeof vi.fn>
+  onUpload?: ReturnType<typeof vi.fn>
   onWithdraw?: ReturnType<typeof vi.fn>
   pending?: readonly PendingInput[]
   exclusiveSubmit?: boolean
@@ -24,6 +27,7 @@ const draw = ({
       <Composer
         pending={pending}
         onSend={onSend}
+        onUpload={onUpload}
         onWithdraw={onWithdraw}
         exclusiveSubmit={exclusiveSubmit}
       />
@@ -35,12 +39,12 @@ const draw = ({
 }
 
 describe('sending with the keyboard', () => {
-  it('sends on Enter', () => {
+  it('sends on Enter', async () => {
     const { box, onSend } = draw()
 
-    fireEvent.keyDown(box, { key: 'Enter' })
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
 
-    expect(onSend).toHaveBeenCalledWith('你好')
+    expect(onSend).toHaveBeenCalledWith('你好', [])
   })
 
   // Enter also confirms a candidate in a Chinese IME. Sending there ships half a
@@ -103,6 +107,36 @@ describe('sending with the keyboard', () => {
   })
 })
 
+describe('attachments', () => {
+  it('uploads and sends a file without requiring text', async () => {
+    const file = new File(['brief'], 'brief.txt', { type: 'text/plain' })
+    const uploaded: UploadedFile = {
+      fid: 'file123',
+      filename: file.name,
+      contentType: file.type,
+      size: file.size,
+      status: 'ready',
+      url: '/api/web/files/file123',
+      createdAt: '2026-07-31T00:00:00.000Z',
+    }
+    const onUpload = vi.fn().mockResolvedValue(uploaded)
+    const { box, onSend } = draw({ onUpload })
+    fireEvent.change(box, { target: { value: '' } })
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('composer-file-input'), {
+        target: { files: [file] },
+      })
+    })
+
+    await waitFor(() => expect(screen.getByTestId('composer-send')).not.toBeDisabled())
+    await act(async () => fireEvent.click(screen.getByTestId('composer-send')))
+
+    expect(onUpload).toHaveBeenCalledWith(file)
+    expect(onSend).toHaveBeenCalledWith('', ['file123'])
+  })
+})
+
 describe('the arrow', () => {
   // The one saturated element in the panel should never be idle: disabled is
   // what keeps it grey until there is something to send.
@@ -125,7 +159,9 @@ describe('withdrawing queued input', () => {
     const onWithdraw = vi.fn(() => request)
     draw({
       onWithdraw,
-      pending: [{ id: 7, text: '补充说明', createdAt: '2026-07-29T00:01:00.000Z' }],
+      pending: [
+        { id: 7, text: '补充说明', attachments: [], createdAt: '2026-07-29T00:01:00.000Z' },
+      ],
     })
     const button = screen.getByTestId('pending-withdraw-7')
 

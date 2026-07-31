@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 import { createFileService } from './file.ts'
 import type { StorageService } from './storage.ts'
+import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 
 describe.skipIf(!databaseUrl)('file persistence and access', () => {
   let db: TestDb
@@ -74,5 +74,34 @@ describe.skipIf(!databaseUrl)('file persistence and access', () => {
       fid: file.fid,
     })
     expect(await db.app.$file.getForMember(outsider.id, file.fid)).toBeNull()
+
+    storedSize = 16
+    await db.app.$file.confirm(db.userId, file.fid)
+    expect(await db.app.$file.getReadyForWorkspace(db.workspaceId, file.fid)).toMatchObject({
+      fid: file.fid,
+    })
+    expect(await db.app.$file.getReadyForWorkspace(db.workspaceId + 1, file.fid)).toBeNull()
+  })
+
+  it('resolves ready attachments inside one app in request order', async () => {
+    const first = await create()
+    const second = await create()
+    storedSize = 16
+    await db.app.$file.confirm(db.userId, first.fid)
+    await db.app.$file.confirm(db.userId, second.fid)
+
+    const resolved = await db.app.$file.resolveAttachments(db.appId, [second.fid, first.fid])
+    expect(resolved).toMatchObject({
+      kind: 'ok',
+      attachments: [{ fid: second.fid }, { fid: first.fid }],
+    })
+
+    const pending = await create()
+    expect(await db.app.$file.resolveAttachments(db.appId, [pending.fid])).toEqual({
+      kind: 'not_ready',
+    })
+    expect(await db.app.$file.resolveAttachments(db.appId + 1, [first.fid])).toEqual({
+      kind: 'not_found',
+    })
   })
 })

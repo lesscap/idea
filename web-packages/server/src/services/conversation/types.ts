@@ -1,5 +1,5 @@
 import type { Prisma } from '@idea/core'
-import type { ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
+import type { Attachment, ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
 
 export type Conversation = {
   readonly id: Id
@@ -31,7 +31,12 @@ export type EventWindow = {
 }
 
 export type ConversationService = {
-  start: (input: { appId: Id; createdById: Id; text: string }) => Promise<Conversation>
+  start: (input: {
+    appId: Id
+    createdById: Id
+    text: string
+    attachments?: readonly Attachment[]
+  }) => Promise<Conversation>
   listForApp: (appId: Id, query: PageQuery) => Promise<Paged<Conversation>>
   getByCid: (appId: Id, cid: string) => Promise<Conversation | null>
   get: (id: Id) => Promise<Conversation | null>

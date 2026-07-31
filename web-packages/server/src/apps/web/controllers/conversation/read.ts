@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { notFound, sendOk } from '../../../../http.ts'
+import { failWith, notFound, sendOk } from '../../../../http.ts'
 import { parsePageQuery } from '../../../../paging.ts'
 import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
@@ -57,10 +57,20 @@ export const registerRead: Controller = app => {
     if (isResponse(currentApp)) return currentApp
     if (!currentApp) return notFound(c, 'app not found')
 
+    const input = c.req.valid('json')
+    const resolved = await app.$file.resolveAttachments(currentApp.id, input.attachmentFids)
+    if (resolved.kind === 'not_found') {
+      return failWith(c, 404, 'attachment_not_found', 'attachment not found')
+    }
+    if (resolved.kind === 'not_ready') {
+      return failWith(c, 409, 'attachment_not_ready', 'attachment upload is not ready')
+    }
+
     const conversation = await app.$conversation.start({
       appId: currentApp.id,
       createdById: session(c).userId,
-      text: c.req.valid('json').text,
+      text: input.text,
+      attachments: resolved.attachments,
     })
     app.$commands.broadcast({ type: 'work_available' })
     const { cid, title, lastActiveAt } = conversation

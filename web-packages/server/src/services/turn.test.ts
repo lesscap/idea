@@ -287,14 +287,22 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
   describe('materialize', () => {
     it('merges everything pending into one message and one turn', async () => {
       const c = await conversation()
-      for (const text of ['要报销审批', '要能传发票', '超 5000 要总监批'])
-        await db.app.$pendingInput.enqueue(c.id, { text })
+      const attachment = {
+        fid: 'invoice123',
+        filename: '发票.pdf',
+        contentType: 'application/pdf',
+        size: 16,
+      }
+      await db.app.$pendingInput.enqueue(c.id, { text: '要报销审批' })
+      await db.app.$pendingInput.enqueue(c.id, { text: '要能传发票', attachments: [attachment] })
+      await db.app.$pendingInput.enqueue(c.id, { text: '超 5000 要总监批' })
 
       const stored = await db.app.$pendingInput.materialize(c.id)
 
       expect(stored?.event).toMatchObject({
         type: 'user_message',
         text: '要报销审批\n\n要能传发票\n\n超 5000 要总监批',
+        attachments: [attachment],
       })
       expect(await db.prisma.turn.count({ where: { conversationId: c.id } })).toBe(1)
       expect(await db.app.$pendingInput.list(c.id)).toEqual([])

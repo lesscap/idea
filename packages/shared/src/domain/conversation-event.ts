@@ -67,8 +67,8 @@ export type AgentUsage = {
 }
 
 export type Attachment = {
-  id: Id
-  name: string
+  fid: string
+  filename: string
   contentType: string
   size: number
 }

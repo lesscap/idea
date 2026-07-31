@@ -1,6 +1,8 @@
-import { ChevronLeft } from 'lucide-react'
+import type { Attachment } from '@idea/shared'
+import { ChevronLeft, Paperclip } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
+import { uploadAppFile } from '../../lib/file-upload'
 import { Button, Markdown } from '../../ui'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
 import { ActivityBlock, Step } from './activity-group'
@@ -20,7 +22,13 @@ import { useConversation } from './use-conversation'
 // trading lines; this is someone dictating what they need while the other side
 // works it out. A continuous left-aligned record fits that, and lets a long
 // requirement use the full width instead of being squeezed into 85% of it.
-const Said = ({ text }: { text: string }) => {
+const Said = ({
+  text,
+  attachments = [],
+}: {
+  text: string
+  attachments?: readonly Attachment[]
+}) => {
   const __ = useLocale()
 
   // Split on blank lines: several messages typed while a turn was running are
@@ -45,6 +53,26 @@ const Said = ({ text }: { text: string }) => {
             {paragraph}
           </p>
         ))}
+        {attachments.length > 0 && (
+          <div
+            className={
+              paragraphs.length > 0 ? 'mt-2 flex flex-wrap gap-1.5' : 'flex flex-wrap gap-1.5'
+            }
+          >
+            {attachments.map(file => (
+              <a
+                key={file.fid}
+                className="inline-flex min-w-0 max-w-full items-center gap-1 rounded border border-border bg-background px-2 py-1 text-xs hover:bg-muted"
+                href={`/api/web/files/${encodeURIComponent(file.fid)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Paperclip className="size-3 shrink-0 text-muted-foreground" />
+                <span className="truncate">{file.filename}</span>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -53,7 +81,7 @@ const Said = ({ text }: { text: string }) => {
 const Drawn = ({ item }: { item: StreamItem }) => {
   if (isActivityGroup(item)) return <ActivityBlock group={item} />
 
-  if (item.kind === 'them') return <Said text={item.text} />
+  if (item.kind === 'them') return <Said text={item.text} attachments={item.attachments} />
 
   // The answer is what the transcript is for: a little larger and darker than
   // its surroundings, and capped near 70 characters because a line wider than
@@ -209,6 +237,7 @@ export const ConversationPanel = ({
             key={conversationId}
             pending={pending}
             onSend={send}
+            onUpload={file => uploadAppFile(slug, file)}
             onWithdraw={withdraw}
             exclusiveSubmit={conversationId === 'new'}
           />

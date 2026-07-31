@@ -1,3 +1,4 @@
+import type { Attachment } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, post } from '../../lib/request'
 import { isWorking, toBubbles, type WireStored } from './transcript'
@@ -18,7 +19,12 @@ import { isWorking, toBubbles, type WireStored } from './transcript'
 // there. The server widens a window that would otherwise hold no turn boundary,
 // so `isWorking` can still answer from what arrives — see its windowed events().
 
-export type PendingInput = { id: number; text: string; createdAt: string }
+export type PendingInput = {
+  id: number
+  text: string
+  attachments: readonly Attachment[]
+  createdAt: string
+}
 export type Status = 'connecting' | 'open' | 'error' | 'closed'
 
 // How much transcript to open with, counted in stored events.
@@ -219,14 +225,14 @@ export const useConversation = (
       setPending(page.pending)
   }
 
-  const send = async (text: string) => {
+  const send = async (text: string, attachmentFids: readonly string[]) => {
     if (conversationId === 'new') {
-      const created = await post<{ cid: string }>(base, { text })
+      const created = await post<{ cid: string }>(base, { text, attachmentFids })
       onConversationCreated(created.cid)
       return
     }
     if (persistedId === null) return
-    await post(`${base}/${persistedId}/messages`, { text })
+    await post(`${base}/${persistedId}/messages`, { text, attachmentFids })
     await refreshPending()
   }
 

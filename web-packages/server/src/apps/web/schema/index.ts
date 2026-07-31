@@ -91,13 +91,17 @@ export const UpdateAppBody = z
   // An empty PATCH is a caller mistake, not a no-op worth pretending succeeded.
   .refine(v => Object.keys(v).length > 0, { message: 'no fields to update' })
 
-export const StartConversationBody = z.object({
-  text: z.string().trim().min(1).max(20_000),
-})
+const ConversationMessageBody = z
+  .object({
+    text: z.string().trim().max(20_000).default(''),
+    attachmentFids: z.array(z.string().trim().min(1).max(64)).max(10).default([]),
+  })
+  .refine(({ text, attachmentFids }) => text.length > 0 || attachmentFids.length > 0, {
+    message: 'a message needs text or an attachment',
+  })
 
-export const SendMessageBody = z.object({
-  text: z.string().trim().min(1).max(20_000),
-})
+export const StartConversationBody = ConversationMessageBody
+export const SendMessageBody = ConversationMessageBody
 
 export const CreateFileBody = z.object({
   filename: z.string().trim().min(1).max(255),

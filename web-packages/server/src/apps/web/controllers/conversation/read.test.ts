@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CommandBus } from '../../../../command-bus.ts'
 import type { AppRecord, AppService } from '../../../../services/app.ts'
 import type { Conversation, ConversationService } from '../../../../services/conversation/index.ts'
+import type { FileService } from '../../../../services/file.ts'
 import type { WorkspaceService } from '../../../../services/workspace.ts'
 import { json, mountController, okData } from '../../test-support.ts'
 import { ConversationsController } from './index.ts'
@@ -34,7 +35,12 @@ const currentApp: AppRecord = {
   updatedAt: '2026-07-28T00:00:00.000Z',
 }
 
-const mount = (conversation: Partial<ConversationService>) => {
+const mount = (
+  conversation: Partial<ConversationService>,
+  file: Partial<FileService> = {
+    resolveAttachments: async () => ({ kind: 'ok', attachments: [] }),
+  },
+) => {
   const broadcast = vi.fn()
   return {
     app: mountController(
@@ -42,6 +48,7 @@ const mount = (conversation: Partial<ConversationService>) => {
       {
         $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
         $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $file: stub<FileService>(file),
         $conversation: stub<ConversationService>(conversation),
         $commands: stub<CommandBus>({ broadcast }),
       },
@@ -72,8 +79,35 @@ describe('starting a conversation', () => {
       appId: 5,
       createdById: 7,
       text: '第一条消息',
+      attachments: [],
     })
     expect(broadcast).toHaveBeenCalledWith({ type: 'work_available' })
+  })
+
+  it('starts from a ready attachment without requiring text', async () => {
+    const start = vi.fn(async () => created)
+    const attachment = {
+      fid: 'file123',
+      filename: 'brief.docx',
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      size: 16,
+    }
+    const resolveAttachments = vi.fn().mockResolvedValue({ kind: 'ok', attachments: [attachment] })
+    const { app } = mount({ start }, { resolveAttachments })
+
+    const response = await app.request(
+      '/leave-request/conversations',
+      json({ attachmentFids: [attachment.fid] }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(resolveAttachments).toHaveBeenCalledWith(currentApp.id, [attachment.fid])
+    expect(start).toHaveBeenCalledWith({
+      appId: currentApp.id,
+      createdById: 7,
+      text: '',
+      attachments: [attachment],
+    })
   })
 
   it('rejects an empty first message before creating anything', async () => {
