@@ -26,6 +26,13 @@ enum AppStatus {
   @@map("app_status")
 }
 
+enum FileStatus {
+  pending
+  ready
+
+  @@map("file_status")
+}
+
 enum TurnStatus {
   queued
   running
@@ -63,6 +70,7 @@ model User {
   invitesAccepted Invite[]        @relation("AcceptedBy")
   appsCreated     App[]
   conversations   Conversation[]
+  filesUploaded   File[]
   enrolments      WorkerEnrolment[]
 
   @@map("users")
@@ -163,11 +171,34 @@ model App {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy     User           @relation(fields: [createdById], references: [id])
   conversations Conversation[]
+  files         File[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, name])
   @@index([workspaceId])
   @@map("apps")
+}
+
+// A private object uploaded for one app. The workspace boundary is reached
+// through App rather than copied onto this row.
+model File {
+  id           Int        @id @default(autoincrement())
+  fid          String     @unique
+  appId        Int
+  uploadedById Int
+  filename     String     @db.VarChar(255)
+  contentType  String     @db.VarChar(128)
+  size         Int
+  storageKey   String     @unique @db.VarChar(512)
+  status       FileStatus @default(pending)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  app        App  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([appId, createdAt])
+  @@map("files")
 }
 
 // A conversation with the agent. It belongs to one app; associations with

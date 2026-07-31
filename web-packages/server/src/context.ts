@@ -5,9 +5,11 @@ import { createEventBus } from './event-bus.ts'
 import { createAppService } from './services/app.ts'
 import { createAuthService } from './services/auth.ts'
 import { createConversationService } from './services/conversation/index.ts'
+import { createFileService } from './services/file.ts'
 import { createHealthService } from './services/health.ts'
 import { createPendingInputService } from './services/pending-input.ts'
 import { createProviderService } from './services/provider.ts'
+import { createStorageService } from './services/storage.ts'
 import { createTurnService } from './services/turn.ts'
 import { createUserService } from './services/user.ts'
 import { createWorkerService } from './services/worker.ts'
@@ -24,14 +26,16 @@ import type { ServiceApplication } from './types.ts'
 export const createContext = (config: Config): [ServiceApplication, Dispose] => {
   const scope = createScope()
   const prisma = scope.use(createPrisma(config.databaseUrl))
+  const storage = config.oss ? createStorageService(config.oss) : null
 
-  const app = { $config: config, $prisma: prisma } as ServiceApplication
+  const app = { $config: config, $prisma: prisma, $storage: storage } as ServiceApplication
   Object.assign(app, {
     $health: createHealthService(app),
     $user: createUserService(app),
     $auth: createAuthService(app),
     $workspace: createWorkspaceService(app),
     $app: createAppService(app),
+    $file: createFileService(app),
     $conversation: createConversationService(app),
     $pendingInput: createPendingInputService(app),
     $provider: createProviderService(app),

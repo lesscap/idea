@@ -6,9 +6,11 @@ import type { EventBus } from './event-bus.ts'
 import type { AppService } from './services/app.ts'
 import type { AuthService } from './services/auth.ts'
 import type { ConversationService } from './services/conversation/index.ts'
+import type { FileService } from './services/file.ts'
 import type { HealthService } from './services/health.ts'
 import type { PendingInputService } from './services/pending-input.ts'
 import type { ProviderService } from './services/provider.ts'
+import type { StorageService } from './services/storage.ts'
 import type { TurnService } from './services/turn.ts'
 import type { UserService } from './services/user.ts'
 import type { WorkerService } from './services/worker.ts'
@@ -29,6 +31,8 @@ export type ServiceApplication = {
   readonly $auth: AuthService
   readonly $workspace: WorkspaceService
   readonly $app: AppService
+  readonly $storage: StorageService | null
+  readonly $file: FileService
   readonly $conversation: ConversationService
   readonly $pendingInput: PendingInputService
   readonly $provider: ProviderService
