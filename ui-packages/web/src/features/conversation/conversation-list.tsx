@@ -126,28 +126,31 @@ export const ConversationList = ({
           <button
             key={item.cid}
             type="button"
-            className={`w-full rounded-md px-2 py-1.5 text-left ${
+            className={`flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
               conversationId === item.cid
-                ? 'bg-background font-medium'
-                : 'text-muted-foreground hover:bg-background/60'
+                ? 'bg-muted font-medium text-foreground'
+                : 'text-foreground/80 hover:bg-muted/60'
             }`}
             data-testid={`conversation-${item.cid}`}
             data-active={conversationId === item.cid}
             onClick={() => onSelect(item.cid)}
           >
-            <span className="block truncate text-sm">
+            <span className="min-w-0 flex-1 truncate text-sm">
               {item.title ?? `${__('shell.newConversation')} #${item.cid.slice(0, 6)}`}
             </span>
-            <span className="block text-xs text-muted-foreground">
+            <time
+              className="shrink-0 text-muted-foreground text-xs tabular-nums"
+              dateTime={item.lastActiveAt}
+            >
               {formatActivity(item.lastActiveAt)}
-            </span>
+            </time>
           </button>
         ))}
 
         {hasMore && (
           <button
             type="button"
-            className="w-full rounded-md px-2 py-1.5 text-left text-muted-foreground text-xs hover:bg-background/60"
+            className="w-full rounded-md px-2 py-2 text-center text-muted-foreground text-xs transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             data-testid="conversation-load-more"
             onClick={() => void fetchPage(info.page + 1)}
           >
