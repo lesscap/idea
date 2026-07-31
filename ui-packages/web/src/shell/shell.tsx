@@ -146,6 +146,7 @@ export const Shell = () => {
       >
         <Panel
           id="conversation"
+          hidden={conversationHidden}
           defaultSize="340px"
           minSize="260px"
           collapsible
