@@ -30,10 +30,10 @@ const Said = ({ text }: { text: string }) => {
 
   return (
     <div
-      className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
       data-testid="bubble-them"
     >
-      <span className="mb-1 block select-none font-medium text-muted-foreground text-xs">
+      <span className="select-none font-medium text-muted-foreground text-xs leading-relaxed">
         {__('transcript.you')}
       </span>
       <div className="min-w-0">
