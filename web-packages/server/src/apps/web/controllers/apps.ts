@@ -5,7 +5,7 @@ import { parsePageQuery } from '../../../paging.ts'
 import type { AppRecord } from '../../../services/app.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
-import { isResponse, requireCurrentWorkspace } from '../middleware/workspace.ts'
+import { isResponse, requireAdmin, requireCurrentWorkspace } from '../middleware/workspace.ts'
 import { CreateAppBody, UpdateAppBody } from '../schema/index.ts'
 
 const toPublicApp = ({
@@ -22,9 +22,9 @@ const toPublicApp = ({
 // request by requireCurrentWorkspace — the session records a selection, not a
 // grant.
 //
-// No role checks: the workspace is the trust boundary, and everyone inside it is
-// a colleague. Adding a second permission layer on App would be complexity with
-// no requirement behind it.
+// Members can create and edit apps. Permanent deletion is narrower because it
+// also removes every conversation in the app, so that operation requires an
+// administrator below.
 export const AppsController: Controller = app => {
   app.get('/', async c => {
     const access = await requireCurrentWorkspace(app, c)
@@ -84,5 +84,19 @@ export const AppsController: Controller = app => {
     return updated.kind === 'ok'
       ? sendOk(c, toPublicApp(updated.app))
       : notFound(c, 'app not found')
+  })
+
+  app.delete('/:slug', async c => {
+    const access = await requireCurrentWorkspace(app, c)
+    if (isResponse(access)) return access
+    const denied = requireAdmin(c, access)
+    if (denied) return denied
+
+    const slug = c.req.param('slug')
+    const removed = await app.$app.remove(access.workspaceId, slug)
+    if (removed.kind === 'busy') {
+      return failWith(c, 409, 'app_busy', 'app has queued or running work')
+    }
+    return removed.kind === 'ok' ? sendOk(c, { removed: slug }) : notFound(c, 'app not found')
   })
 }

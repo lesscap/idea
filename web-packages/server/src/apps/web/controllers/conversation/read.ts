@@ -1,12 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
-import { notFound, sendOk } from '../../../../http.ts'
+import { failWith, notFound, sendOk } from '../../../../http.ts'
 import { parsePageQuery } from '../../../../paging.ts'
 import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
 import { StartConversationBody } from '../../schema/index.ts'
 import { toWireEvent } from '../../wire.ts'
-import { isResponse, scopedApp, scopedConversation } from './scoped.ts'
+import { isResponse, scopedApp } from './scoped.ts'
 
 // Beyond this a transcript read stops being a window. Nothing in the interface
 // asks for more; a caller that does gets the ceiling rather than an error.
@@ -57,12 +57,28 @@ export const registerRead: Controller = app => {
     if (isResponse(currentApp)) return currentApp
     if (!currentApp) return notFound(c, 'app not found')
 
+    const input = c.req.valid('json')
+    const worker = await app.$worker.getForWorkspace(currentApp.workspaceId, input.workerId)
+    if (!worker) return failWith(c, 404, 'worker_not_found', 'worker not found')
+    if (!worker.online) return failWith(c, 409, 'worker_offline', 'worker is offline')
+
+    const resolved = await app.$file.resolveAttachments(currentApp.id, input.attachmentFids)
+    if (resolved.kind === 'not_found') {
+      return failWith(c, 404, 'attachment_not_found', 'attachment not found')
+    }
+    if (resolved.kind === 'not_ready') {
+      return failWith(c, 409, 'attachment_not_ready', 'attachment upload is not ready')
+    }
+
     const conversation = await app.$conversation.start({
       appId: currentApp.id,
       createdById: session(c).userId,
-      text: c.req.valid('json').text,
+      providerId: worker.providerId,
+      workerId: worker.id,
+      text: input.text,
+      attachments: resolved.attachments,
     })
-    app.$commands.broadcast({ type: 'work_available' })
+    app.$commands.publish(worker.id, { type: 'work_available' })
     const { cid, title, lastActiveAt } = conversation
     return sendOk(c, { cid, title, lastActiveAt })
   })
@@ -72,11 +88,20 @@ export const registerRead: Controller = app => {
   // `pending`, because what has been typed but not sent is part of what the
   // interface has to show and is deliberately not in the log.
   app.get('/:cid/events', async c => {
-    const found = await scopedConversation(app, c, c.req.param('cid'))
-    if (isResponse(found)) return found
+    const currentApp = await scopedApp(app, c)
+    if (isResponse(currentApp)) return currentApp
+    if (!currentApp) return notFound(c, 'app not found')
+    const found = await app.$conversation.getByCid(currentApp.id, c.req.param('cid'))
     if (!found) return notFound(c, 'conversation not found')
 
-    const events = await app.$conversation.events(found.id, windowFrom(c.req.query()))
+    const [events, pending, execution, worker] = await Promise.all([
+      app.$conversation.events(found.id, windowFrom(c.req.query())),
+      app.$pendingInput.list(found.id),
+      app.$turn.execution(found.id),
+      found.workerId === null
+        ? Promise.resolve(null)
+        : app.$worker.getForWorkspace(currentApp.workspaceId, found.workerId),
+    ])
 
     return sendOk(c, {
       items: events.map(stored => ({
@@ -85,7 +110,19 @@ export const registerRead: Controller = app => {
         createdAt: stored.createdAt,
         event: toWireEvent(stored.event),
       })),
-      pending: await app.$pendingInput.list(found.id),
+      pending,
+      execution,
+      assignment: {
+        providerId: found.providerId,
+        worker: worker
+          ? {
+              id: worker.id,
+              name: worker.name,
+              hostname: worker.hostname,
+              online: worker.online,
+            }
+          : null,
+      },
     })
   })
 }

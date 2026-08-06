@@ -92,6 +92,7 @@ const toStored = (row: EventRow): StoredEvent => ({
 // compile — but a newly added turn-closing event has to be listed in both.
 const TURN_BOUNDARIES: readonly ConversationEventType[] = [
   'user_message',
+  'turn.queued',
   'turn.started',
   'turn.completed',
   'turn.failed',

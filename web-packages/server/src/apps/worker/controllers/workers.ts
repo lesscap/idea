@@ -33,6 +33,9 @@ export const WorkersController: Controller = app => {
         `the name "${result.existing.name}" is already used by ${result.existing.hostname}`,
       )
 
+    if (result.kind === 'provider_mismatch')
+      return conflict(c, `worker ${result.existing.name} is already registered to another provider`)
+
     return sendOk(c, {
       worker: result.worker,
       apiToken: result.apiToken,

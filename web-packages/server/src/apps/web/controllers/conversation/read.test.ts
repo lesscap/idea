@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CommandBus } from '../../../../command-bus.ts'
 import type { AppRecord, AppService } from '../../../../services/app.ts'
 import type { Conversation, ConversationService } from '../../../../services/conversation/index.ts'
+import type { FileService } from '../../../../services/file.ts'
+import type { PendingInputService } from '../../../../services/pending-input.ts'
+import type { TurnService } from '../../../../services/turn.ts'
+import type { WorkerOption, WorkerService } from '../../../../services/worker.ts'
 import type { WorkspaceService } from '../../../../services/workspace.ts'
 import { json, mountController, okData } from '../../test-support.ts'
 import { ConversationsController } from './index.ts'
@@ -16,10 +20,23 @@ const created: Conversation = {
   id: 42,
   cid: 'abc123def456',
   appId: 5,
-  agentKind: null,
+  providerId: 3,
+  workerId: 7,
   providerSessionId: null,
   title: null,
   lastActiveAt: '2026-07-28T00:00:00.000Z',
+}
+
+const worker: WorkerOption = {
+  id: 7,
+  workspaceId: 11,
+  providerId: 3,
+  machineId: 'machine-7',
+  name: 'mac-mini',
+  hostname: 'mini.local',
+  online: true,
+  providerLabel: 'GLM',
+  providerKind: 'claude',
 }
 
 const currentApp: AppRecord = {
@@ -34,8 +51,14 @@ const currentApp: AppRecord = {
   updatedAt: '2026-07-28T00:00:00.000Z',
 }
 
-const mount = (conversation: Partial<ConversationService>) => {
-  const broadcast = vi.fn()
+const mount = (
+  conversation: Partial<ConversationService>,
+  file: Partial<FileService> = {
+    resolveAttachments: async () => ({ kind: 'ok', attachments: [] }),
+  },
+  pendingInput: Partial<PendingInputService> = { list: async () => [] },
+) => {
+  const publish = vi.fn()
   return {
     app: mountController(
       ConversationsController,
@@ -43,23 +66,27 @@ const mount = (conversation: Partial<ConversationService>) => {
         $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
         $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
         $conversation: stub<ConversationService>(conversation),
-        $commands: stub<CommandBus>({ broadcast }),
+        $file: stub<FileService>(file),
+        $pendingInput: stub<PendingInputService>(pendingInput),
+        $turn: stub<TurnService>({ execution: async () => ({ state: 'idle' }) }),
+        $worker: stub<WorkerService>({ getForWorkspace: async () => worker }),
+        $commands: stub<CommandBus>({ publish }),
       },
       { userId: 7, workspaceId: 11 },
       { guarded: true, prefix: '/:slug/conversations' },
     ),
-    broadcast,
+    publish,
   }
 }
 
 describe('starting a conversation', () => {
   it('passes the first message into creation and announces the queued work', async () => {
     const start = vi.fn(async () => created)
-    const { app, broadcast } = mount({ start })
+    const { app, publish } = mount({ start })
 
     const response = await app.request(
       '/leave-request/conversations',
-      json({ text: '  第一条消息  ' }),
+      json({ text: '  第一条消息  ', workerId: worker.id }),
     )
 
     expect(response.status).toBe(200)
@@ -71,20 +98,129 @@ describe('starting a conversation', () => {
     expect(start).toHaveBeenCalledWith({
       appId: 5,
       createdById: 7,
+      providerId: worker.providerId,
+      workerId: worker.id,
       text: '第一条消息',
+      attachments: [],
     })
-    expect(broadcast).toHaveBeenCalledWith({ type: 'work_available' })
+    expect(publish).toHaveBeenCalledWith(worker.id, { type: 'work_available' })
+  })
+
+  it('starts from a ready attachment without requiring text', async () => {
+    const start = vi.fn(async () => created)
+    const attachment = {
+      fid: 'file123',
+      filename: 'brief.docx',
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      size: 16,
+    }
+    const resolveAttachments = vi.fn().mockResolvedValue({ kind: 'ok', attachments: [attachment] })
+    const { app } = mount({ start }, { resolveAttachments })
+
+    const response = await app.request(
+      '/leave-request/conversations',
+      json({ attachmentFids: [attachment.fid], workerId: worker.id }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(resolveAttachments).toHaveBeenCalledWith(currentApp.id, [attachment.fid])
+    expect(start).toHaveBeenCalledWith({
+      appId: currentApp.id,
+      createdById: 7,
+      providerId: worker.providerId,
+      workerId: worker.id,
+      text: '',
+      attachments: [attachment],
+    })
   })
 
   it('rejects an empty first message before creating anything', async () => {
     const start = vi.fn()
-    const { app, broadcast } = mount({ start })
+    const { app, publish } = mount({ start })
 
     const response = await app.request('/leave-request/conversations', json({ text: '   ' }))
 
     expect(response.status).toBe(400)
     expect(start).not.toHaveBeenCalled()
-    expect(broadcast).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+  })
+})
+
+describe('sending an attachment', () => {
+  it('queues only the trusted descriptor resolved by the server', async () => {
+    const attachment = {
+      fid: 'file123',
+      filename: 'brief.pdf',
+      contentType: 'application/pdf',
+      size: 16,
+    }
+    const resolveAttachments = vi.fn().mockResolvedValue({ kind: 'ok', attachments: [attachment] })
+    const enqueue = vi.fn().mockResolvedValue({
+      id: 9,
+      text: '',
+      attachments: [attachment],
+      createdAt: '2026-08-05T00:00:00.000Z',
+    })
+    const { app } = mount(
+      { getByCid: async () => created },
+      { resolveAttachments },
+      { enqueue, materialize: async () => null, list: async () => [] },
+    )
+
+    const response = await app.request(
+      '/leave-request/conversations/abc123def456/messages',
+      json({ attachmentFids: [attachment.fid] }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(resolveAttachments).toHaveBeenCalledWith(created.appId, [attachment.fid])
+    expect(enqueue).toHaveBeenCalledWith(created.id, { text: '', attachments: [attachment] })
+  })
+})
+
+describe('changing the conversation worker', () => {
+  it('assigns an online worker with the same provider and wakes it', async () => {
+    const assignWorker = vi.fn(async () => true)
+    const { app, publish } = mount({ getByCid: async () => created, assignWorker })
+
+    const response = await app.request('/leave-request/conversations/abc123def456/worker', {
+      ...json({ workerId: worker.id }),
+      method: 'PATCH',
+    })
+
+    expect(response.status).toBe(200)
+    expect(assignWorker).not.toHaveBeenCalled() // already assigned: idempotent
+    expect(publish).toHaveBeenCalledWith(worker.id, { type: 'work_available' })
+  })
+
+  it('rejects reassignment while a turn is running', async () => {
+    const replacement = { ...worker, id: 8, machineId: 'machine-8', name: 'replacement' }
+    const assignWorker = vi.fn(async () => false)
+    const publish = vi.fn()
+    const app = mountController(
+      ConversationsController,
+      {
+        $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
+        $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $conversation: stub<ConversationService>({
+          getByCid: async () => created,
+          assignWorker,
+        }),
+        $worker: stub<WorkerService>({ getForWorkspace: async () => replacement }),
+        $commands: stub<CommandBus>({ publish }),
+      },
+      { userId: 7, workspaceId: 11 },
+      { guarded: true, prefix: '/:slug/conversations' },
+    )
+
+    const response = await app.request('/leave-request/conversations/abc123def456/worker', {
+      ...json({ workerId: replacement.id }),
+      method: 'PATCH',
+    })
+
+    expect(response.status).toBe(409)
+    expect(assignWorker).toHaveBeenCalledWith(created.id, replacement.id)
+    expect(publish).not.toHaveBeenCalled()
   })
 })
 
@@ -97,5 +233,38 @@ describe('conversation app scoping', () => {
 
     expect(response.status).toBe(404)
     expect(getByCid).toHaveBeenCalledWith(currentApp.id, 'other-app')
+  })
+
+  it('returns live execution state beside the transcript window', async () => {
+    const app = mountController(
+      ConversationsController,
+      {
+        $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
+        $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $conversation: stub<ConversationService>({
+          getByCid: async () => created,
+          events: async () => [],
+        }),
+        $pendingInput: stub<PendingInputService>({ list: async () => [] }),
+        $turn: stub<TurnService>({
+          execution: async () => ({ state: 'queued' }),
+        }),
+        $worker: stub<WorkerService>({ getForWorkspace: async () => worker }),
+      },
+      { userId: 7, workspaceId: 11 },
+      { guarded: true, prefix: '/:slug/conversations' },
+    )
+
+    const response = await app.request('/leave-request/conversations/abc123def456/events')
+
+    expect(await okData(response)).toEqual({
+      items: [],
+      pending: [],
+      execution: { state: 'queued' },
+      assignment: {
+        providerId: created.providerId,
+        worker: { id: 7, name: 'mac-mini', hostname: 'mini.local', online: true },
+      },
+    })
   })
 })

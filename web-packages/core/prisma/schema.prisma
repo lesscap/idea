@@ -208,18 +208,12 @@ model Conversation {
   cid         String @unique
   appId       Int
   createdById Int
-  // Null until the first turn is claimed, then stamped with whichever worker
-  // took it — and fixed from then on. Nobody has to choose a backend in advance;
-  // the deployment decides. Setting it up front is still allowed, and means "run
-  // this one on that backend".
-  //
-  // Fixed afterwards because resume depends on it: a conversation that changed
-  // backends mid-way could not pick up where it left off, and its event
-  // vocabulary would change under the interface.
-  providerId  Int?
-  // A copy of provider.kind taken at the same moment, so editing the provider
-  // row later cannot retroactively change how old turns are read.
-  agentKind   String?
+  // The backend is stable for the lifetime of the conversation. The current
+  // worker may move, but only to another worker serving this same provider.
+  providerId  Int
+  // Current execution machine. Null only after that worker is deleted; the
+  // conversation remains durable and can be assigned to a replacement.
+  workerId    Int?
   // The provider's own session handle, used to resume rather than replay. Null
   // until the first turn has run.
   providerSessionId String?
@@ -234,7 +228,8 @@ model Conversation {
 
   app       App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   createdBy User      @relation(fields: [createdById], references: [id])
-  provider  Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  provider  Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  worker    Worker?   @relation(fields: [workerId], references: [id], onDelete: SetNull)
   events    ConversationEvent[]
   pending   PendingInput[]
   turns     Turn[]
@@ -290,16 +285,14 @@ model PendingInput {
 }
 
 // One unit of agent work. Exists as a row rather than being derived from the
-// transcript because work is routed to whichever worker is free: with a pool,
-// two of them would otherwise pick up the same message. Binding a conversation
-// to one worker would make derivation safe, at the cost of the routing.
+// transcript because status, retries and leases are execution state rather than
+// conversation history. The conversation owns the current worker assignment.
 model Turn {
   id                Int        @id @default(autoincrement())
   conversationId    Int
   // Points at the exact transcript event this turn is answering.
   userEventSequence Int
   status            TurnStatus @default(queued)
-  workerId          Int?
   // Holds the conversation id while running, and null otherwise. The unique
   // index is the whole mutual-exclusion mechanism: a second worker claiming a
   // turn for a conversation that already has one running collides here and backs
@@ -317,9 +310,6 @@ model Turn {
   updatedAt         DateTime   @updatedAt
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  // The turn outlives the worker that was running it — that is precisely the
-  // case the reaper exists to recover.
-  worker       Worker?      @relation(fields: [workerId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, status])
   @@index([status, leaseUntil])
@@ -367,7 +357,7 @@ model Worker {
   // Restrict: a provider still being served by a worker should not be deletable
   // out from under it.
   provider  Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  turns     Turn[]
+  conversations Conversation[]
 
   @@unique([workspaceId, machineId])
   @@unique([workspaceId, name])

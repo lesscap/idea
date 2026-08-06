@@ -1,13 +1,10 @@
-import type { Id } from '@idea/shared'
+import type { ConversationExecution, Id } from '@idea/shared'
 import type { Service } from '../types.ts'
 
 // One unit of agent work, and the rules for who may run it.
 //
-// Work is routed to whichever worker is free, so two of them can reach for the
-// same conversation at the same moment. The `runningKey` unique index settles
-// that: a claim writes the conversation id there, and a second claim for a
-// conversation that already has one running collides and backs off. The database
-// is the lock, which is why there is no lock service here.
+// A conversation names its current worker. The `runningKey` unique index still
+// serialises turns within that conversation when a worker has several slots.
 //
 // A claim is a LEASE, not a handover. A worker that dies mid-turn cannot hand
 // anything back, so the lease expires and the reaper returns the turn. Renewal
@@ -29,14 +26,14 @@ export type Claimant = {
   readonly id: Id
   readonly workspaceId: Id
   readonly providerId: Id
-  readonly agentKind: string
 }
 
 export type TurnService = {
   // Null when there is nothing to do, or nothing this worker may take right now.
   claimNext: (worker: Claimant) => Promise<ClaimedTurn | null>
+  execution: (conversationId: Id) => Promise<ConversationExecution>
   renewLease: (turnId: Id, workerId: Id) => Promise<boolean>
-  finish: (turnId: Id, outcome: TurnOutcome) => Promise<boolean>
+  finish: (turnId: Id, workerId: Id, outcome: TurnOutcome) => Promise<boolean>
   requestAbort: (turnId: Id) => Promise<boolean>
   isAbortRequested: (turnId: Id) => Promise<boolean>
   // Returns how many turns were returned to the queue and how many gave up.
@@ -60,6 +57,7 @@ const CANDIDATES = 20
 // Past this, a turn has failed the same way repeatedly and retrying is just a
 // slower way to fail.
 const MAX_ATTEMPTS = 3
+const RELEASE_RACE = 'TURN_RELEASE_RACE'
 
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
@@ -67,16 +65,26 @@ const isUniqueViolation = (error: unknown): boolean =>
 export const createTurnService: Service<TurnService> = app => {
   const leaseUntil = () => new Date(Date.now() + LEASE_MS)
 
-  const tryClaim = async (candidate: ClaimedTurn, workerId: Id): Promise<ClaimedTurn | null> => {
+  const tryClaim = async (
+    candidate: ClaimedTurn,
+    worker: Claimant,
+  ): Promise<ClaimedTurn | null> => {
     try {
       const claimed = await app.$prisma.turn.updateMany({
         // `status: 'queued'` in the filter is the second half of the guard: it
         // makes the claim conditional on the row still being unclaimed, so a
         // worker that read it a moment ago cannot overwrite a fresher claim.
-        where: { id: candidate.id, status: 'queued' },
+        where: {
+          id: candidate.id,
+          status: 'queued',
+          conversation: {
+            workerId: worker.id,
+            providerId: worker.providerId,
+            app: { workspaceId: worker.workspaceId },
+          },
+        },
         data: {
           status: 'running',
-          workerId,
           runningKey: String(candidate.conversationId),
           leaseUntil: leaseUntil(),
           startedAt: new Date(),
@@ -96,23 +104,16 @@ export const createTurnService: Service<TurnService> = app => {
 
   return {
     claimNext: async worker => {
-      // Two filters, one query, doing two different jobs.
-      //
-      // The workspace filter is a security boundary: even if the worker's own
-      // confinement were defeated, the server still will not hand it another
-      // tenant's work.
-      //
-      // The provider filter keeps a conversation on one backend. A conversation
-      // that has not run yet takes whichever worker reaches it — nobody has to
-      // choose a model in advance. Once one has run, only that backend may
-      // continue it: resume depends on it, and the event vocabulary would
-      // otherwise change under the interface mid-conversation.
+      // Workspace and provider remain explicit security/integrity checks even
+      // though the worker id already names one row. Assignment alone must never
+      // become a shortcut around tenant confinement.
       const candidates = await app.$prisma.turn.findMany({
         where: {
           status: 'queued',
           conversation: {
+            workerId: worker.id,
+            providerId: worker.providerId,
             app: { workspaceId: worker.workspaceId },
-            OR: [{ providerId: null }, { providerId: worker.providerId }],
           },
         },
         orderBy: { id: 'asc' },
@@ -123,37 +124,35 @@ export const createTurnService: Service<TurnService> = app => {
       // Sequential and short-circuiting on purpose: each attempt is a write, and
       // the first success is the answer.
       for (const candidate of candidates) {
-        const claimed = await tryClaim(candidate, worker.id)
+        const claimed = await tryClaim(candidate, worker)
         if (!claimed) continue
-
-        // Stamp on the way out, and only from null: two workers reaching an
-        // unclaimed conversation at once both pass the filter above, and the
-        // first one to get here decides. `providerId: null` in the condition is
-        // what makes the second a no-op instead of a silent reassignment.
-        await app.$prisma.conversation.updateMany({
-          where: { id: claimed.conversationId, providerId: null },
-          data: { providerId: worker.providerId, agentKind: worker.agentKind },
-        })
         return claimed
       }
       return null
     },
 
-    // Guarded by workerId, and that guard is load-bearing. Once a lease expires
-    // and the reaper hands the turn to someone else, the original worker may
-    // still be alive and still heartbeating; without this it would extend a
-    // lease it no longer holds and two workers would run the same turn.
+    execution: async conversationId => {
+      const open = await app.$prisma.turn.findMany({
+        where: { conversationId, status: { in: ['queued', 'running'] } },
+        select: { status: true },
+      })
+      if (open.some(turn => turn.status === 'running')) return { state: 'running' }
+      return open.some(turn => turn.status === 'queued') ? { state: 'queued' } : { state: 'idle' }
+    },
+
+    // The relation guard is load-bearing. After a lease is requeued or a
+    // conversation moves, a stale worker must not renew the old execution.
     renewLease: async (turnId, workerId) => {
       const renewed = await app.$prisma.turn.updateMany({
-        where: { id: turnId, workerId, status: 'running' },
+        where: { id: turnId, status: 'running', conversation: { workerId } },
         data: { leaseUntil: leaseUntil() },
       })
       return renewed.count === 1
     },
 
-    finish: async (turnId, outcome) => {
+    finish: async (turnId, workerId, outcome) => {
       const finished = await app.$prisma.turn.updateMany({
-        where: { id: turnId, status: 'running' },
+        where: { id: turnId, status: 'running', conversation: { workerId } },
         // Clearing runningKey releases the conversation. Doing it in the same
         // write as the status means there is no window where the turn is over
         // but the conversation still looks busy.
@@ -210,7 +209,7 @@ export const createTurnService: Service<TurnService> = app => {
               where: { id: { in: retry.map(t => t.id) }, status: 'running' },
               // Back to queued with runningKey cleared, so the conversation is
               // free for whoever picks it up next.
-              data: { status: 'queued', workerId: null, leaseUntil: null, runningKey: null },
+              data: { status: 'queued', leaseUntil: null, runningKey: null },
             }),
       ])
 
@@ -218,11 +217,32 @@ export const createTurnService: Service<TurnService> = app => {
     },
 
     releaseWorker: async workerId => {
-      const released = await app.$prisma.turn.updateMany({
-        where: { workerId, status: 'running' },
-        data: { status: 'queued', workerId: null, leaseUntil: null, runningKey: null },
+      const held = await app.$prisma.turn.findMany({
+        where: { status: 'running', conversation: { workerId } },
+        select: { id: true, conversationId: true },
       })
-      return released.count
+      const released = await Promise.all(
+        held.map(async turn => {
+          try {
+            await app.$conversation.appendEvent(
+              turn.conversationId,
+              { type: 'turn.queued', reason: 'worker_disconnected' },
+              async tx => {
+                const updated = await tx.turn.updateMany({
+                  where: { id: turn.id, status: 'running', conversation: { workerId } },
+                  data: { status: 'queued', leaseUntil: null, runningKey: null },
+                })
+                if (updated.count === 0) throw new Error(RELEASE_RACE)
+              },
+            )
+            return true
+          } catch (error) {
+            if (error instanceof Error && error.message === RELEASE_RACE) return false
+            throw error
+          }
+        }),
+      )
+      return released.filter(Boolean).length
     },
   }
 }

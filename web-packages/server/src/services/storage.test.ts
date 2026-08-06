@@ -48,3 +48,20 @@ describe('OSS upload policy', () => {
     expect(lifetime).toBeLessThanOrEqual(OSS_SIGNED_URL_TTL_SECONDS * 1000 + 1000)
   })
 })
+
+describe('OSS download URLs', () => {
+  it('keeps previews inline and makes explicit downloads attachments', async () => {
+    const storage = createStorageService(config)
+    const inline = new URL(await storage.signGet('idea/files/1/2/file123', '说明.md'))
+    const download = new URL(
+      await storage.signGet('idea/files/1/2/file123', '说明.md', 'attachment'),
+    )
+
+    expect(inline.searchParams.get('response-content-disposition')).toBe(
+      "inline; filename*=UTF-8''%E8%AF%B4%E6%98%8E.md",
+    )
+    expect(download.searchParams.get('response-content-disposition')).toBe(
+      "attachment; filename*=UTF-8''%E8%AF%B4%E6%98%8E.md",
+    )
+  })
+})

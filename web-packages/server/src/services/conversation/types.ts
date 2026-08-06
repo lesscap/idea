@@ -1,13 +1,12 @@
 import type { Prisma } from '@idea/core'
-import type { ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
+import type { Attachment, ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
 
 export type Conversation = {
   readonly id: Id
   readonly cid: string
   readonly appId: Id
-  // Null until a worker has claimed the first turn. Nobody chooses a backend in
-  // advance — whichever worker reaches it decides, and it is fixed from then on.
-  readonly agentKind: string | null
+  readonly providerId: Id
+  readonly workerId: Id | null
   readonly providerSessionId: string | null
   readonly title: string | null
   readonly lastActiveAt: string
@@ -31,7 +30,14 @@ export type EventWindow = {
 }
 
 export type ConversationService = {
-  start: (input: { appId: Id; createdById: Id; text: string }) => Promise<Conversation>
+  start: (input: {
+    appId: Id
+    createdById: Id
+    providerId: Id
+    workerId: Id
+    text: string
+    attachments?: readonly Attachment[]
+  }) => Promise<Conversation>
   listForApp: (appId: Id, query: PageQuery) => Promise<Paged<Conversation>>
   getByCid: (appId: Id, cid: string) => Promise<Conversation | null>
   get: (id: Id) => Promise<Conversation | null>
@@ -44,6 +50,7 @@ export type ConversationService = {
   // The provider's own handle for this conversation, so a later turn can resume
   // rather than start over.
   rememberSession: (conversationId: Id, providerSessionId: string) => Promise<void>
+  assignWorker: (conversationId: Id, workerId: Id) => Promise<boolean>
   // Names a conversation, but only while it has no name. False means someone got
   // there first — which the caller reports rather than retries.
   nameIfUnnamed: (conversationId: Id, title: string) => Promise<boolean>

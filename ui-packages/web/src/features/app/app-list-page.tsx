@@ -1,22 +1,40 @@
 import type { App } from '@idea/shared'
-import { Plus } from 'lucide-react'
+import { MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useCurrentWorkspaceId } from '../../core/session/use-session'
+import { useCurrentRole, useCurrentWorkspaceId } from '../../core/session/use-session'
 import { useLocale, useLocaleControl } from '../../i18n'
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../ui'
 import { listApps } from './api'
 import { CreateAppDialog } from './create-app-dialog'
+import { DeleteAppDialog } from './delete-app-dialog'
+import { EditAppDialog } from './edit-app-dialog'
 
 export const AppListPage = () => {
   const __ = useLocale()
   const { locale } = useLocaleControl()
   const workspaceId = useCurrentWorkspaceId()
+  const role = useCurrentRole()
   const navigate = useNavigate()
   // Local state, not a store: one consumer, and refetching on mount answers the
   // "when is this stale?" question that a store would leave open.
   const [apps, setApps] = useState<App[] | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<App | null>(null)
+  const [deleting, setDeleting] = useState<App | null>(null)
 
   // Guarding on workspaceId is not just a lint accommodation: the endpoint reads
   // the workspace from the session, and calling it with none selected is a 400.
@@ -71,27 +89,62 @@ export const AppListPage = () => {
         data-testid="app-list"
       >
         {apps?.map(app => (
-          <Link key={app.slug} to={`/apps/${encodeURIComponent(app.slug)}`}>
-            <Card
-              className="h-full transition-colors hover:bg-muted/30"
-              data-testid="app-card"
-              data-app-slug={app.slug}
-              data-status={app.status}
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle>{app.name}</CardTitle>
-                  <Badge variant={app.status === 'active' ? 'default' : 'secondary'}>
-                    {__(`app.status.${app.status}`)}
-                  </Badge>
-                </div>
-                {app.description && <CardDescription>{app.description}</CardDescription>}
-              </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">
-                {__('app.createdAt', formatDate(app.createdAt))}
-              </CardContent>
-            </Card>
-          </Link>
+          <div key={app.slug} className="relative">
+            <Link className="block h-full" to={`/apps/${encodeURIComponent(app.slug)}`}>
+              <Card
+                className="h-full transition-colors hover:bg-muted/30"
+                data-testid="app-card"
+                data-app-slug={app.slug}
+                data-status={app.status}
+              >
+                <CardHeader className="pr-16">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle>{app.name}</CardTitle>
+                    <Badge variant={app.status === 'active' ? 'default' : 'secondary'}>
+                      {__(`app.status.${app.status}`)}
+                    </Badge>
+                  </div>
+                  {app.description && <CardDescription>{app.description}</CardDescription>}
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  {__('app.createdAt', formatDate(app.createdAt))}
+                </CardContent>
+              </Card>
+            </Link>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-3 top-3 z-10"
+                  aria-label={__('app.actions', app.name)}
+                  data-testid={`app-actions-${app.slug}`}
+                >
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setEditing(app)}>
+                  <Pencil />
+                  {__('app.edit')}
+                </DropdownMenuItem>
+                {role === 'admin' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      onSelect={() => setDeleting(app)}
+                    >
+                      <Trash2 />
+                      {__('app.delete')}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ))}
       </div>
 
@@ -100,6 +153,28 @@ export const AppListPage = () => {
         onOpenChange={setCreating}
         onCreated={app => navigate(`/apps/${encodeURIComponent(app.slug)}`)}
       />
+
+      {editing && (
+        <EditAppDialog
+          app={editing}
+          open
+          onOpenChange={open => !open && setEditing(null)}
+          onUpdated={updated =>
+            setApps(
+              current => current?.map(app => (app.slug === editing.slug ? updated : app)) ?? null,
+            )
+          }
+        />
+      )}
+
+      {deleting && (
+        <DeleteAppDialog
+          app={deleting}
+          open
+          onOpenChange={open => !open && setDeleting(null)}
+          onDeleted={slug => setApps(current => current?.filter(app => app.slug !== slug) ?? null)}
+        />
+      )}
     </div>
   )
 }

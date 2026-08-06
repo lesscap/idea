@@ -1,11 +1,16 @@
 import { ChevronLeft } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
+import { uploadAppFile } from '../../lib/file-upload'
 import { Button, Markdown } from '../../ui'
+import type { FileDescriptor } from '../file/api'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
 import { ActivityBlock, Step } from './activity-group'
+import { SentAttachments } from './attachment-view'
 import { Composer } from './composer'
+import { ConversationStatus } from './conversation-status'
 import { useConversation } from './use-conversation'
+import { NewConversationWorker, RecoveryWorker } from './worker-picker'
 
 // Where the requirement actually gets worked out.
 //
@@ -20,7 +25,15 @@ import { useConversation } from './use-conversation'
 // trading lines; this is someone dictating what they need while the other side
 // works it out. A continuous left-aligned record fits that, and lets a long
 // requirement use the full width instead of being squeezed into 85% of it.
-const Said = ({ text }: { text: string }) => {
+const Said = ({
+  text,
+  attachments = [],
+  onOpenFile,
+}: {
+  text: string
+  attachments?: Extract<StreamItem, { kind: 'them' }>['attachments']
+  onOpenFile: (file: FileDescriptor) => void
+}) => {
   const __ = useLocale()
 
   // Split on blank lines: several messages typed while a turn was running are
@@ -45,15 +58,27 @@ const Said = ({ text }: { text: string }) => {
             {paragraph}
           </p>
         ))}
+        {attachments.length > 0 && (
+          <div className={paragraphs.length > 0 ? 'mt-2' : ''}>
+            <SentAttachments files={attachments} onOpen={onOpenFile} />
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-const Drawn = ({ item }: { item: StreamItem }) => {
+const Drawn = ({
+  item,
+  onOpenFile,
+}: {
+  item: StreamItem
+  onOpenFile: (file: FileDescriptor) => void
+}) => {
   if (isActivityGroup(item)) return <ActivityBlock group={item} />
 
-  if (item.kind === 'them') return <Said text={item.text} />
+  if (item.kind === 'them')
+    return <Said text={item.text} attachments={item.attachments} onOpenFile={onOpenFile} />
 
   // The answer is what the transcript is for: a little larger and darker than
   // its surroundings, and capped near 70 characters because a line wider than
@@ -94,23 +119,60 @@ export const ConversationPanel = ({
   hidden,
   onConversationCreated,
   onCollapse,
+  onOpenFile,
 }: {
   slug: string
   conversationId: string | null
   hidden: boolean
   onConversationCreated: (id: string) => void
   onCollapse: () => void
+  onOpenFile: (file: FileDescriptor) => void
 }) => {
   const __ = useLocale()
-  const { bubbles, pending, working, status, hasOlder, loadingOlder, loadOlder, send, withdraw } =
-    useConversation(slug, conversationId, onConversationCreated)
+  const {
+    bubbles,
+    pending,
+    phase,
+    working,
+    activityLive,
+    assignment,
+    workers,
+    workersStatus,
+    selectedWorkerId,
+    selectWorker,
+    refreshWorkers,
+    assignWorker,
+    assigningWorker,
+    workerAssignmentFailed,
+    connection,
+    retryConnection,
+    hasOlder,
+    loadingOlder,
+    loadOlder,
+    send,
+    withdraw,
+  } = useConversation(slug, conversationId, onConversationCreated)
   const bottom = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   // The scroll height recorded just before a "load earlier" read, consumed by
   // the effect below once the events land.
   const anchor = useRef<number | null>(null)
 
-  const stream = useMemo(() => groupActivity(bubbles, working), [bubbles, working])
+  const stream = useMemo(() => groupActivity(bubbles, activityLive), [bubbles, activityLive])
+  const lastStreamItem = stream.at(-1)
+  const statusPhase =
+    phase === 'working' &&
+    lastStreamItem !== undefined &&
+    isActivityGroup(lastStreamItem) &&
+    lastStreamItem.live
+      ? 'idle'
+      : phase
+  const isNew = conversationId === 'new'
+  const needsRecovery =
+    !isNew && assignment !== null && (assignment.worker === null || !assignment.worker.online)
+  const composerDisabled = isNew
+    ? workersStatus !== 'ready' || selectedWorkerId === null
+    : assignment?.worker === null || assignment === null
 
   const showOlder = () => {
     anchor.current = scroller.current?.scrollHeight ?? 0
@@ -137,7 +199,7 @@ export const ConversationPanel = ({
     }
     // Anything else is the conversation growing at the bottom. Follow it.
     bottom.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [stream.length])
+  }, [stream.length, phase, connection])
 
   return (
     <div
@@ -149,7 +211,8 @@ export const ConversationPanel = ({
       data-testid="conversation-column"
       data-conversation-id={conversationId ?? ''}
       data-working={working}
-      data-status={status}
+      data-status={connection}
+      data-phase={phase}
     >
       <div className="flex h-10 shrink-0 items-center justify-between border-border border-b px-3">
         <span className="truncate font-medium text-sm">
@@ -192,25 +255,49 @@ export const ConversationPanel = ({
                 {__('shell.loadEarlier')}
               </button>
             )}
-            {stream.map(item => (
-              <Drawn key={item.key} item={item} />
-            ))}
-            {/* Only when nothing is on screen yet. Once a group is live it says
-                so itself, and two "working" indicators is one too many. */}
-            {working && stream.length === 0 && (
-              <p className="text-muted-foreground text-xs" data-testid="agent-working">
-                {__('shell.thinking')}
-              </p>
+            {isNew && (
+              <div className="flex min-h-52 flex-1 items-center justify-center px-4 py-8">
+                <NewConversationWorker
+                  workers={workers}
+                  status={workersStatus}
+                  selectedId={selectedWorkerId}
+                  onSelect={selectWorker}
+                  onRefresh={() => void refreshWorkers()}
+                />
+              </div>
             )}
+            {stream.map(item => (
+              <Drawn key={item.key} item={item} onOpenFile={onOpenFile} />
+            ))}
+            <ConversationStatus
+              connection={connection}
+              phase={statusPhase}
+              onRetry={retryConnection}
+            />
             <div ref={bottom} />
           </div>
+
+          {needsRecovery && assignment && (
+            <RecoveryWorker
+              assignment={assignment}
+              workers={workers}
+              status={workersStatus}
+              busy={assigningWorker || working}
+              failed={workerAssignmentFailed}
+              onAssign={workerId => void assignWorker(workerId).catch(() => {})}
+              onRefresh={() => void refreshWorkers()}
+            />
+          )}
 
           <Composer
             key={conversationId}
             pending={pending}
             onSend={send}
+            onUpload={file => uploadAppFile(slug, file)}
+            onOpenFile={onOpenFile}
             onWithdraw={withdraw}
             exclusiveSubmit={conversationId === 'new'}
+            disabled={composerDisabled}
           />
         </>
       )}

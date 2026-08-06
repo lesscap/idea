@@ -82,7 +82,7 @@ export const CreateAppDialog = ({ open, onOpenChange, onCreated }: Props) => {
                 onChange={e => setSlug(e.target.value)}
                 placeholder={__('app.slugPlaceholder')}
                 pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                minLength={3}
+                minLength={2}
                 maxLength={48}
                 required
               />

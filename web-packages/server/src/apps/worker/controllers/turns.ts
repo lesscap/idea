@@ -11,12 +11,17 @@ import { AppendEventBody, ClaimTurnParams, FinishTurnBody, SetTitleBody } from '
 // Every route re-reads which worker is calling from its token rather than
 // trusting an id in the body — a worker may only touch what it actually holds.
 export const TurnsController: Controller = app => {
-  const holds = async (turnId: number, workerId: number) => {
+  const holds = async (turnId: number, workerId: number, runningOnly = true) => {
     const turn = await app.$prisma.turn.findUnique({
       where: { id: turnId },
-      select: { workerId: true, conversationId: true },
+      select: {
+        status: true,
+        conversationId: true,
+        conversation: { select: { workerId: true } },
+      },
     })
-    return turn?.workerId === workerId ? turn : null
+    if (turn?.conversation.workerId !== workerId) return null
+    return !runningOnly || turn.status === 'running' ? turn : null
   }
 
   // Returns the next turn this worker may run, or nothing. Which turn is not
@@ -33,7 +38,11 @@ export const TurnsController: Controller = app => {
     // secret — the credential is named here, never carried.
     const provider = await app.$provider.get(worker.providerId)
 
-    return sendOk(c, { turn: claimed, conversation, provider: provider?.config ?? null })
+    return sendOk(c, {
+      turn: claimed,
+      conversation,
+      provider: provider ? { kind: provider.kind, config: provider.config } : null,
+    })
   })
 
   // The transcript so far, so a worker can rebuild context after a restart.
@@ -102,7 +111,7 @@ export const TurnsController: Controller = app => {
     const parsed = FinishTurnBody.safeParse(body)
     if (!parsed.success) return badRequest(c, 'outcome must be completed, failed or aborted')
 
-    const finished = await app.$turn.finish(id, parsed.data.outcome)
+    const finished = await app.$turn.finish(id, worker.id, parsed.data.outcome)
 
     // Closing the turn is the moment anything typed while it ran becomes
     // sendable, and this is the only place that moment is observable. Without
@@ -111,7 +120,7 @@ export const TurnsController: Controller = app => {
     // silently never gets answered.
     if (finished) {
       const started = await app.$pendingInput.materialize(turn.conversationId)
-      if (started) app.$commands.broadcast({ type: 'work_available' })
+      if (started) app.$commands.publish(worker.id, { type: 'work_available' })
     }
 
     return sendOk(c, { finished })
@@ -128,7 +137,7 @@ export const TurnsController: Controller = app => {
   app.post('/:id/title', zValidator('param', ClaimTurnParams), async c => {
     const worker = currentWorker(c)
     const { id } = c.req.valid('param')
-    const turn = await holds(id, worker.id)
+    const turn = await holds(id, worker.id, false)
     if (!turn) return notFound(c, 'turn not found')
 
     const body = await c.req.json().catch(() => null)

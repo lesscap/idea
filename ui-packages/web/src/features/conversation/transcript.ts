@@ -1,4 +1,4 @@
-import type { StoredEvent, WireEvent } from '@idea/shared'
+import type { Attachment, ConversationExecution, StoredEvent, WireEvent } from '@idea/shared'
 
 // The transcript, folded into what is actually drawn.
 //
@@ -13,7 +13,7 @@ import type { StoredEvent, WireEvent } from '@idea/shared'
 // difference — an id is all this has to go on.
 
 export type Bubble =
-  | { kind: 'them'; key: string; text: string }
+  | { kind: 'them'; key: string; text: string; attachments?: readonly Attachment[] }
   | { kind: 'agent'; key: string; text: string }
   | { kind: 'thinking'; key: string; text: string }
   | {
@@ -31,7 +31,13 @@ export type Bubble =
   | { kind: 'note'; key: string; text: string }
 
 const bubbleOf = (event: WireEvent, key: string): Bubble | null => {
-  if (event.type === 'user_message') return { kind: 'them', key, text: event.text }
+  if (event.type === 'user_message')
+    return {
+      kind: 'them',
+      key,
+      text: event.text,
+      ...(event.attachments?.length ? { attachments: event.attachments } : {}),
+    }
 
   if (
     event.type === 'item.started' ||
@@ -66,6 +72,39 @@ const bubbleOf = (event: WireEvent, key: string): Bubble | null => {
 
 export type WireStored = Omit<StoredEvent, 'event'> & { event: WireEvent }
 
+export type ConversationPhase = 'idle' | 'queued' | 'thinking' | 'working' | 'streaming'
+
+// The database says whether work is queued or running; the transcript says what
+// a running agent is doing. Keeping the two inputs explicit prevents an open SSE
+// connection from being mistaken for an agent that actually accepted the turn.
+export const phaseOf = (
+  events: readonly WireStored[],
+  execution: ConversationExecution,
+): ConversationPhase => {
+  if (execution.state === 'idle') return 'idle'
+  if (execution.state === 'queued') return 'queued'
+
+  const startedAt = events.findLastIndex(({ event }) => event.type === 'turn.started')
+  const items = startedAt < 0 ? events : events.slice(startedAt + 1)
+  const latestItem = items.findLast(
+    ({ event }) =>
+      event.type === 'item.started' ||
+      event.type === 'item.updated' ||
+      event.type === 'item.completed',
+  )?.event
+
+  if (
+    latestItem?.type === 'item.started' ||
+    latestItem?.type === 'item.updated' ||
+    latestItem?.type === 'item.completed'
+  ) {
+    if (latestItem.item.type === 'agent_message' && latestItem.item.status === 'in_progress')
+      return 'streaming'
+    return 'working'
+  }
+  return 'thinking'
+}
+
 export const toBubbles = (events: readonly WireStored[]): Bubble[] => {
   const byKey = new Map<string, Bubble>()
 
@@ -92,11 +131,16 @@ export const isWorking = (events: readonly WireStored[]): boolean => {
   const last = events.findLast(
     ({ event }) =>
       event.type === 'user_message' ||
+      event.type === 'turn.queued' ||
       event.type === 'turn.started' ||
       event.type === 'turn.completed' ||
       event.type === 'turn.failed' ||
       event.type === 'turn.aborted',
   )
   if (!last) return false
-  return last.event.type === 'user_message' || last.event.type === 'turn.started'
+  return (
+    last.event.type === 'user_message' ||
+    last.event.type === 'turn.queued' ||
+    last.event.type === 'turn.started'
+  )
 }

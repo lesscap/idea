@@ -17,6 +17,7 @@ import {
 import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/session/use-session'
 import { getApp } from '../features/app/api'
 import { ConversationPanel } from '../features/conversation/conversation-panel'
+import { fileResourceRef } from '../features/file/api'
 import { useLocale, useLocaleControl } from '../i18n'
 import { Button } from '../ui'
 import { ContentColumn } from './content'
@@ -187,6 +188,7 @@ export const Shell = () => {
             hidden={conversationHidden}
             onConversationCreated={workspace.replaceConversation}
             onCollapse={() => setConversationCollapsed(true)}
+            onOpenFile={file => workspace.open(fileResourceRef(file))}
           />
         </Panel>
 

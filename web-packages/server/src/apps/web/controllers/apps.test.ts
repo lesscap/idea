@@ -27,6 +27,7 @@ const services = (
     getBySlugInWorkspace: async () => anApp,
     create: async () => ({ kind: 'ok', app: anApp }),
     update: async () => ({ kind: 'ok', app: anApp }),
+    remove: async () => ({ kind: 'ok' }),
     ...appOver,
   },
 })
@@ -131,6 +132,21 @@ describe('app writes', () => {
     expect(res.status).toBe(200)
   })
 
+  it('accepts a two-character slug and rejects a one-character slug', async () => {
+    const app = mountController(
+      AppsController,
+      services('member'),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const accepted = await app.request('/', json({ name: 'AI', slug: 'ai' }))
+    const rejected = await app.request('/', json({ name: 'A', slug: 'a' }))
+
+    expect(accepted.status).toBe(200)
+    expect(rejected.status).toBe(400)
+  })
+
   it('reports a duplicate name as a conflict, not a crash', async () => {
     const app = mountController(
       AppsController,
@@ -184,6 +200,57 @@ describe('app writes', () => {
       ...json({ name: 'x' }),
       method: 'PATCH',
     })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('only lets workspace administrators delete an app', async () => {
+    const remove = vi.fn(async () => ({ kind: 'ok' as const }))
+    const memberApp = mountController(
+      AppsController,
+      services('member', { remove }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+    const adminApp = mountController(
+      AppsController,
+      services('admin', { remove }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const denied = await memberApp.request('/expense-approval', { method: 'DELETE' })
+    const removed = await adminApp.request('/expense-approval', { method: 'DELETE' })
+
+    expect(denied.status).toBe(403)
+    expect(remove).toHaveBeenCalledOnce()
+    expect(removed.status).toBe(200)
+    expect(await okData(removed)).toEqual({ removed: 'expense-approval' })
+  })
+
+  it('reports active agent work as a specific deletion conflict', async () => {
+    const app = mountController(
+      AppsController,
+      services('admin', { remove: async () => ({ kind: 'busy' }) }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/expense-approval', { method: 'DELETE' })
+
+    expect(res.status).toBe(409)
+    expect((await failure(res)).code).toBe('app_busy')
+  })
+
+  it('reports deleting an app outside the workspace as missing', async () => {
+    const app = mountController(
+      AppsController,
+      services('admin', { remove: async () => ({ kind: 'not_found' }) }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/expense-approval', { method: 'DELETE' })
 
     expect(res.status).toBe(404)
   })

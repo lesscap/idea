@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import type { ProviderConfig } from '../agent/index.ts'
 import type { SdkMessage } from './sdk-types.ts'
-import type { ProviderConfig } from './session.ts'
 
 // Ask the model one question, take back one string.
 //

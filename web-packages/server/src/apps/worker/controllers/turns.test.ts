@@ -10,7 +10,7 @@ import { TurnsController } from './turns.ts'
 // mechanism — and it is invisible from the service tests, which can only show
 // that materialize would have worked had anyone called it.
 
-const WORKER = { id: 7, workspaceId: 1, providerId: 1, agentKind: 'claude' }
+const WORKER = { id: 7, workspaceId: 1, providerId: 1 }
 
 const mount = (services: Partial<ServiceApplication>): Hono => {
   const app = Object.assign(new Hono(), services) as WebApplication
@@ -28,26 +28,34 @@ const mount = (services: Partial<ServiceApplication>): Hono => {
 const services = (over: {
   finished?: boolean
   materialize?: ReturnType<typeof vi.fn>
-  broadcast?: ReturnType<typeof vi.fn>
+  publish?: ReturnType<typeof vi.fn>
 }) =>
   ({
-    $prisma: { turn: { findUnique: async () => ({ workerId: 7, conversationId: 42 }) } },
+    $prisma: {
+      turn: {
+        findUnique: async () => ({
+          status: 'running',
+          conversationId: 42,
+          conversation: { workerId: 7 },
+        }),
+      },
+    },
     $turn: { finish: async () => over.finished ?? true },
     $pendingInput: { materialize: over.materialize ?? vi.fn().mockResolvedValue(null) },
-    $commands: { broadcast: over.broadcast ?? vi.fn() },
+    $commands: { publish: over.publish ?? vi.fn() },
   }) as never
 
 describe('finishing a turn', () => {
   it('lets anything queued during the turn go out', async () => {
     const materialize = vi.fn().mockResolvedValue({ sequence: 9 })
-    const broadcast = vi.fn()
-    const app = mount(services({ materialize, broadcast }))
+    const publish = vi.fn()
+    const app = mount(services({ materialize, publish }))
 
     await app.request('/1/finish', json({ outcome: 'completed' }))
 
     expect(materialize).toHaveBeenCalledWith(42)
     // Nobody is watching the queue; a worker only looks when told to.
-    expect(broadcast).toHaveBeenCalledWith({ type: 'work_available' })
+    expect(publish).toHaveBeenCalledWith(WORKER.id, { type: 'work_available' })
   })
 
   // Losing the race is ordinary — another request may already have closed this
@@ -68,11 +76,11 @@ describe('finishing a turn', () => {
   // An empty queue is the common case: waking a worker for nothing costs a claim
   // round trip per finished turn.
   it('wakes nobody when there was nothing waiting', async () => {
-    const broadcast = vi.fn()
-    const app = mount(services({ broadcast }))
+    const publish = vi.fn()
+    const app = mount(services({ publish }))
 
     await app.request('/1/finish', json({ outcome: 'completed' }))
 
-    expect(broadcast).not.toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
   })
 })

@@ -67,11 +67,16 @@ export type AgentUsage = {
 }
 
 export type Attachment = {
-  id: Id
-  name: string
+  fid: string
+  filename: string
   contentType: string
   size: number
 }
+
+export type ConversationExecution =
+  | { readonly state: 'idle' }
+  | { readonly state: 'queued' }
+  | { readonly state: 'running' }
 
 // The provider's untouched payload. Kept server-side for replay and for working
 // out what an adapter got wrong — and never sent anywhere, because it can carry
@@ -95,6 +100,7 @@ export type ConversationEvent =
     })
   | (WithRaw & { type: 'thread.started'; providerSessionId: string; model?: string })
   | (WithRaw & { type: 'turn.started'; sourceSequence?: number })
+  | (WithRaw & { type: 'turn.queued'; reason: 'worker_disconnected' })
   | (WithRaw & { type: 'item.started'; item: AgentItem })
   | (WithRaw & { type: 'item.updated'; item: AgentItem })
   | (WithRaw & { type: 'item.completed'; item: AgentItem })

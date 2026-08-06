@@ -36,11 +36,17 @@ export type AppWriteResult =
 
 export type AppUpdateResult = AppWriteResult | { readonly kind: 'not_found' }
 
+export type AppDeleteResult =
+  | { readonly kind: 'ok' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'busy' }
+
 export type AppService = {
   listInWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<AppRecord>>
   getBySlugInWorkspace: (workspaceId: Id, slug: string) => Promise<AppRecord | null>
   create: (input: AppCreate) => Promise<AppWriteResult>
   update: (workspaceId: Id, currentSlug: string, patch: AppPatch) => Promise<AppUpdateResult>
+  remove: (workspaceId: Id, slug: string) => Promise<AppDeleteResult>
 }
 
 type Row = {
@@ -156,5 +162,25 @@ export const createAppService: Service<AppService> = app => {
         throw error
       }
     },
+
+    remove: (workspaceId, slug) =>
+      app.$prisma.$transaction(async tx => {
+        const found = await tx.app.findUnique({
+          where: { workspaceId_slug: { workspaceId, slug } },
+          select: { id: true },
+        })
+        if (!found) return { kind: 'not_found' }
+
+        const activeTurns = await tx.turn.count({
+          where: {
+            status: { in: ['queued', 'running'] },
+            conversation: { appId: found.id },
+          },
+        })
+        if (activeTurns > 0) return { kind: 'busy' }
+
+        const deleted = await tx.app.deleteMany({ where: { id: found.id } })
+        return deleted.count === 0 ? { kind: 'not_found' } : { kind: 'ok' }
+      }),
   }
 }
