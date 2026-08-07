@@ -11,7 +11,8 @@ export type StorageService = {
   keyFor: (workspaceId: number, appId: number, fid: string) => string
   signPost: (key: string, contentType: string, size: number) => PostUploadTarget
   head: (key: string) => Promise<{ readonly size: number } | null>
-  signGet: (key: string, filename: string) => Promise<string>
+  readText: (key: string) => Promise<string>
+  signGet: (key: string, filename: string, disposition?: 'inline' | 'attachment') => Promise<string>
 }
 
 type OssV4Client = OSS & {
@@ -106,13 +107,19 @@ export const createStorageService = (config: OssConfig): StorageService => {
       }
     },
 
-    signGet: (key, filename) =>
+    readText: async key => {
+      const result = await client.get(key, undefined, { timeout: OSS_REQUEST_TIMEOUT_MS })
+      if (!Buffer.isBuffer(result.content)) throw new Error('OSS GET omitted file content')
+      return result.content.toString('utf8')
+    },
+
+    signGet: (key, filename, disposition = 'inline') =>
       client.signatureUrlV4(
         'GET',
         OSS_SIGNED_URL_TTL_SECONDS,
         {
           queries: {
-            'response-content-disposition': `inline; filename*=UTF-8''${encodedFilename(filename)}`,
+            'response-content-disposition': `${disposition}; filename*=UTF-8''${encodedFilename(filename)}`,
             'response-cache-control': 'private, no-store',
           },
         },

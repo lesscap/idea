@@ -1,4 +1,5 @@
 import type { Controller } from '../../types.ts'
+import { WorkerFilesController } from './controllers/files.ts'
 import { TurnsController } from './controllers/turns.ts'
 import { WorkersController } from './controllers/workers.ts'
 import { workerAuth } from './middleware/auth.ts'
@@ -20,5 +21,6 @@ const guarded =
 // the middleware individually.
 export const Routes: Record<string, Controller> = {
   '/workers': WorkersController,
+  '/files': guarded(WorkerFilesController),
   '/turns': guarded(TurnsController),
 }

@@ -1,6 +1,7 @@
+import type { Attachment, ConversationExecution, Id } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { del, get, post } from '../../lib/request'
-import { isWorking, toBubbles, type WireStored } from './transcript'
+import { del, get, patch, post } from '../../lib/request'
+import { phaseOf, toBubbles, type WireStored } from './transcript'
 
 // One conversation, kept current from two sources folded into one ordered list:
 // the history behind it and the live tail in front.
@@ -18,8 +19,28 @@ import { isWorking, toBubbles, type WireStored } from './transcript'
 // there. The server widens a window that would otherwise hold no turn boundary,
 // so `isWorking` can still answer from what arrives — see its windowed events().
 
-export type PendingInput = { id: number; text: string; createdAt: string }
-export type Status = 'connecting' | 'open' | 'error' | 'closed'
+export type PendingInput = {
+  id: number
+  text: string
+  attachments: readonly Attachment[]
+  createdAt: string
+}
+export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'error' | 'closed'
+export type WorkersStatus = 'loading' | 'ready' | 'error'
+
+export type WorkerOption = {
+  id: number
+  name: string
+  hostname: string
+  providerId: number
+  providerLabel: string
+  providerKind: string
+}
+
+export type WorkerAssignment = {
+  providerId: number
+  worker: { id: number; name: string; hostname: string; online: boolean } | null
+}
 
 // How much transcript to open with, counted in stored events.
 //
@@ -53,21 +74,36 @@ export const mergeEvents = (existing: WireStored[], incoming: WireStored[]): Wir
 
 // The events endpoint's answer. Unrelated to `Paged<T>` — a transcript is walked
 // by cursor, not by page number, because its sequences are what a reader holds.
-type TranscriptPage = { items: WireStored[]; pending: PendingInput[] }
+type TranscriptPage = {
+  items: WireStored[]
+  pending: PendingInput[]
+  execution: ConversationExecution
+  assignment: WorkerAssignment
+}
+
+type WorkersPage = { items: WorkerOption[] }
 
 // `onConversationCreated` is required rather than optional: a caller that forgets
 // it would send the first message into a conversation the URL never learns about,
 // and the draft would sit there looking unsent. That should not compile.
 export const useConversation = (
-  slug: string,
+  appId: Id,
   conversationId: string | null,
   onConversationCreated: (id: string) => void,
 ) => {
-  const base = `/apps/${encodeURIComponent(slug)}/conversations`
+  const base = `/apps/${appId}/conversations`
   const persistedId = conversationId === 'new' ? null : conversationId
   const [events, setEvents] = useState<WireStored[]>([])
   const [pending, setPending] = useState<PendingInput[]>([])
-  const [status, setStatus] = useState<Status>('connecting')
+  const [execution, setExecution] = useState<ConversationExecution>({ state: 'idle' })
+  const [assignment, setAssignment] = useState<WorkerAssignment | null>(null)
+  const [workers, setWorkers] = useState<WorkerOption[]>([])
+  const [workersStatus, setWorkersStatus] = useState<WorkersStatus>('loading')
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null)
+  const [assigningWorker, setAssigningWorker] = useState(false)
+  const [workerAssignmentFailed, setWorkerAssignmentFailed] = useState(false)
+  const [connection, setConnection] = useState<ConnectionStatus>('connecting')
+  const [connectionAttempt, setConnectionAttempt] = useState(0)
   const [loadingOlder, setLoadingOlder] = useState(false)
   // The resume point, and the cursor going the other way. Refs, so reading them
   // does not make every arriving event restart the stream.
@@ -80,32 +116,57 @@ export const useConversation = (
   const pendingRequest = useRef(0)
   const fetchingOlder = useRef(false)
 
-  const apply = useCallback(
-    (incoming: WireStored[]) =>
-      setEvents(previous => {
-        const next = mergeEvents(previous, incoming)
-        const last = next.at(-1)
-        if (last) lastSeq.current = Math.max(lastSeq.current, last.sequence)
-        const first = next[0]
-        if (first) oldestSeq.current = first.sequence
-        return next
-      }),
-    [],
-  )
+  const refreshWorkers = useCallback(async () => {
+    setWorkersStatus('loading')
+    try {
+      const page = await get<WorkersPage>(`/apps/${appId}/workers`)
+      setWorkers(page.items)
+      setSelectedWorkerId(current =>
+        current !== null && page.items.some(worker => worker.id === current)
+          ? current
+          : (page.items[0]?.id ?? null),
+      )
+      setWorkersStatus('ready')
+    } catch {
+      setWorkersStatus('error')
+    }
+  }, [appId])
 
   useEffect(() => {
+    void refreshWorkers()
+  }, [refreshWorkers])
+
+  const apply = useCallback((incoming: WireStored[]) => {
+    setEvents(previous => {
+      const next = mergeEvents(previous, incoming)
+      const last = next.at(-1)
+      if (last) lastSeq.current = Math.max(lastSeq.current, last.sequence)
+      const first = next[0]
+      if (first) oldestSeq.current = first.sequence
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    // Retrying restarts the whole connection lifecycle; the counter's value is
+    // immaterial, but reading it here makes that trigger explicit.
+    void connectionAttempt
     boundId.current = persistedId
     pendingRequest.current++
     if (persistedId === null) {
       setEvents([])
       setPending([])
-      setStatus('closed')
+      setExecution({ state: 'idle' })
+      setAssignment(null)
+      setConnection('closed')
       return
     }
 
     setEvents([])
     setPending([])
-    setStatus('connecting')
+    setExecution({ state: 'idle' })
+    setAssignment(null)
+    setConnection('connecting')
     lastSeq.current = -1
     oldestSeq.current = null
 
@@ -119,16 +180,19 @@ export const useConversation = (
         .then(page => {
           if (!alive) return
           apply(page.items)
-          if (boundId.current === persistedId && pendingRequest.current === request)
+          if (boundId.current === persistedId && pendingRequest.current === request) {
             setPending(page.pending)
+            setExecution(page.execution)
+            setAssignment(page.assignment)
+          }
           loaded = true
-          if (stream.readyState === EventSource.OPEN) setStatus('open')
+          if (stream.readyState === EventSource.OPEN) setConnection('open')
         })
         .catch(() => {
           // A hole in the transcript. Reporting 'open' would claim the person is
           // seeing everything when they are not; the resume point has not moved,
           // so the next reconnect asks for the same gap again.
-          if (alive) setStatus('error')
+          if (alive) setConnection('error')
         })
     }
 
@@ -136,17 +200,24 @@ export const useConversation = (
       const source = new EventSource(`/api/web${base}/${persistedId}/stream`)
 
       source.onopen = () => {
-        setStatus('open')
         // Only a REopen backfills — the first open is followed by the initial
         // read below. A reopen asks for the gap; one that never got its window
         // asks for the window again.
         if (opened) void backfill(loaded ? `?after=${lastSeq.current}` : OPENING)
+        else if (loaded) setConnection('open')
         opened = true
       }
 
       source.onmessage = message => {
         try {
           const incoming = JSON.parse(message.data) as WireStored
+          if (incoming.event.type === 'turn.started') setExecution({ state: 'running' })
+          if (
+            incoming.event.type === 'turn.completed' ||
+            incoming.event.type === 'turn.failed' ||
+            incoming.event.type === 'turn.aborted'
+          )
+            setExecution({ state: 'idle' })
           apply([incoming])
           // A queued batch is deleted in the same transaction that writes its
           // user_message. Read the authoritative queue after that commit rather
@@ -157,7 +228,7 @@ export const useConversation = (
         }
       }
 
-      source.onerror = () => setStatus('error')
+      source.onerror = () => setConnection('reconnecting')
       return source
     }
 
@@ -186,7 +257,7 @@ export const useConversation = (
       window.removeEventListener('pageshow', onPageShow)
       stream.close()
     }
-  }, [persistedId, apply, base])
+  }, [persistedId, apply, base, connectionAttempt])
 
   // Walks back from the oldest event held. Guarded by a ref rather than the
   // rendered flag, because two clicks land before a re-render.
@@ -215,19 +286,42 @@ export const useConversation = (
     if (persistedId === null) return
     const request = ++pendingRequest.current
     const page = await get<TranscriptPage>(`${base}/${persistedId}/events?after=${lastSeq.current}`)
-    if (boundId.current === persistedId && pendingRequest.current === request)
+    if (boundId.current === persistedId && pendingRequest.current === request) {
       setPending(page.pending)
+      setExecution(page.execution)
+      setAssignment(page.assignment)
+    }
   }
 
-  const send = async (text: string) => {
+  const send = async (text: string, attachmentFids: readonly string[]) => {
     if (conversationId === 'new') {
-      const created = await post<{ cid: string }>(base, { text })
+      if (selectedWorkerId === null) throw new Error('a worker is required')
+      const created = await post<{ cid: string }>(base, {
+        text,
+        attachmentFids,
+        workerId: selectedWorkerId,
+      })
       onConversationCreated(created.cid)
       return
     }
     if (persistedId === null) return
-    await post(`${base}/${persistedId}/messages`, { text })
+    await post(`${base}/${persistedId}/messages`, { text, attachmentFids })
     await refreshPending()
+  }
+
+  const assignWorker = async (workerId: number) => {
+    if (persistedId === null || assigningWorker) return
+    setAssigningWorker(true)
+    setWorkerAssignmentFailed(false)
+    try {
+      const next = await patch<WorkerAssignment>(`${base}/${persistedId}/worker`, { workerId })
+      setAssignment(next)
+    } catch (error) {
+      setWorkerAssignmentFailed(true)
+      throw error
+    } finally {
+      setAssigningWorker(false)
+    }
   }
 
   const withdraw = async (inputId: number) => {
@@ -238,13 +332,25 @@ export const useConversation = (
       setPending(current => current.filter(item => item.id !== inputId))
   }
 
+  const phase = phaseOf(events, execution)
+
   return {
     bubbles: toBubbles(events),
     pending,
-    // Derived from the transcript rather than read from a status column: the log
-    // already says, and a second source would be a second thing to keep in step.
-    working: isWorking(events),
-    status,
+    phase,
+    working: execution.state !== 'idle',
+    activityLive: execution.state === 'running',
+    assignment,
+    workers,
+    workersStatus,
+    selectedWorkerId,
+    selectWorker: setSelectedWorkerId,
+    refreshWorkers,
+    assignWorker,
+    assigningWorker,
+    workerAssignmentFailed,
+    connection,
+    retryConnection: () => setConnectionAttempt(attempt => attempt + 1),
     // Sequence 0 is the first thing ever said, so holding it means there is
     // nothing behind this. Read off the events rather than the cursor ref, which
     // does not re-render.

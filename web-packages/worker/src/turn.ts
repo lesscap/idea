@@ -1,6 +1,8 @@
-import { asContext, canResume, type ProviderConfig, runClaude } from './claude/session.ts'
-import { extractSeed, generateTitle } from './claude/title.ts'
-import type { ClaimedTurn, Conversation, WorkerClient } from './client.ts'
+import { asContext, userPrompt } from './agent/context.ts'
+import { type AgentAdapter, agentFor, type ProviderConfig } from './agent/index.ts'
+import { materializeAttachments } from './attachments.ts'
+import { extractSeed } from './claude/title.ts'
+import type { ClaimedTurn, Conversation, Provider, WorkerClient } from './client.ts'
 import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 
 // Running one turn: prepare the context, talk to the agent, close the turn.
@@ -20,10 +22,11 @@ export const runTurn = async (
   root: string,
   claimed: ClaimedTurn,
   conversation: Conversation,
-  provider: ProviderConfig,
+  provider: Provider,
   log: (message: string) => void,
 ): Promise<void> => {
   const controller = new AbortController()
+  const agent = agentFor(provider.kind)
   // Runs for the whole turn, including the stretches that emit nothing.
   // Cleared in `finally` so a failure cannot leave a timer holding a lease on a
   // turn nobody is running.
@@ -45,23 +48,29 @@ export const runTurn = async (
     const said = events.find(
       e => e.sequence === claimed.userEventSequence && e.event.type === 'user_message',
     )
-    const message = said?.event.type === 'user_message' ? said.event.text : ''
+    if (said?.event.type !== 'user_message') throw new Error('turn user message not found')
+    await materializeAttachments(client, worktree, events)
 
     // Resuming keeps the agent's own memory of the conversation. When there is
     // nothing local to resume — another machine ran the earlier turns, or the
     // directory was cleared — a fresh session with the transcript as context
     // keeps the conversation unbroken for the person, which is what matters.
-    const resume = canResume(sessions, conversation.providerSessionId)
+    const resume = agent.canResume(sessions, conversation.providerSessionId)
       ? conversation.providerSessionId
       : null
-    const prompt = resume ? message : asContext(events, message)
+    const prompt = resume
+      ? userPrompt(said.event)
+      : asContext(
+          events.filter(event => event.sequence < claimed.userEventSequence),
+          said.event,
+        )
     log(`turn ${claimed.id} in ${worktree} (${resume ? 'resuming' : 'new session'})`)
 
-    for await (const event of runClaude({
+    for await (const event of agent.run({
       prompt,
       worktree,
       sessions,
-      provider,
+      provider: provider.config,
       resume,
       scope: `t${claimed.id}`,
       signal: controller.signal,
@@ -78,7 +87,12 @@ export const runTurn = async (
     // follow-up input queued while that turn ran; that still describes the same
     // opening subject and is useful context rather than a boundary to reconstruct.
     if (claimed.userEventSequence === 0 && conversation.title === null)
-      await nameConversation(client, claimed.id, { provider, worktree, sessions }, log)
+      await nameConversation(
+        client,
+        claimed.id,
+        { agent, provider: provider.config, worktree, sessions },
+        log,
+      )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     log(`turn ${claimed.id} failed: ${message}`)
@@ -103,14 +117,19 @@ export const runTurn = async (
 const nameConversation = async (
   client: WorkerClient,
   turnId: number,
-  where: { provider: ProviderConfig; worktree: string; sessions: string },
+  where: {
+    agent: AgentAdapter
+    provider: ProviderConfig
+    worktree: string
+    sessions: string
+  },
   log: (message: string) => void,
 ): Promise<void> => {
   try {
     const seed = extractSeed(await client.events(turnId))
     if (!seed) return log(`turn ${turnId}: too little said to name the conversation`)
 
-    const outcome = await generateTitle({ ...where, seed })
+    const outcome = await where.agent.generateTitle({ ...where, seed })
     if (outcome.kind === 'error') return log(`turn ${turnId}: naming failed — ${outcome.reason}`)
     if (outcome.kind === 'declined') return log(`turn ${turnId}: nothing worth naming yet`)
 

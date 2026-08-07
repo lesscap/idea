@@ -1,6 +1,6 @@
 import type { WireEvent } from '@idea/shared'
 import { describe, expect, it } from 'vitest'
-import { isWorking, toBubbles, type WireStored } from './transcript'
+import { isWorking, phaseOf, toBubbles, type WireStored } from './transcript'
 import { mergeEvents } from './use-conversation'
 
 // The two rules here are the ones that go wrong quietly: an answer rendered
@@ -81,6 +81,20 @@ describe('folding a transcript into what is drawn', () => {
     expect(aborted?.kind).toBe('note')
     expect(failed?.kind).toBe('error')
   })
+
+  it('keeps attachments on the user message that carried them', () => {
+    const attachment = {
+      fid: 'file123',
+      filename: 'brief.pdf',
+      contentType: 'application/pdf',
+      size: 16,
+    }
+    const [bubble] = toBubbles([
+      stored(0, { type: 'user_message', text: '', attachments: [attachment] }),
+    ])
+
+    expect(bubble).toEqual({ kind: 'them', key: 'seq:0', text: '', attachments: [attachment] })
+  })
 })
 
 describe('is the agent working', () => {
@@ -112,6 +126,35 @@ describe('is the agent working', () => {
 
     expect(isWorking(midTurn)).toBe(false)
     expect(isWorking([stored(40, { type: 'turn.started' }), ...midTurn])).toBe(true)
+  })
+})
+
+describe('conversation phase', () => {
+  it('reports queued work independently of worker liveness', () => {
+    expect(phaseOf([], { state: 'queued' })).toBe('queued')
+  })
+
+  it('describes progress inside a running turn', () => {
+    const started = stored(0, { type: 'turn.started' })
+    const tool = stored(1, {
+      type: 'item.started',
+      item: {
+        id: 'tool-1',
+        status: 'in_progress',
+        type: 'command_execution',
+        command: 'pwd',
+        output: '',
+      },
+    })
+    const answer = stored(2, {
+      type: 'item.updated',
+      item: { id: 'answer-1', status: 'in_progress', type: 'agent_message', text: 'Hello' },
+    })
+
+    expect(phaseOf([started], { state: 'running' })).toBe('thinking')
+    expect(phaseOf([started, tool], { state: 'running' })).toBe('working')
+    expect(phaseOf([started, tool, answer], { state: 'running' })).toBe('streaming')
+    expect(phaseOf([started, answer], { state: 'idle' })).toBe('idle')
   })
 })
 

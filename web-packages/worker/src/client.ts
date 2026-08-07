@@ -1,4 +1,5 @@
 import type { ConversationEvent, StoredEvent } from '@idea/shared'
+import type { ProviderConfig } from './agent/index.ts'
 
 // The only way this process reaches anything shared. The worker holds no
 // database credentials on purpose: it may run on a machine outside the network
@@ -15,7 +16,8 @@ export type Conversation = {
   id: number
   cid: string
   appId: number
-  agentKind: string | null
+  providerId: number
+  workerId: number | null
   // The provider's handle for this conversation. Null before the first turn, or
   // after one had to start a new session.
   providerSessionId: string | null
@@ -24,11 +26,7 @@ export type Conversation = {
 
 // Endpoint and model, sent with the claim. Not secret — the credential is named
 // by `tokenEnv` and read from this process's own environment.
-export type ProviderConfig = {
-  baseUrl: string
-  model: string
-  tokenEnv: string
-}
+export type Provider = { kind: string; config: ProviderConfig }
 
 export type RegisterInput = {
   enrolmentToken: string
@@ -43,9 +41,10 @@ export type WorkerClient = {
   claim: () => Promise<{
     turn: ClaimedTurn
     conversation: Conversation | null
-    provider: ProviderConfig | null
+    provider: Provider | null
   } | null>
   events: (turnId: number, after?: number) => Promise<StoredEvent[]>
+  downloadFile: (fid: string) => Promise<Response>
   emit: (turnId: number, event: ConversationEvent) => Promise<void>
   heartbeat: (turnId: number) => Promise<boolean>
   finish: (turnId: number, outcome: 'completed' | 'failed' | 'aborted') => Promise<void>
@@ -111,7 +110,7 @@ export const createClient = (server: string, token?: string): WorkerClient => {
       const data = await post<{
         turn: ClaimedTurn | null
         conversation: Conversation | null
-        provider: ProviderConfig | null
+        provider: Provider | null
       }>('/turns/claim')
       return data.turn
         ? { turn: data.turn, conversation: data.conversation, provider: data.provider }
@@ -124,6 +123,16 @@ export const createClient = (server: string, token?: string): WorkerClient => {
           `/turns/${turnId}/events${after === undefined ? '' : `?after=${after}`}`,
         )
       ).items,
+
+    downloadFile: async fid => {
+      const response = await fetch(`${base}/files/${encodeURIComponent(fid)}`, {
+        headers: { authorization: `Bearer ${bearer}` },
+      })
+      if (!response.ok || !response.body) {
+        throw new Error(`file ${fid} download failed: ${response.status}`)
+      }
+      return response
+    },
 
     emit: async (turnId, event) => {
       await post(`/turns/${turnId}/events`, event)

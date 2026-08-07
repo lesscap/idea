@@ -33,6 +33,9 @@ export const WorkersController: Controller = app => {
         `the name "${result.existing.name}" is already used by ${result.existing.hostname}`,
       )
 
+    if (result.kind === 'provider_mismatch')
+      return conflict(c, `worker ${result.existing.name} is already registered to another provider`)
+
     return sendOk(c, {
       worker: result.worker,
       apiToken: result.apiToken,
@@ -59,11 +62,6 @@ export const WorkersController: Controller = app => {
       c,
       push => app.$commands.subscribe(worker.id, push),
       command => JSON.stringify(command),
-      {
-        // Its child processes died with it, so every turn it held is already
-        // abandoned. Releasing now beats waiting out leases nobody will renew.
-        onClose: () => void app.$turn.releaseWorker(worker.id),
-      },
     )
   })
 

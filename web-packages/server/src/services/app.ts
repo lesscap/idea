@@ -36,11 +36,18 @@ export type AppWriteResult =
 
 export type AppUpdateResult = AppWriteResult | { readonly kind: 'not_found' }
 
+export type AppDeleteResult =
+  | { readonly kind: 'ok' }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'busy' }
+
 export type AppService = {
   listInWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<AppRecord>>
+  getByIdInWorkspace: (workspaceId: Id, appId: Id) => Promise<AppRecord | null>
   getBySlugInWorkspace: (workspaceId: Id, slug: string) => Promise<AppRecord | null>
   create: (input: AppCreate) => Promise<AppWriteResult>
-  update: (workspaceId: Id, currentSlug: string, patch: AppPatch) => Promise<AppUpdateResult>
+  update: (workspaceId: Id, appId: Id, patch: AppPatch) => Promise<AppUpdateResult>
+  remove: (workspaceId: Id, appId: Id) => Promise<AppDeleteResult>
 }
 
 type Row = {
@@ -123,6 +130,11 @@ export const createAppService: Service<AppService> = app => {
       return row ? toApp(row) : null
     },
 
+    getByIdInWorkspace: async (workspaceId, appId) => {
+      const row = await app.$prisma.app.findFirst({ where: { workspaceId, id: appId } })
+      return row ? toApp(row) : null
+    },
+
     create: async input => {
       try {
         return { kind: 'ok', app: toApp(await app.$prisma.app.create({ data: input })) }
@@ -134,10 +146,10 @@ export const createAppService: Service<AppService> = app => {
       }
     },
 
-    update: async (workspaceId, currentSlug, patch) => {
+    update: async (workspaceId, appId, patch) => {
       try {
         const row = await app.$prisma.app.update({
-          where: { workspaceId_slug: { workspaceId, slug: currentSlug } },
+          where: { id: appId, workspaceId },
           data: patch,
         })
         return { kind: 'ok', app: toApp(row) }
@@ -145,8 +157,8 @@ export const createAppService: Service<AppService> = app => {
         if (hasPrismaCode(error, 'P2025')) return { kind: 'not_found' }
         if (!hasPrismaCode(error, 'P2002')) throw error
 
-        const current = await app.$prisma.app.findUnique({
-          where: { workspaceId_slug: { workspaceId, slug: currentSlug } },
+        const current = await app.$prisma.app.findFirst({
+          where: { id: appId, workspaceId },
           select: { id: true },
         })
         if (!current) return { kind: 'not_found' }
@@ -156,5 +168,25 @@ export const createAppService: Service<AppService> = app => {
         throw error
       }
     },
+
+    remove: (workspaceId, appId) =>
+      app.$prisma.$transaction(async tx => {
+        const found = await tx.app.findFirst({
+          where: { id: appId, workspaceId },
+          select: { id: true },
+        })
+        if (!found) return { kind: 'not_found' }
+
+        const activeTurns = await tx.turn.count({
+          where: {
+            status: { in: ['queued', 'running'] },
+            conversation: { appId: found.id },
+          },
+        })
+        if (activeTurns > 0) return { kind: 'busy' }
+
+        const deleted = await tx.app.deleteMany({ where: { id: found.id, workspaceId } })
+        return deleted.count === 0 ? { kind: 'not_found' } : { kind: 'ok' }
+      }),
   }
 }

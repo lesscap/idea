@@ -4,6 +4,7 @@ import { ConversationsController } from './controllers/conversation/index.ts'
 import { AppFilesController, FilesController } from './controllers/files.ts'
 import { InvitesController } from './controllers/invites.ts'
 import { SessionController } from './controllers/session.ts'
+import { AppWorkersController } from './controllers/workers.ts'
 import { WorkspacesController } from './controllers/workspaces.ts'
 import { requireSession } from './middleware/session.ts'
 
@@ -31,8 +32,9 @@ export const Routes: Record<string, Controller> = {
   '/session': SessionController,
   '/invites': InvitesController,
   '/workspaces': guarded(WorkspacesController),
-  '/apps/:slug/files': guarded(AppFilesController),
-  '/apps/:slug/conversations': guarded(ConversationsController),
+  '/apps/:appId/files': guarded(AppFilesController),
+  '/apps/:appId/workers': guarded(AppWorkersController),
+  '/apps/:appId/conversations': guarded(ConversationsController),
   '/apps': guarded(AppsController),
   '/files': guarded(FilesController),
 }

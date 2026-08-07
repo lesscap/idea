@@ -3,14 +3,35 @@ import { createEventBus } from '../../event-bus.ts'
 import { databaseUrl, setupTestDb, type TestDb } from '../test-support.ts'
 import { createConversationService } from './index.ts'
 
+const createTarget = async (db: TestDb, name: string) => {
+  const provider = await db.prisma.provider.upsert({
+    where: { name: 'conversation-test' },
+    update: {},
+    create: { name: 'conversation-test', label: 'Conversation test', kind: 'claude', config: {} },
+  })
+  const worker = await db.prisma.worker.create({
+    data: {
+      workspaceId: db.workspaceId,
+      providerId: provider.id,
+      machineId: name,
+      name,
+      hostname: 'test',
+      apiToken: name,
+    },
+  })
+  return { providerId: provider.id, workerId: worker.id }
+}
+
 describe.skipIf(!databaseUrl)('conversation persistence', () => {
   let db: TestDb
+  let target: Awaited<ReturnType<typeof createTarget>>
 
   beforeAll(async () => {
     db = await setupTestDb(app => ({
       $events: createEventBus(),
       $conversation: createConversationService(app),
     }))
+    target = await createTarget(db, 'conversation-persistence')
   }, 60_000)
 
   afterAll(async () => db?.close())
@@ -19,6 +40,7 @@ describe.skipIf(!databaseUrl)('conversation persistence', () => {
     db.app.$conversation.start({
       appId: db.appId,
       createdById: db.userId,
+      ...target,
       text,
     })
 
@@ -77,18 +99,20 @@ describe.skipIf(!databaseUrl)('conversation persistence', () => {
 // describes. What these protect is that gap.
 describe.skipIf(!databaseUrl)('naming a conversation', () => {
   let db: TestDb
+  let target: Awaited<ReturnType<typeof createTarget>>
 
   beforeAll(async () => {
     db = await setupTestDb(app => ({
       $events: createEventBus(),
       $conversation: createConversationService(app),
     }))
+    target = await createTarget(db, 'conversation-naming')
   }, 60_000)
 
   afterAll(async () => db?.close())
 
   const start = (text: string) =>
-    db.app.$conversation.start({ appId: db.appId, createdById: db.userId, text })
+    db.app.$conversation.start({ appId: db.appId, createdById: db.userId, ...target, text })
 
   it('names one that has none', async () => {
     const conversation = await start('我想做一个报销审批系统')

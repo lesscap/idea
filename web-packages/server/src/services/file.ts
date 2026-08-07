@@ -1,4 +1,4 @@
-import type { FileStatus, Id, PostUploadTarget } from '@idea/shared'
+import type { Attachment, FileStatus, Id, PostUploadTarget } from '@idea/shared'
 import { nanoid } from 'nanoid'
 import type { Service } from '../types.ts'
 
@@ -40,10 +40,17 @@ export type FileConfirmResult =
   | { readonly kind: 'size_mismatch' }
   | { readonly kind: 'storage_unavailable' }
 
+export type ResolveAttachmentsResult =
+  | { readonly kind: 'ok'; readonly attachments: readonly Attachment[] }
+  | { readonly kind: 'not_found' }
+  | { readonly kind: 'not_ready' }
+
 export type FileService = {
   createUpload: (input: FileCreate) => Promise<FileCreateResult>
   confirm: (userId: Id, fid: string) => Promise<FileConfirmResult>
   getForMember: (userId: Id, fid: string) => Promise<FileRecord | null>
+  resolveAttachments: (appId: Id, fids: readonly string[]) => Promise<ResolveAttachmentsResult>
+  getReadyForWorkspace: (workspaceId: Id, fid: string) => Promise<FileRecord | null>
 }
 
 type Row = {
@@ -140,6 +147,42 @@ export const createFileService: Service<FileService> = app => ({
         fid,
         app: { workspace: { users: { some: { userId } } } },
       },
+    })
+    return row ? toFile(row) : null
+  },
+
+  resolveAttachments: async (appId, fids) => {
+    const uniqueFids = [...new Set(fids)]
+    if (uniqueFids.length === 0) return { kind: 'ok', attachments: [] }
+
+    const rows = await app.$prisma.file.findMany({
+      where: { appId, fid: { in: uniqueFids } },
+    })
+    if (rows.length !== uniqueFids.length) return { kind: 'not_found' }
+    if (rows.some(row => row.status !== 'ready')) return { kind: 'not_ready' }
+
+    const byFid = new Map(rows.map(row => [row.fid, row]))
+    return {
+      kind: 'ok',
+      attachments: fids.flatMap(fid => {
+        const row = byFid.get(fid)
+        return row
+          ? [
+              {
+                fid: row.fid,
+                filename: row.filename,
+                contentType: row.contentType,
+                size: row.size,
+              },
+            ]
+          : []
+      }),
+    }
+  },
+
+  getReadyForWorkspace: async (workspaceId, fid) => {
+    const row = await app.$prisma.file.findFirst({
+      where: { fid, status: 'ready', app: { workspaceId } },
     })
     return row ? toFile(row) : null
   },

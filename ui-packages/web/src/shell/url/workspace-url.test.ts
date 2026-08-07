@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { fileResourceRef } from '../../features/file/api'
 import {
   buildWorkspaceUrl,
   closeTab,
@@ -51,5 +52,12 @@ describe('the app workbench URL', () => {
   it('keeps refs containing commas intact', () => {
     const state = openTab(at('/apps/a'), 'files/a,b.ts')
     expect(at(buildWorkspaceUrl(state)).tabs).toEqual(['files/a,b.ts'])
+  })
+
+  it('round-trips file tabs with localized and URL-significant filenames', () => {
+    const ref = fileResourceRef({ fid: 'file123', filename: '报销 #1,最终版.md' })
+    const state = openTab(at('/apps/a'), ref)
+
+    expect(at(buildWorkspaceUrl(state))).toMatchObject({ active: ref, tabs: [ref] })
   })
 })

@@ -1,6 +1,7 @@
-import { FileText, type LucideIcon } from 'lucide-react'
+import { File, FileText, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
+import { FileResource } from '../features/file/file-resource'
 import type { Translate } from '../i18n'
 import { Placeholder } from './content/placeholder'
 
@@ -53,6 +54,12 @@ export const RESOURCES = {
     // "R-1" — which is what people say out loud anyway.
     title: (_, params) => params.code ?? '',
     Content: RequirementDetail,
+  },
+  file: {
+    path: '/files/:fid/*',
+    icon: File,
+    title: (_, params) => params['*'] ?? '',
+    Content: FileResource,
   },
 } satisfies Record<string, ResourceDef>
 

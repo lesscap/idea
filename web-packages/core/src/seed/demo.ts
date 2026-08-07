@@ -87,6 +87,9 @@ const done: string[] = []
 
 try {
   await prisma.$transaction(async tx => {
+    const provider = await tx.provider.findUnique({ where: { name: 'glm' }, select: { id: true } })
+    if (!provider) throw new Error('seed:providers must run before seed:demo')
+
     const ws =
       (await tx.workspace.findFirst({ where: { name: DEMO.workspace } })) ??
       (await tx.workspace.create({ data: { name: DEMO.workspace } }))
@@ -159,6 +162,7 @@ try {
             cid: nanoid(12),
             appId: app.id,
             createdById: member.id,
+            providerId: provider.id,
             title: item.title,
             titleLocked: true,
             createdAt: lastActiveAt,

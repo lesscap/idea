@@ -24,9 +24,11 @@ const services = (
   $workspace: { roleOf: async () => roleOf, listForUser: async () => [] } as never,
   $app: {
     listInWorkspace: async (_ws, q) => paged([anApp], 1, q),
+    getByIdInWorkspace: async () => anApp,
     getBySlugInWorkspace: async () => anApp,
     create: async () => ({ kind: 'ok', app: anApp }),
     update: async () => ({ kind: 'ok', app: anApp }),
+    remove: async () => ({ kind: 'ok' }),
     ...appOver,
   },
 })
@@ -85,6 +87,7 @@ describe('workspace scoping', () => {
     const data = await okData<{ items: unknown[] }>(response)
     expect(data.items).toEqual([
       {
+        id: anApp.id,
         slug: anApp.slug,
         name: anApp.name,
         description: null,
@@ -93,6 +96,38 @@ describe('workspace scoping', () => {
         updatedAt: '',
       },
     ])
+  })
+
+  it('resolves the browser slug inside the selected workspace', async () => {
+    const getBySlugInWorkspace = vi.fn(async () => anApp)
+    const app = mountController(
+      AppsController,
+      services('member', { getBySlugInWorkspace }),
+      { userId: 1, workspaceId: 42 },
+      { guarded: true },
+    )
+
+    const response = await app.request('/by-slug/expense-approval')
+
+    expect(response.status).toBe(200)
+    expect(getBySlugInWorkspace).toHaveBeenCalledWith(42, 'expense-approval')
+    expect(await okData(response)).toMatchObject({ id: anApp.id, slug: anApp.slug })
+  })
+
+  it('loads an app resource by id inside the selected workspace', async () => {
+    const getByIdInWorkspace = vi.fn(async () => anApp)
+    const app = mountController(
+      AppsController,
+      services('member', { getByIdInWorkspace }),
+      { userId: 1, workspaceId: 42 },
+      { guarded: true },
+    )
+
+    const response = await app.request('/1')
+
+    expect(response.status).toBe(200)
+    expect(getByIdInWorkspace).toHaveBeenCalledWith(42, 1)
+    expect(await okData(response)).toMatchObject({ id: anApp.id, slug: anApp.slug })
   })
 
   // pageSize reaches the database as a LIMIT, so an unclamped value is a free
@@ -131,6 +166,21 @@ describe('app writes', () => {
     expect(res.status).toBe(200)
   })
 
+  it('accepts a two-character slug and rejects a one-character slug', async () => {
+    const app = mountController(
+      AppsController,
+      services('member'),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const accepted = await app.request('/', json({ name: 'AI', slug: 'ai' }))
+    const rejected = await app.request('/', json({ name: 'A', slug: 'a' }))
+
+    expect(accepted.status).toBe(200)
+    expect(rejected.status).toBe(400)
+  })
+
   it('reports a duplicate name as a conflict, not a crash', async () => {
     const app = mountController(
       AppsController,
@@ -167,7 +217,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', { ...json({}), method: 'PATCH' })
+    const res = await app.request('/1', { ...json({}), method: 'PATCH' })
 
     expect(res.status).toBe(400)
   })
@@ -180,11 +230,81 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', {
+    const res = await app.request('/1', {
       ...json({ name: 'x' }),
       method: 'PATCH',
     })
 
     expect(res.status).toBe(404)
+  })
+
+  it('only lets workspace administrators delete an app', async () => {
+    const remove = vi.fn(async () => ({ kind: 'ok' as const }))
+    const memberApp = mountController(
+      AppsController,
+      services('member', { remove }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+    const adminApp = mountController(
+      AppsController,
+      services('admin', { remove }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const denied = await memberApp.request('/1', { method: 'DELETE' })
+    const removed = await adminApp.request('/1', { method: 'DELETE' })
+
+    expect(denied.status).toBe(403)
+    expect(remove).toHaveBeenCalledOnce()
+    expect(removed.status).toBe(200)
+    expect(remove).toHaveBeenCalledWith(1, 1)
+    expect(await okData(removed)).toEqual({ removed: 1 })
+  })
+
+  it('reports active agent work as a specific deletion conflict', async () => {
+    const app = mountController(
+      AppsController,
+      services('admin', { remove: async () => ({ kind: 'busy' }) }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/1', { method: 'DELETE' })
+
+    expect(res.status).toBe(409)
+    expect((await failure(res)).code).toBe('app_busy')
+  })
+
+  it('reports deleting an app outside the workspace as missing', async () => {
+    const app = mountController(
+      AppsController,
+      services('admin', { remove: async () => ({ kind: 'not_found' }) }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/1', { method: 'DELETE' })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('reports an invalid app id as missing without calling the service', async () => {
+    const update = vi.fn()
+    const app = mountController(
+      AppsController,
+      services('member', { update }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/not-an-id', {
+      ...json({ name: 'x' }),
+      method: 'PATCH',
+    })
+
+    expect(res.status).toBe(404)
+    expect(update).not.toHaveBeenCalled()
   })
 })

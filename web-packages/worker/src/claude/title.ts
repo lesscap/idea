@@ -1,6 +1,6 @@
 import type { StoredEvent } from '@idea/shared'
+import type { ProviderConfig, TitleOutcome, TitleSeed } from '../agent/index.ts'
 import { oneShot } from './one-shot.ts'
-import type { ProviderConfig } from './session.ts'
 
 // Naming a conversation after what it is about.
 //
@@ -15,10 +15,6 @@ import type { ProviderConfig } from './session.ts'
 // summariser persona (inside the agent harness the model answers NONE
 // surprisingly often) and not loading the project's CLAUDE.md (it steers a
 // titling ask into prose).
-
-export type TitleSeed = { userText: string; assistantText: string }
-
-export type TitleOutcome = { kind: 'titled'; title: string } | { kind: 'declined' }
 
 // Below this there is nothing to summarise — a greeting, a test ping — and the
 // call is not worth making.
@@ -118,7 +114,7 @@ export const generateTitle = async (input: {
   worktree: string
   sessions: string
   seed: TitleSeed
-}): Promise<TitleOutcome | { kind: 'error'; reason: string }> => {
+}): Promise<TitleOutcome> => {
   const result = await oneShot({
     provider: input.provider,
     worktree: input.worktree,

@@ -1,7 +1,13 @@
+import type { UploadedFile } from '@idea/shared'
 import { ArrowUp, Clock3, X } from 'lucide-react'
 import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
+import {
+  ComposerAttachmentButton,
+  ComposerAttachmentTray,
+  useComposerAttachments,
+} from './composer-attachments'
 import type { PendingInput } from './use-conversation'
 
 // Where someone says what they want.
@@ -10,10 +16,10 @@ import type { PendingInput } from './use-conversation'
 // one control, while queue changes do not resize its border.
 //
 // Shape taken from baton's composer (`channel-room/composer.tsx`), minus the
-// parts we have no mechanism for yet: attachments, slash commands, plan mode.
+// parts we have no mechanism for yet: slash commands and plan mode.
 
-const MIN = '2.5rem'
-const MAX_PX = 160
+const MIN = '2.75rem'
+const MAX_PX = 192
 
 type Withdrawal = { id: number; status: 'pending' | 'failed' } | null
 
@@ -52,40 +58,53 @@ const useAutosize = (ref: RefObject<HTMLTextAreaElement | null>, value: string) 
 export const Composer = ({
   pending,
   onSend,
+  onUpload,
+  onOpenFile,
   onWithdraw,
   exclusiveSubmit,
+  disabled,
 }: {
   pending: readonly PendingInput[]
-  onSend: (text: string) => Promise<unknown>
+  onSend: (text: string, attachmentFids: readonly string[]) => Promise<unknown>
+  onUpload: (file: File) => Promise<UploadedFile>
+  onOpenFile: (file: UploadedFile) => void
   onWithdraw: (id: number) => Promise<unknown>
   exclusiveSubmit: boolean
+  disabled: boolean
 }) => {
   const __ = useLocale()
   const [draft, setDraft] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [sendFailed, setSendFailed] = useState(false)
   const [withdrawal, setWithdrawal] = useState<Withdrawal>(null)
+  const [dragging, setDragging] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
   const submittingRef = useRef(false)
+  const attachments = useComposerAttachments(onUpload)
   useAutosize(ref, draft)
 
-  const canSend = draft.trim() !== ''
+  const canSend =
+    !disabled && !attachments.unsettled && (draft.trim() !== '' || attachments.ready.length > 0)
 
   const submit = () => {
     const text = draft.trim()
-    if (!text || (exclusiveSubmit && submittingRef.current)) return
+    if (!canSend || submittingRef.current) return
+    const attachmentFids = attachments.ready.map(file => file.fid)
+    setSendFailed(false)
 
-    if (exclusiveSubmit) {
-      submittingRef.current = true
-      setSubmitting(true)
-    }
+    submittingRef.current = true
+    setSubmitting(true)
 
     // Cleared immediately. Waiting for the round trip makes the interface feel
     // like it missed the keystroke; restored if the send actually failed.
     setDraft('')
-    void onSend(text)
-      .catch(() => setDraft(current => (current ? `${text}\n\n${current}` : text)))
+    void onSend(text, attachmentFids)
+      .then(() => attachments.removeUploaded(attachmentFids))
+      .catch(() => {
+        setDraft(current => (text ? (current ? `${text}\n\n${current}` : text) : current))
+        setSendFailed(true)
+      })
       .finally(() => {
-        if (!exclusiveSubmit) return
         submittingRef.current = false
         setSubmitting(false)
       })
@@ -121,7 +140,14 @@ export const Composer = ({
                 data-testid={`pending-${item.id}`}
               >
                 <div className="min-w-0 flex-1">
-                  <span className="block truncate text-foreground/80">{item.text}</span>
+                  {item.text && (
+                    <span className="block truncate text-foreground/80">{item.text}</span>
+                  )}
+                  {item.attachments.length > 0 && (
+                    <span className="block truncate text-muted-foreground text-xs">
+                      {item.attachments.map(file => file.filename).join(', ')}
+                    </span>
+                  )}
                   {withdrawal?.id === item.id && withdrawal.status === 'failed' && (
                     <span className="block text-destructive text-xs" role="status">
                       {__('shell.withdrawQueuedFailed')}
@@ -144,31 +170,71 @@ export const Composer = ({
         </section>
       )}
 
-      <div className="rounded-xl border border-border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
-        <div className="flex items-end gap-2 p-2">
-          <textarea
-            ref={ref}
-            rows={1}
-            style={{ minHeight: MIN }}
-            className="flex-1 resize-none border-0 bg-transparent px-1 py-1.5 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-            placeholder={__('shell.composerPlaceholder')}
-            data-testid="composer"
-            value={draft}
-            disabled={exclusiveSubmit && submitting}
-            onChange={event => setDraft(event.target.value)}
-            // Sending while a turn is running is allowed on purpose: the server
-            // holds it and merges it with whatever else arrives before that turn
-            // ends, so a thought delivered in pieces gets one reply.
-            onKeyDown={event => {
-              if (event.key !== 'Enter' || event.shiftKey) return
-              // Enter also confirms a candidate in an IME. Sending here would
-              // ship half a pinyin string — and this interface is Chinese first,
-              // so that is the common path, not an edge case.
-              if (event.nativeEvent.isComposing) return
-              event.preventDefault()
-              submit()
-            }}
-          />
+      {sendFailed && (
+        <p className="mb-2 px-1 text-destructive text-xs" role="alert">
+          {__('transcript.status.sendFailed')}
+        </p>
+      )}
+
+      <fieldset
+        disabled={disabled || (exclusiveSubmit && submitting)}
+        className={`min-w-0 rounded-xl border transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 ${
+          dragging ? 'border-ring bg-muted/20' : 'border-border'
+        } ${disabled ? 'bg-muted/20 opacity-70' : ''}`}
+        onDragEnter={event => {
+          event.preventDefault()
+          if (disabled) return
+          setDragging(true)
+        }}
+        onDragOver={event => event.preventDefault()}
+        onDragLeave={event => {
+          if (
+            event.relatedTarget instanceof Node &&
+            event.currentTarget.contains(event.relatedTarget)
+          )
+            return
+          setDragging(false)
+        }}
+        onDrop={event => {
+          event.preventDefault()
+          setDragging(false)
+          if (disabled) return
+          attachments.add(event.dataTransfer.files)
+        }}
+      >
+        <ComposerAttachmentTray state={attachments} onOpen={onOpenFile} />
+        <textarea
+          ref={ref}
+          rows={1}
+          style={{ minHeight: MIN }}
+          className="block w-full resize-none overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+          placeholder={__('shell.composerPlaceholder')}
+          data-testid="composer"
+          value={draft}
+          onChange={event => {
+            setDraft(event.target.value)
+            setSendFailed(false)
+          }}
+          onPaste={event => {
+            if (event.clipboardData.files.length === 0) return
+            event.preventDefault()
+            attachments.add(event.clipboardData.files)
+          }}
+          // Sending while a turn is running is allowed on purpose: the server
+          // holds it and merges it with whatever else arrives before that turn
+          // ends, so a thought delivered in pieces gets one reply.
+          onKeyDown={event => {
+            if (event.key !== 'Enter' || event.shiftKey) return
+            // Enter also confirms a candidate in an IME. Sending here would
+            // ship half a pinyin string — and this interface is Chinese first,
+            // so that is the common path, not an edge case.
+            if (event.nativeEvent.isComposing) return
+            event.preventDefault()
+            submit()
+          }}
+        />
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <ComposerAttachmentButton state={attachments} />
           {/* Colour follows whether there is anything to send, so the one
               saturated element in the panel is never idle. Disabled goes
               neutral rather than the default half-opacity, which on a coloured
@@ -178,13 +244,13 @@ export const Composer = ({
             className="size-8 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
             aria-label={__('shell.send')}
             data-testid="composer-send"
-            disabled={!canSend || (exclusiveSubmit && submitting)}
+            disabled={!canSend || submitting}
             onClick={submit}
           >
             <ArrowUp />
           </Button>
         </div>
-      </div>
+      </fieldset>
     </div>
   )
 }

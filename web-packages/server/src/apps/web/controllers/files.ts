@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import type { CreateFileUploadResult, UploadedFile } from '@idea/shared'
-import { failWith, notFound, sendOk } from '../../../http.ts'
 import { MAX_FILE_BYTES } from '../../../config.ts'
+import { failWith, notFound, sendOk } from '../../../http.ts'
 import type { FileRecord } from '../../../services/file.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
@@ -9,6 +9,20 @@ import { CreateFileBody } from '../schema/index.ts'
 import { isResponse, scopedApp } from './conversation/scoped.ts'
 
 const fileUrl = (fid: string): string => `/api/web/files/${fid}`
+const MAX_TEXT_PREVIEW_BYTES = 5 * 1024 * 1024
+const TEXT_FILENAME =
+  /\.(?:txt|log|csv|tsv|json|xml|ya?ml|toml|ini|conf|css|s[ac]ss|less|js|jsx|mjs|cjs|ts|tsx|py|rb|go|rs|java|kt|kts|c|h|cc|cpp|hpp|sql|sh|bash|zsh)$/i
+
+const isTextPreview = (file: FileRecord): boolean => {
+  const contentType = file.contentType.toLowerCase().split(';')[0]?.trim() ?? ''
+  const filename = file.filename.toLowerCase()
+  return (
+    contentType.startsWith('text/') ||
+    ['application/json', 'application/xml', 'application/javascript'].includes(contentType) ||
+    ['.md', '.markdown', '.html', '.htm'].some(extension => filename.endsWith(extension)) ||
+    TEXT_FILENAME.test(filename)
+  )
+}
 
 const toUploadedFile = (file: FileRecord): UploadedFile => ({
   fid: file.fid,
@@ -64,6 +78,64 @@ export const FilesController: Controller = app => {
       return failWith(c, 503, 'storage_unavailable', 'object storage is unavailable')
     }
     return sendOk(c, toUploadedFile(result.file))
+  })
+
+  app.get('/:fid/meta', async c => {
+    const file = await app.$file.getForMember(session(c).userId, c.req.param('fid'))
+    return file ? sendOk(c, toUploadedFile(file)) : notFound(c, 'file not found')
+  })
+
+  app.get('/:fid/text', async c => {
+    const file = await app.$file.getForMember(session(c).userId, c.req.param('fid'))
+    if (!file) return notFound(c, 'file not found')
+    if (file.status !== 'ready') {
+      return failWith(c, 409, 'file_not_ready', 'file upload has not been confirmed')
+    }
+    if (!isTextPreview(file)) {
+      return failWith(c, 400, 'file_preview_unsupported', 'file is not a supported text format')
+    }
+    if (file.size > MAX_TEXT_PREVIEW_BYTES) {
+      return failWith(
+        c,
+        413,
+        'file_preview_too_large',
+        `text preview exceeds ${MAX_TEXT_PREVIEW_BYTES} bytes`,
+      )
+    }
+
+    const storage = app.$storage
+    if (!storage) {
+      return failWith(c, 503, 'storage_unavailable', 'object storage is unavailable')
+    }
+
+    try {
+      c.header('Cache-Control', 'private, no-store')
+      return sendOk(c, await storage.readText(file.storageKey))
+    } catch (error) {
+      globalThis.console.error('OSS readText failed', error)
+      return failWith(c, 503, 'storage_unavailable', 'object storage is unavailable')
+    }
+  })
+
+  app.get('/:fid/download', async c => {
+    const file = await app.$file.getForMember(session(c).userId, c.req.param('fid'))
+    if (!file) return notFound(c, 'file not found')
+    if (file.status !== 'ready') {
+      return failWith(c, 409, 'file_not_ready', 'file upload has not been confirmed')
+    }
+
+    const storage = app.$storage
+    if (!storage) {
+      return failWith(c, 503, 'storage_unavailable', 'object storage is unavailable')
+    }
+
+    try {
+      c.header('Cache-Control', 'private, no-store')
+      return c.redirect(await storage.signGet(file.storageKey, file.filename, 'attachment'), 302)
+    } catch (error) {
+      globalThis.console.error('OSS signGet for download failed', error)
+      return failWith(c, 503, 'storage_unavailable', 'object storage is unavailable')
+    }
   })
 
   app.get('/:fid', async c => {

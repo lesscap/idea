@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
@@ -10,37 +10,54 @@ import type { PendingInput } from './use-conversation'
 
 const draw = ({
   onSend = vi.fn().mockResolvedValue(undefined),
+  onUpload = vi.fn().mockResolvedValue({
+    fid: 'file123',
+    filename: 'brief.pdf',
+    contentType: 'application/pdf',
+    size: 5,
+    status: 'ready',
+    url: '/api/web/files/file123',
+    createdAt: '2026-08-05T00:00:00.000Z',
+  }),
+  onOpenFile = vi.fn(),
   onWithdraw = vi.fn().mockResolvedValue(undefined),
   pending = [],
   exclusiveSubmit = false,
+  disabled = false,
 }: {
   onSend?: ReturnType<typeof vi.fn>
+  onUpload?: ReturnType<typeof vi.fn>
+  onOpenFile?: ReturnType<typeof vi.fn>
   onWithdraw?: ReturnType<typeof vi.fn>
   pending?: readonly PendingInput[]
   exclusiveSubmit?: boolean
+  disabled?: boolean
 } = {}) => {
   render(
     <LocaleProvider>
       <Composer
         pending={pending}
         onSend={onSend}
+        onUpload={onUpload}
+        onOpenFile={onOpenFile}
         onWithdraw={onWithdraw}
         exclusiveSubmit={exclusiveSubmit}
+        disabled={disabled}
       />
     </LocaleProvider>,
   )
   const box = screen.getByTestId('composer')
   fireEvent.change(box, { target: { value: '你好' } })
-  return { box, onSend }
+  return { box, onSend, onUpload, onOpenFile }
 }
 
 describe('sending with the keyboard', () => {
-  it('sends on Enter', () => {
+  it('sends on Enter', async () => {
     const { box, onSend } = draw()
 
-    fireEvent.keyDown(box, { key: 'Enter' })
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
 
-    expect(onSend).toHaveBeenCalledWith('你好')
+    expect(onSend).toHaveBeenCalledWith('你好', [])
   })
 
   // Enter also confirms a candidate in a Chinese IME. Sending there ships half a
@@ -82,6 +99,10 @@ describe('sending with the keyboard', () => {
 
     expect(box).not.toBeDisabled()
     expect(box).toHaveValue('你好')
+    expect(screen.getByRole('alert')).toHaveTextContent('发送失败，消息已恢复，请重试。')
+
+    fireEvent.change(box, { target: { value: '修改后重试' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('keeps a newer draft when an earlier send fails', async () => {
@@ -114,6 +135,45 @@ describe('the arrow', () => {
 
     expect(screen.getByTestId('composer-send')).toBeDisabled()
   })
+
+  it('disables message and file input when no worker is assigned', () => {
+    const { box } = draw({ disabled: true })
+
+    expect(box).toBeDisabled()
+    expect(screen.getByTestId('composer-file-input')).toBeDisabled()
+    expect(screen.getByTestId('composer-send')).toBeDisabled()
+  })
+})
+
+describe('attachments', () => {
+  it('uploads immediately and sends a ready file without text', async () => {
+    const { box, onSend, onUpload } = draw()
+    fireEvent.change(box, { target: { value: '' } })
+    const file = new File(['brief'], 'brief.pdf', { type: 'application/pdf' })
+
+    fireEvent.change(screen.getByTestId('composer-file-input'), {
+      target: { files: [file] },
+    })
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledWith(file))
+    await waitFor(() => expect(screen.getByText('brief.pdf')).toBeInTheDocument())
+    await act(async () => fireEvent.click(screen.getByTestId('composer-send')))
+
+    expect(onSend).toHaveBeenCalledWith('', ['file123'])
+  })
+
+  it('opens a ready attachment without sending it', async () => {
+    const { box, onOpenFile, onSend } = draw()
+    fireEvent.change(box, { target: { value: '' } })
+    fireEvent.change(screen.getByTestId('composer-file-input'), {
+      target: { files: [new File(['brief'], 'brief.pdf', { type: 'application/pdf' })] },
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: /brief.pdf/ }))
+
+    expect(onOpenFile).toHaveBeenCalledWith(expect.objectContaining({ fid: 'file123' }))
+    expect(onSend).not.toHaveBeenCalled()
+  })
 })
 
 describe('withdrawing queued input', () => {
@@ -125,7 +185,9 @@ describe('withdrawing queued input', () => {
     const onWithdraw = vi.fn(() => request)
     draw({
       onWithdraw,
-      pending: [{ id: 7, text: '补充说明', createdAt: '2026-07-29T00:01:00.000Z' }],
+      pending: [
+        { id: 7, text: '补充说明', attachments: [], createdAt: '2026-07-29T00:01:00.000Z' },
+      ],
     })
     const button = screen.getByTestId('pending-withdraw-7')
 

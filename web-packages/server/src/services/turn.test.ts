@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createCommandBus } from '../command-bus.ts'
 import { createEventBus } from '../event-bus.ts'
 import { createConversationService } from './conversation/index.ts'
 import { createPendingInputService } from './pending-input.ts'
@@ -18,6 +19,7 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
       // Real rather than stubbed: it holds only live subscriptions, so there is
       // nothing to fake and a stub would just be another thing to keep correct.
       $events: createEventBus(),
+      $commands: createCommandBus(),
       $conversation: createConversationService(app),
       $pendingInput: createPendingInputService(app),
       $turn: createTurnService(app),
@@ -26,7 +28,37 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
 
   afterAll(async () => db?.close())
 
-  const conversation = async (workspaceId = db.workspaceId) => {
+  const provider = async (name: string) =>
+    db.prisma.provider.upsert({
+      where: { name },
+      update: {},
+      create: { name, label: name, kind: 'claude', config: {} },
+      select: { id: true },
+    })
+
+  const worker = async (
+    name: string,
+    options: { workspaceId?: number; provider?: string } = {},
+  ): Promise<Claimant> => {
+    const backend = await provider(options.provider ?? 'claude-test')
+    return db.prisma.worker.create({
+      data: {
+        workspaceId: options.workspaceId ?? db.workspaceId,
+        providerId: backend.id,
+        machineId: name,
+        name,
+        hostname: 'h',
+        apiToken: name,
+      },
+      select: { id: true, workspaceId: true, providerId: true },
+    })
+  }
+
+  const conversation = async (
+    assigned?: Claimant,
+    workspaceId = assigned?.workspaceId ?? db.workspaceId,
+  ) => {
+    const owner = assigned ?? (await worker(`conversation-${nanoid(6)}`, { workspaceId }))
     const app = await db.prisma.app.upsert({
       where: { workspaceId_slug: { workspaceId, slug: 'turn-tests' } },
       update: {},
@@ -38,40 +70,17 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
       },
       select: { id: true },
     })
-    return db.prisma.conversation.create({
-      data: { cid: nanoid(12), appId: app.id, createdById: db.userId },
+    const row = await db.prisma.conversation.create({
+      data: {
+        cid: nanoid(12),
+        appId: app.id,
+        createdById: db.userId,
+        providerId: owner.providerId,
+        workerId: owner.id,
+      },
       select: { id: true },
     })
-  }
-
-  const provider = async (name: string) =>
-    db.prisma.provider.upsert({
-      where: { name },
-      update: {},
-      create: { name, label: name, kind: 'claude', config: {} },
-      select: { id: true, kind: true },
-    })
-
-  // Returns what the claim needs to know about the caller. Built here rather
-  // than looked up inside claimNext so a caller cannot claim on behalf of a
-  // worker it did not authenticate.
-  const worker = async (
-    name: string,
-    options: { workspaceId?: number; provider?: string } = {},
-  ): Promise<Claimant> => {
-    const backend = await provider(options.provider ?? 'claude-test')
-    const row = await db.prisma.worker.create({
-      data: {
-        workspaceId: options.workspaceId ?? db.workspaceId,
-        providerId: backend.id,
-        machineId: name,
-        name,
-        hostname: 'h',
-        apiToken: name,
-      },
-      select: { id: true, workspaceId: true, providerId: true },
-    })
-    return { ...row, agentKind: backend.kind }
+    return { ...row, worker: owner }
   }
 
   describe('claiming', () => {
@@ -80,7 +89,7 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     // cross-process serialisation.
     it('lets exactly one worker run a conversation at a time', async () => {
       const c = await conversation()
-      const [w1, w2] = [await worker('claim-a'), await worker('claim-b')]
+      const other = await worker('claim-b')
       // Two separate turns on one conversation — the situation the index exists
       // for. Claiming the same row twice would be caught by status alone.
       await db.prisma.turn.createMany({
@@ -90,7 +99,10 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         ],
       })
 
-      const claims = await Promise.all([db.app.$turn.claimNext(w1), db.app.$turn.claimNext(w2)])
+      const claims = await Promise.all([
+        db.app.$turn.claimNext(c.worker),
+        db.app.$turn.claimNext(other),
+      ])
 
       expect(claims.filter(Boolean)).toHaveLength(1)
       expect(
@@ -100,7 +112,6 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
 
     it('frees the conversation once the turn finishes', async () => {
       const c = await conversation()
-      const w = await worker('claim-serial')
       await db.prisma.turn.createMany({
         data: [
           { conversationId: c.id, userEventSequence: 0 },
@@ -108,18 +119,18 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         ],
       })
 
-      const first = await db.app.$turn.claimNext(w)
+      const first = await db.app.$turn.claimNext(c.worker)
       expect(first).not.toBeNull()
-      expect(await db.app.$turn.claimNext(w)).toBeNull() // still busy
+      expect(await db.app.$turn.claimNext(c.worker)).toBeNull() // still busy
 
-      await db.app.$turn.finish(first!.id, 'completed')
+      await db.app.$turn.finish(first!.id, c.worker.id, 'completed')
 
-      expect(await db.app.$turn.claimNext(w)).not.toBeNull()
+      expect(await db.app.$turn.claimNext(c.worker)).not.toBeNull()
     })
 
     it('moves on to another conversation rather than giving up', async () => {
-      const [busy, free] = [await conversation(), await conversation()]
       const w = await worker('claim-skip')
+      const [busy, free] = [await conversation(w), await conversation(w)]
       await db.prisma.turn.createMany({
         data: [
           { conversationId: busy.id, userEventSequence: 0 },
@@ -135,6 +146,31 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     })
   })
 
+  describe('execution state', () => {
+    it('reports a queue without consulting worker liveness', async () => {
+      const c = await conversation()
+      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
+
+      expect(await db.app.$turn.execution(c.id)).toEqual({ state: 'queued' })
+    })
+
+    it('reports running and idle without consulting worker presence', async () => {
+      const c = await conversation()
+      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
+
+      expect(await db.app.$turn.execution(c.id)).toMatchObject({ state: 'queued' })
+      const claimed = await db.app.$turn.claimNext(c.worker)
+      expect(await db.app.$turn.execution(c.id)).toEqual({ state: 'running' })
+      const waiting = await db.prisma.turn.create({
+        data: { conversationId: c.id, userEventSequence: 1 },
+      })
+      expect(await db.app.$turn.execution(c.id)).toEqual({ state: 'running' })
+      await db.prisma.turn.delete({ where: { id: waiting.id } })
+      await db.app.$turn.finish(claimed!.id, c.worker.id, 'completed')
+      expect(await db.app.$turn.execution(c.id)).toEqual({ state: 'idle' })
+    })
+  })
+
   // A worker runs untrusted instructions, so the server does not rely on it
   // staying confined. These are the checks that hold even if it does not.
   describe('what a worker may reach', () => {
@@ -143,62 +179,40 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         data: { name: 'other' },
         select: { id: true },
       })
-      const theirs = await conversation(other.id)
+      const theirs = await conversation(undefined, other.id)
       await db.prisma.turn.create({ data: { conversationId: theirs.id, userEventSequence: 0 } })
 
       expect(await db.app.$turn.claimNext(await worker('cross-tenant'))).toBeNull()
     })
 
-    // Nobody picks a backend in advance; whichever worker gets there first
-    // decides, and the conversation is fixed to it from then on.
-    it('stamps an unclaimed conversation with the backend that took it', async () => {
-      const c = await conversation()
-      const w = await worker('stamp-first', { provider: 'stamp-glm' })
+    it('only lets the assigned worker claim the conversation', async () => {
+      const mine = await worker('assigned-mine', { provider: 'assigned-provider' })
+      const c = await conversation(mine)
       await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-
-      await db.app.$turn.claimNext(w)
-
-      const row = await db.prisma.conversation.findUniqueOrThrow({ where: { id: c.id } })
-      expect(row.providerId).toBe(w.providerId)
-      expect(row.agentKind).toBe('claude')
-    })
-
-    // Resume and the event vocabulary both depend on a conversation staying on
-    // one backend. A second worker with a different one must not pick it up.
-    it('keeps a stamped conversation on its own backend', async () => {
-      const c = await conversation()
-      const mine = await worker('stamp-mine', { provider: 'stamp-a' })
-      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      const first = await db.app.$turn.claimNext(mine)
-      await db.app.$turn.finish(first!.id, 'completed')
-      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 1 } })
-
-      const stranger = await worker('stamp-stranger', { provider: 'stamp-b' })
+      const stranger = await worker('assigned-stranger', { provider: 'assigned-provider' })
 
       expect(await db.app.$turn.claimNext(stranger)).toBeNull()
       expect(await db.app.$turn.claimNext(mine)).not.toBeNull()
     })
 
-    // Both pass the filter — the conversation is unstamped for both — so the
-    // stamp itself has to settle it. Without `providerId: null` in the update's
-    // condition the second would silently reassign the first one's conversation.
-    it('settles on one backend when two reach an unstamped conversation together', async () => {
+    it('does not let a stale worker renew after reassignment', async () => {
       const c = await conversation()
-      const [a, b] = [
-        await worker('race-a', { provider: 'race-alpha' }),
-        await worker('race-b', { provider: 'race-beta' }),
-      ]
-      await db.prisma.turn.createMany({
-        data: [
-          { conversationId: c.id, userEventSequence: 0 },
-          { conversationId: c.id, userEventSequence: 1 },
-        ],
+      const claimed = await db.prisma.turn.create({
+        data: {
+          conversationId: c.id,
+          userEventSequence: 0,
+          status: 'running',
+          runningKey: String(c.id),
+          leaseUntil: new Date(Date.now() + 60_000),
+        },
+      })
+      const replacement = await worker('assigned-replacement')
+      await db.prisma.conversation.update({
+        where: { id: c.id },
+        data: { workerId: replacement.id, providerId: replacement.providerId },
       })
 
-      await Promise.all([db.app.$turn.claimNext(a), db.app.$turn.claimNext(b)])
-
-      const row = await db.prisma.conversation.findUniqueOrThrow({ where: { id: c.id } })
-      expect([a.providerId, b.providerId]).toContain(row.providerId)
+      expect(await db.app.$turn.renewLease(claimed.id, c.worker.id)).toBe(false)
     })
   })
 
@@ -208,9 +222,8 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
 
     it('returns an expired turn to the queue', async () => {
       const c = await conversation()
-      const w = await worker('lease-expire')
       await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      const claimed = await db.app.$turn.claimNext(w)
+      const claimed = await db.app.$turn.claimNext(c.worker)
       await expire(claimed!.id)
 
       expect((await db.app.$turn.reap()).requeued).toBeGreaterThanOrEqual(1)
@@ -225,12 +238,11 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     // its turn taken away and executed a second time.
     it('does not reclaim a turn that keeps renewing', async () => {
       const c = await conversation()
-      const w = await worker('lease-renew')
       await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      const claimed = await db.app.$turn.claimNext(w)
+      const claimed = await db.app.$turn.claimNext(c.worker)
 
       await expire(claimed!.id)
-      expect(await db.app.$turn.renewLease(claimed!.id, w.id)).toBe(true)
+      expect(await db.app.$turn.renewLease(claimed!.id, c.worker.id)).toBe(true)
       await db.app.$turn.reap()
 
       expect((await db.prisma.turn.findUniqueOrThrow({ where: { id: claimed!.id } })).status).toBe(
@@ -242,16 +254,15 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     // longer holds after the reaper handed its turn to someone else.
     it('refuses renewal from a worker that no longer holds the turn', async () => {
       const c = await conversation()
-      const [owner, other] = [await worker('lease-owner'), await worker('lease-other')]
+      const other = await worker('lease-other')
       await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      const claimed = await db.app.$turn.claimNext(owner)
+      const claimed = await db.app.$turn.claimNext(c.worker)
 
       expect(await db.app.$turn.renewLease(claimed!.id, other.id)).toBe(false)
     })
 
     it('gives up on a turn that keeps failing instead of retrying forever', async () => {
       const c = await conversation()
-      const w = await worker('lease-attempts')
       const turn = await db.prisma.turn.create({
         data: { conversationId: c.id, userEventSequence: 0, attempt: 3 },
       })
@@ -259,7 +270,6 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         where: { id: turn.id },
         data: {
           status: 'running',
-          workerId: w.id,
           runningKey: String(c.id),
           leaseUntil: new Date(0),
         },
@@ -270,31 +280,27 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         'failed',
       )
     })
-
-    // A dropped command stream means the worker's child processes are already
-    // gone; waiting out the leases would only make someone wait longer.
-    it('releases every turn a disconnected worker held', async () => {
-      const c = await conversation()
-      const w = await worker('lease-release')
-      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      await db.app.$turn.claimNext(w)
-
-      expect(await db.app.$turn.releaseWorker(w.id)).toBe(1)
-      expect(await db.app.$turn.claimNext(await worker('lease-successor'))).not.toBeNull()
-    })
   })
 
   describe('materialize', () => {
     it('merges everything pending into one message and one turn', async () => {
       const c = await conversation()
-      for (const text of ['要报销审批', '要能传发票', '超 5000 要总监批'])
-        await db.app.$pendingInput.enqueue(c.id, { text })
+      const attachment = {
+        fid: 'invoice123',
+        filename: '发票.pdf',
+        contentType: 'application/pdf',
+        size: 16,
+      }
+      await db.app.$pendingInput.enqueue(c.id, { text: '要报销审批' })
+      await db.app.$pendingInput.enqueue(c.id, { text: '要能传发票', attachments: [attachment] })
+      await db.app.$pendingInput.enqueue(c.id, { text: '超 5000 要总监批' })
 
       const stored = await db.app.$pendingInput.materialize(c.id)
 
       expect(stored?.event).toMatchObject({
         type: 'user_message',
         text: '要报销审批\n\n要能传发票\n\n超 5000 要总监批',
+        attachments: [attachment],
       })
       expect(await db.prisma.turn.count({ where: { conversationId: c.id } })).toBe(1)
       expect(await db.app.$pendingInput.list(c.id)).toEqual([])
@@ -320,14 +326,14 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     // and this test finishes someone else's turn.
     it('goes out once the turn that held it back has closed', async () => {
       const alone = await db.prisma.workspace.create({ data: { name: 'held-back' } })
-      const c = await conversation(alone.id)
       const w = await worker('materialize-after-finish', { workspaceId: alone.id })
+      const c = await conversation(w)
       await db.app.$pendingInput.enqueue(c.id, { text: 'first' })
       await db.app.$pendingInput.materialize(c.id)
       await db.app.$pendingInput.enqueue(c.id, { text: 'second' })
       const claimed = await db.app.$turn.claimNext(w)
 
-      expect(await db.app.$turn.finish(claimed?.id ?? 0, 'completed')).toBe(true)
+      expect(await db.app.$turn.finish(claimed?.id ?? 0, w.id, 'completed')).toBe(true)
 
       expect(await db.app.$pendingInput.materialize(c.id)).not.toBeNull()
       expect(await db.app.$pendingInput.list(c.id)).toEqual([])

@@ -1,4 +1,4 @@
-import type { ConversationSummary, Paged } from '@idea/shared'
+import type { ConversationSummary, Id, Paged } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useLocaleControl } from '../../i18n'
 import { get } from '../../lib/request'
@@ -32,11 +32,11 @@ type PageInfo = { total: number; page: number; pageSize: number }
 const UNREAD: PageInfo = { total: 0, page: 0, pageSize: 0 }
 
 export const ConversationList = ({
-  slug,
+  appId,
   conversationId,
   onSelect,
 }: {
-  slug: string
+  appId: Id
   conversationId: string | null
   onSelect: (id: string) => void
 }) => {
@@ -47,9 +47,7 @@ export const ConversationList = ({
 
   const fetchPage = useCallback(
     (page: number) =>
-      get<Paged<ConversationSummary>>(
-        `/apps/${encodeURIComponent(slug)}/conversations?page=${page}`,
-      )
+      get<Paged<ConversationSummary>>(`/apps/${appId}/conversations?page=${page}`)
         .then(data => {
           // Page 1 is a re-read and replaces; anything beyond it is "load more"
           // and appends.
@@ -60,7 +58,7 @@ export const ConversationList = ({
           // A list that failed to refresh is better left showing what it had
           // than emptied: the selection in the URL still resolves either way.
         }),
-    [slug],
+    [appId],
   )
 
   // The first page, once. `fetchPage` is stable, so this does not re-run when

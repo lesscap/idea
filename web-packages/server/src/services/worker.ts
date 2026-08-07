@@ -21,12 +21,15 @@ export type Worker = {
   readonly id: Id
   readonly workspaceId: Id
   readonly providerId: Id
-  // A copy of the provider's kind, so the claim can stamp a conversation without
-  // a second lookup on every attempt.
-  readonly agentKind: string
   readonly machineId: string
   readonly name: string
   readonly hostname: string
+}
+
+export type WorkerOption = Worker & {
+  readonly online: boolean
+  readonly providerLabel: string
+  readonly providerKind: string
 }
 
 export type RegisterInput = {
@@ -51,10 +54,15 @@ export type RegisterResult =
   // The container names a backend the platform does not know, or that is turned
   // off. Refused at registration rather than at the first turn.
   | { kind: 'unknown_provider' }
+  // A machine is one worker deployment. Changing its backend in place would
+  // invalidate every conversation currently assigned to it.
+  | { kind: 'provider_mismatch'; existing: Worker }
 
 export type WorkerService = {
   register: (input: RegisterInput) => Promise<RegisterResult>
   byToken: (token: string) => Promise<Worker | null>
+  getForWorkspace: (workspaceId: Id, workerId: Id) => Promise<WorkerOption | null>
+  listOnline: (workspaceId: Id, providerId?: Id) => Promise<readonly WorkerOption[]>
   createEnrolment: (
     workspaceId: Id,
     createdById: Id,
@@ -84,11 +92,25 @@ const view = (row: {
   id: row.id,
   workspaceId: row.workspaceId,
   providerId: row.providerId,
-  agentKind: row.provider.kind,
   machineId: row.machineId,
   name: row.name,
   hostname: row.hostname,
 })
+
+const option = (
+  row: Parameters<typeof view>[0] & { provider: { kind: string; label: string } },
+  online: boolean,
+): WorkerOption => ({
+  ...view(row),
+  online,
+  providerLabel: row.provider.label,
+  providerKind: row.provider.kind,
+})
+
+const OPTION_SELECT = {
+  ...SELECT,
+  provider: { select: { kind: true, label: true } },
+} as const
 
 export const createWorkerService: Service<WorkerService> = app => ({
   // Idempotent on IDENTITY, anchored on (workspace, machine): a restarted daemon
@@ -117,19 +139,21 @@ export const createWorkerService: Service<WorkerService> = app => ({
       // Hashed at rest, like invite tokens: a database dump then yields nothing
       // that can be presented as a worker.
       const secret = { apiToken: sha256(apiToken) }
-      const fields = { name: input.name, hostname: input.hostname, providerId: provider.id }
-
-      await tx.workerEnrolment.update({
-        where: { id: enrolment.id },
-        data: { lastUsedAt: new Date() },
-      })
+      const fields = { name: input.name, hostname: input.hostname }
 
       const byMachine = await tx.worker.findUnique({
         where: { workspaceId_machineId: { workspaceId, machineId: input.machineId } },
-        select: { id: true },
+        select: SELECT,
       })
 
       if (byMachine) {
+        if (byMachine.providerId !== provider.id)
+          return { kind: 'provider_mismatch' as const, existing: view(byMachine) }
+
+        await tx.workerEnrolment.update({
+          where: { id: enrolment.id },
+          data: { lastUsedAt: new Date() },
+        })
         const row = await tx.worker.update({
           where: { id: byMachine.id },
           data: { ...fields, ...secret },
@@ -144,8 +168,18 @@ export const createWorkerService: Service<WorkerService> = app => ({
       })
       if (byName) return { kind: 'name_collision' as const, existing: view(byName) }
 
+      await tx.workerEnrolment.update({
+        where: { id: enrolment.id },
+        data: { lastUsedAt: new Date() },
+      })
       const created = await tx.worker.create({
-        data: { workspaceId, machineId: input.machineId, ...fields, ...secret },
+        data: {
+          workspaceId,
+          machineId: input.machineId,
+          providerId: provider.id,
+          ...fields,
+          ...secret,
+        },
         select: SELECT,
       })
       return { kind: 'created' as const, worker: view(created), apiToken }
@@ -157,6 +191,27 @@ export const createWorkerService: Service<WorkerService> = app => ({
       select: SELECT,
     })
     return row ? view(row) : null
+  },
+
+  getForWorkspace: async (workspaceId, workerId) => {
+    const row = await app.$prisma.worker.findFirst({
+      where: { id: workerId, workspaceId, provider: { enabled: true } },
+      select: OPTION_SELECT,
+    })
+    return row ? option(row, app.$commands.connected(row.id)) : null
+  },
+
+  listOnline: async (workspaceId, providerId) => {
+    const rows = await app.$prisma.worker.findMany({
+      where: {
+        workspaceId,
+        provider: { enabled: true },
+        ...(providerId === undefined ? {} : { providerId }),
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      select: OPTION_SELECT,
+    })
+    return rows.filter(row => app.$commands.connected(row.id)).map(row => option(row, true))
   },
 
   // The plaintext is returned once and never stored — same shape as an invite.

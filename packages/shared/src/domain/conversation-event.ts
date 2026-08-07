@@ -67,11 +67,16 @@ export type AgentUsage = {
 }
 
 export type Attachment = {
-  id: Id
-  name: string
+  fid: string
+  filename: string
   contentType: string
   size: number
 }
+
+export type ConversationExecution =
+  | { readonly state: 'idle' }
+  | { readonly state: 'queued' }
+  | { readonly state: 'running' }
 
 // The provider's untouched payload. Kept server-side for replay and for working
 // out what an adapter got wrong — and never sent anywhere, because it can carry

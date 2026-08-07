@@ -15,8 +15,9 @@ import {
   useToggleSide,
 } from '../core/layout/use-layout'
 import { useCurrentRole, useCurrentUser, useCurrentWorkspaceId } from '../core/session/use-session'
-import { getApp } from '../features/app/api'
+import { getAppBySlug } from '../features/app/api'
 import { ConversationPanel } from '../features/conversation/conversation-panel'
+import { fileResourceRef } from '../features/file/api'
 import { useLocale, useLocaleControl } from '../i18n'
 import { Button } from '../ui'
 import { ContentColumn } from './content'
@@ -76,7 +77,7 @@ export const Shell = () => {
   useEffect(() => {
     let current = true
     setApp(undefined)
-    getApp(url.slug)
+    getAppBySlug(url.slug)
       .then(found => {
         if (current) setApp(found)
       })
@@ -182,11 +183,12 @@ export const Shell = () => {
           className="flex min-h-0 min-w-0 flex-col"
         >
           <ConversationPanel
-            slug={url.slug}
+            appId={app.id}
             conversationId={url.conversationId}
             hidden={conversationHidden}
             onConversationCreated={workspace.replaceConversation}
             onCollapse={() => setConversationCollapsed(true)}
+            onOpenFile={file => workspace.open(fileResourceRef(file))}
           />
         </Panel>
 
