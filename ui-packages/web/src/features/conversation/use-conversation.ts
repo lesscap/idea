@@ -1,4 +1,4 @@
-import type { Attachment, ConversationExecution } from '@idea/shared'
+import type { Attachment, ConversationExecution, Id } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from '../../lib/request'
 import { phaseOf, toBubbles, type WireStored } from './transcript'
@@ -87,11 +87,11 @@ type WorkersPage = { items: WorkerOption[] }
 // it would send the first message into a conversation the URL never learns about,
 // and the draft would sit there looking unsent. That should not compile.
 export const useConversation = (
-  slug: string,
+  appId: Id,
   conversationId: string | null,
   onConversationCreated: (id: string) => void,
 ) => {
-  const base = `/apps/${encodeURIComponent(slug)}/conversations`
+  const base = `/apps/${appId}/conversations`
   const persistedId = conversationId === 'new' ? null : conversationId
   const [events, setEvents] = useState<WireStored[]>([])
   const [pending, setPending] = useState<PendingInput[]>([])
@@ -119,7 +119,7 @@ export const useConversation = (
   const refreshWorkers = useCallback(async () => {
     setWorkersStatus('loading')
     try {
-      const page = await get<WorkersPage>(`/apps/${encodeURIComponent(slug)}/workers`)
+      const page = await get<WorkersPage>(`/apps/${appId}/workers`)
       setWorkers(page.items)
       setSelectedWorkerId(current =>
         current !== null && page.items.some(worker => worker.id === current)
@@ -130,7 +130,7 @@ export const useConversation = (
     } catch {
       setWorkersStatus('error')
     }
-  }, [slug])
+  }, [appId])
 
   useEffect(() => {
     void refreshWorkers()
@@ -211,7 +211,6 @@ export const useConversation = (
       source.onmessage = message => {
         try {
           const incoming = JSON.parse(message.data) as WireStored
-          if (incoming.event.type === 'turn.queued') setExecution({ state: 'queued' })
           if (incoming.event.type === 'turn.started') setExecution({ state: 'running' })
           if (
             incoming.event.type === 'turn.completed' ||
@@ -223,8 +222,7 @@ export const useConversation = (
           // A queued batch is deleted in the same transaction that writes its
           // user_message. Read the authoritative queue after that commit rather
           // than clearing locally: newer input may already be waiting.
-          if (incoming.event.type === 'user_message' || incoming.event.type === 'turn.queued')
-            void backfill(`?after=${incoming.sequence}`)
+          if (incoming.event.type === 'user_message') void backfill(`?after=${incoming.sequence}`)
         } catch {
           // A frame that will not parse is not worth tearing the stream down for.
         }

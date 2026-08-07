@@ -32,7 +32,7 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
     if (second.kind !== 'ok') return
 
     await expect(
-      db.app.$app.update(db.workspaceId, second.app.slug, { name: 'Test app' }),
+      db.app.$app.update(db.workspaceId, second.app.id, { name: 'Test app' }),
     ).resolves.toEqual({ kind: 'name_taken' })
   })
 
@@ -89,7 +89,7 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
       }),
     ])
 
-    await expect(db.app.$app.remove(db.workspaceId, 'delete-test')).resolves.toEqual({
+    await expect(db.app.$app.remove(db.workspaceId, app.id)).resolves.toEqual({
       kind: 'busy',
     })
     expect(await db.prisma.app.count({ where: { id: app.id } })).toBe(1)
@@ -98,7 +98,7 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
       where: { conversationId: conversation.id },
       data: { status: 'completed' },
     })
-    await expect(db.app.$app.remove(db.workspaceId, 'delete-test')).resolves.toEqual({
+    await expect(db.app.$app.remove(db.workspaceId, app.id)).resolves.toEqual({
       kind: 'ok',
     })
 

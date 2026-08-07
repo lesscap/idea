@@ -74,7 +74,14 @@ export const setupTestDb = async (
   // creates the schema itself, so there is no bootstrap step.
   execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
     cwd: new URL('../../../core', import.meta.url).pathname,
-    env: { ...process.env, DATABASE_URL: withSchema(base, schema) },
+    // Every Vitest worker owns a distinct schema. Prisma's advisory lock is
+    // database-wide, so keeping it would serialize unrelated schemas and can
+    // time out while several integration suites start together.
+    env: {
+      ...process.env,
+      DATABASE_URL: withSchema(base, schema),
+      PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK: '1',
+    },
     stdio: 'pipe',
   })
 

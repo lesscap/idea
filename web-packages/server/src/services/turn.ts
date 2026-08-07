@@ -38,10 +38,6 @@ export type TurnService = {
   isAbortRequested: (turnId: Id) => Promise<boolean>
   // Returns how many turns were returned to the queue and how many gave up.
   reap: () => Promise<{ requeued: number; failed: number }>
-  // Every turn a worker was running, released at once. Called when its command
-  // stream drops: the child processes died with it, so waiting out the leases
-  // would only add delay.
-  releaseWorker: (workerId: Id) => Promise<number>
 }
 
 // How long a claim is good for without renewal. Long enough that a slow
@@ -57,7 +53,6 @@ const CANDIDATES = 20
 // Past this, a turn has failed the same way repeatedly and retrying is just a
 // slower way to fail.
 const MAX_ATTEMPTS = 3
-const RELEASE_RACE = 'TURN_RELEASE_RACE'
 
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
@@ -214,35 +209,6 @@ export const createTurnService: Service<TurnService> = app => {
       ])
 
       return { requeued: requeued.count, failed: failed.count }
-    },
-
-    releaseWorker: async workerId => {
-      const held = await app.$prisma.turn.findMany({
-        where: { status: 'running', conversation: { workerId } },
-        select: { id: true, conversationId: true },
-      })
-      const released = await Promise.all(
-        held.map(async turn => {
-          try {
-            await app.$conversation.appendEvent(
-              turn.conversationId,
-              { type: 'turn.queued', reason: 'worker_disconnected' },
-              async tx => {
-                const updated = await tx.turn.updateMany({
-                  where: { id: turn.id, status: 'running', conversation: { workerId } },
-                  data: { status: 'queued', leaseUntil: null, runningKey: null },
-                })
-                if (updated.count === 0) throw new Error(RELEASE_RACE)
-              },
-            )
-            return true
-          } catch (error) {
-            if (error instanceof Error && error.message === RELEASE_RACE) return false
-            throw error
-          }
-        }),
-      )
-      return released.filter(Boolean).length
     },
   }
 }

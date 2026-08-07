@@ -24,6 +24,7 @@ const services = (
   $workspace: { roleOf: async () => roleOf, listForUser: async () => [] } as never,
   $app: {
     listInWorkspace: async (_ws, q) => paged([anApp], 1, q),
+    getByIdInWorkspace: async () => anApp,
     getBySlugInWorkspace: async () => anApp,
     create: async () => ({ kind: 'ok', app: anApp }),
     update: async () => ({ kind: 'ok', app: anApp }),
@@ -86,6 +87,7 @@ describe('workspace scoping', () => {
     const data = await okData<{ items: unknown[] }>(response)
     expect(data.items).toEqual([
       {
+        id: anApp.id,
         slug: anApp.slug,
         name: anApp.name,
         description: null,
@@ -94,6 +96,38 @@ describe('workspace scoping', () => {
         updatedAt: '',
       },
     ])
+  })
+
+  it('resolves the browser slug inside the selected workspace', async () => {
+    const getBySlugInWorkspace = vi.fn(async () => anApp)
+    const app = mountController(
+      AppsController,
+      services('member', { getBySlugInWorkspace }),
+      { userId: 1, workspaceId: 42 },
+      { guarded: true },
+    )
+
+    const response = await app.request('/by-slug/expense-approval')
+
+    expect(response.status).toBe(200)
+    expect(getBySlugInWorkspace).toHaveBeenCalledWith(42, 'expense-approval')
+    expect(await okData(response)).toMatchObject({ id: anApp.id, slug: anApp.slug })
+  })
+
+  it('loads an app resource by id inside the selected workspace', async () => {
+    const getByIdInWorkspace = vi.fn(async () => anApp)
+    const app = mountController(
+      AppsController,
+      services('member', { getByIdInWorkspace }),
+      { userId: 1, workspaceId: 42 },
+      { guarded: true },
+    )
+
+    const response = await app.request('/1')
+
+    expect(response.status).toBe(200)
+    expect(getByIdInWorkspace).toHaveBeenCalledWith(42, 1)
+    expect(await okData(response)).toMatchObject({ id: anApp.id, slug: anApp.slug })
   })
 
   // pageSize reaches the database as a LIMIT, so an unclamped value is a free
@@ -183,7 +217,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', { ...json({}), method: 'PATCH' })
+    const res = await app.request('/1', { ...json({}), method: 'PATCH' })
 
     expect(res.status).toBe(400)
   })
@@ -196,7 +230,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', {
+    const res = await app.request('/1', {
       ...json({ name: 'x' }),
       method: 'PATCH',
     })
@@ -219,13 +253,14 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const denied = await memberApp.request('/expense-approval', { method: 'DELETE' })
-    const removed = await adminApp.request('/expense-approval', { method: 'DELETE' })
+    const denied = await memberApp.request('/1', { method: 'DELETE' })
+    const removed = await adminApp.request('/1', { method: 'DELETE' })
 
     expect(denied.status).toBe(403)
     expect(remove).toHaveBeenCalledOnce()
     expect(removed.status).toBe(200)
-    expect(await okData(removed)).toEqual({ removed: 'expense-approval' })
+    expect(remove).toHaveBeenCalledWith(1, 1)
+    expect(await okData(removed)).toEqual({ removed: 1 })
   })
 
   it('reports active agent work as a specific deletion conflict', async () => {
@@ -236,7 +271,7 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', { method: 'DELETE' })
+    const res = await app.request('/1', { method: 'DELETE' })
 
     expect(res.status).toBe(409)
     expect((await failure(res)).code).toBe('app_busy')
@@ -250,8 +285,26 @@ describe('app writes', () => {
       { guarded: true },
     )
 
-    const res = await app.request('/expense-approval', { method: 'DELETE' })
+    const res = await app.request('/1', { method: 'DELETE' })
 
     expect(res.status).toBe(404)
+  })
+
+  it('reports an invalid app id as missing without calling the service', async () => {
+    const update = vi.fn()
+    const app = mountController(
+      AppsController,
+      services('member', { update }),
+      { userId: 1, workspaceId: 1 },
+      { guarded: true },
+    )
+
+    const res = await app.request('/not-an-id', {
+      ...json({ name: 'x' }),
+      method: 'PATCH',
+    })
+
+    expect(res.status).toBe(404)
+    expect(update).not.toHaveBeenCalled()
   })
 })

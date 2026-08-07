@@ -1,3 +1,4 @@
+import type { Id } from '@idea/shared'
 import { ChevronLeft } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
@@ -114,14 +115,14 @@ const Drawn = ({
 }
 
 export const ConversationPanel = ({
-  slug,
+  appId,
   conversationId,
   hidden,
   onConversationCreated,
   onCollapse,
   onOpenFile,
 }: {
-  slug: string
+  appId: Id
   conversationId: string | null
   hidden: boolean
   onConversationCreated: (id: string) => void
@@ -151,7 +152,7 @@ export const ConversationPanel = ({
     loadOlder,
     send,
     withdraw,
-  } = useConversation(slug, conversationId, onConversationCreated)
+  } = useConversation(appId, conversationId, onConversationCreated)
   const bottom = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   // The scroll height recorded just before a "load earlier" read, consumed by
@@ -293,7 +294,7 @@ export const ConversationPanel = ({
             key={conversationId}
             pending={pending}
             onSend={send}
-            onUpload={file => uploadAppFile(slug, file)}
+            onUpload={file => uploadAppFile(appId, file)}
             onOpenFile={onOpenFile}
             onWithdraw={withdraw}
             exclusiveSubmit={conversationId === 'new'}

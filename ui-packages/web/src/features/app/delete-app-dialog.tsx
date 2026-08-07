@@ -1,4 +1,4 @@
-import type { App } from '@idea/shared'
+import type { App, Id } from '@idea/shared'
 import { type FormEvent, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { useErrorMessage } from '../../i18n/use-error-message'
@@ -19,7 +19,7 @@ type Props = {
   app: App
   open: boolean
   onOpenChange: (open: boolean) => void
-  onDeleted: (slug: string) => void
+  onDeleted: (appId: Id) => void
 }
 
 export const DeleteAppDialog = ({ app, open, onOpenChange, onDeleted }: Props) => {
@@ -37,8 +37,8 @@ export const DeleteAppDialog = ({ app, open, onOpenChange, onDeleted }: Props) =
     setBusy(true)
     setError(null)
     try {
-      await deleteApp(app.slug)
-      onDeleted(app.slug)
+      await deleteApp(app.id)
+      onDeleted(app.id)
       onOpenChange(false)
     } catch (err) {
       setError(errorMessage(err, 'app'))

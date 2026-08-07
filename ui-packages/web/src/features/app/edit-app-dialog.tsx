@@ -37,7 +37,7 @@ export const EditAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => 
     setError(null)
     try {
       onUpdated(
-        await updateApp(app.slug, {
+        await updateApp(app.id, {
           name,
           slug,
           description: description || null,

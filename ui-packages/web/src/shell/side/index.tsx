@@ -37,7 +37,7 @@ export const SideColumn = ({
   return (
     <div
       className={`flex shrink-0 flex-col border-border border-r bg-muted/20 ${
-        collapsed ? 'w-12' : 'w-56'
+        collapsed ? 'w-12' : 'w-[260px]'
       }`}
       data-testid="side-column"
       data-collapsed={collapsed}
@@ -121,7 +121,7 @@ export const SideColumn = ({
 
       {!collapsed && (
         <ConversationList
-          slug={url.slug}
+          appId={app.id}
           conversationId={url.conversationId}
           onSelect={onShowConversation}
         />

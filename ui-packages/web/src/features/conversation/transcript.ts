@@ -131,16 +131,11 @@ export const isWorking = (events: readonly WireStored[]): boolean => {
   const last = events.findLast(
     ({ event }) =>
       event.type === 'user_message' ||
-      event.type === 'turn.queued' ||
       event.type === 'turn.started' ||
       event.type === 'turn.completed' ||
       event.type === 'turn.failed' ||
       event.type === 'turn.aborted',
   )
   if (!last) return false
-  return (
-    last.event.type === 'user_message' ||
-    last.event.type === 'turn.queued' ||
-    last.event.type === 'turn.started'
-  )
+  return last.event.type === 'user_message' || last.event.type === 'turn.started'
 }

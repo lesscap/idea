@@ -59,12 +59,13 @@ const mount = (
   pendingInput: Partial<PendingInputService> = { list: async () => [] },
 ) => {
   const publish = vi.fn()
+  const getByIdInWorkspace = vi.fn(async () => currentApp)
   return {
     app: mountController(
       ConversationsController,
       {
         $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
-        $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $app: stub<AppService>({ getByIdInWorkspace }),
         $conversation: stub<ConversationService>(conversation),
         $file: stub<FileService>(file),
         $pendingInput: stub<PendingInputService>(pendingInput),
@@ -73,8 +74,9 @@ const mount = (
         $commands: stub<CommandBus>({ publish }),
       },
       { userId: 7, workspaceId: 11 },
-      { guarded: true, prefix: '/:slug/conversations' },
+      { guarded: true, prefix: '/:appId/conversations' },
     ),
+    getByIdInWorkspace,
     publish,
   }
 }
@@ -85,7 +87,7 @@ describe('starting a conversation', () => {
     const { app, publish } = mount({ start })
 
     const response = await app.request(
-      '/leave-request/conversations',
+      '/5/conversations',
       json({ text: '  第一条消息  ', workerId: worker.id }),
     )
 
@@ -118,7 +120,7 @@ describe('starting a conversation', () => {
     const { app } = mount({ start }, { resolveAttachments })
 
     const response = await app.request(
-      '/leave-request/conversations',
+      '/5/conversations',
       json({ attachmentFids: [attachment.fid], workerId: worker.id }),
     )
 
@@ -138,7 +140,7 @@ describe('starting a conversation', () => {
     const start = vi.fn()
     const { app, publish } = mount({ start })
 
-    const response = await app.request('/leave-request/conversations', json({ text: '   ' }))
+    const response = await app.request('/5/conversations', json({ text: '   ' }))
 
     expect(response.status).toBe(400)
     expect(start).not.toHaveBeenCalled()
@@ -168,7 +170,7 @@ describe('sending an attachment', () => {
     )
 
     const response = await app.request(
-      '/leave-request/conversations/abc123def456/messages',
+      '/5/conversations/abc123def456/messages',
       json({ attachmentFids: [attachment.fid] }),
     )
 
@@ -183,7 +185,7 @@ describe('changing the conversation worker', () => {
     const assignWorker = vi.fn(async () => true)
     const { app, publish } = mount({ getByCid: async () => created, assignWorker })
 
-    const response = await app.request('/leave-request/conversations/abc123def456/worker', {
+    const response = await app.request('/5/conversations/abc123def456/worker', {
       ...json({ workerId: worker.id }),
       method: 'PATCH',
     })
@@ -201,7 +203,7 @@ describe('changing the conversation worker', () => {
       ConversationsController,
       {
         $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
-        $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $app: stub<AppService>({ getByIdInWorkspace: async () => currentApp }),
         $conversation: stub<ConversationService>({
           getByCid: async () => created,
           assignWorker,
@@ -210,10 +212,10 @@ describe('changing the conversation worker', () => {
         $commands: stub<CommandBus>({ publish }),
       },
       { userId: 7, workspaceId: 11 },
-      { guarded: true, prefix: '/:slug/conversations' },
+      { guarded: true, prefix: '/:appId/conversations' },
     )
 
-    const response = await app.request('/leave-request/conversations/abc123def456/worker', {
+    const response = await app.request('/5/conversations/abc123def456/worker', {
       ...json({ workerId: replacement.id }),
       method: 'PATCH',
     })
@@ -227,11 +229,12 @@ describe('changing the conversation worker', () => {
 describe('conversation app scoping', () => {
   it('looks up cid inside the URL app and reports a mismatch as missing', async () => {
     const getByCid = vi.fn(async () => null)
-    const { app } = mount({ getByCid })
+    const { app, getByIdInWorkspace } = mount({ getByCid })
 
-    const response = await app.request('/leave-request/conversations/other-app/events')
+    const response = await app.request('/5/conversations/other-app/events')
 
     expect(response.status).toBe(404)
+    expect(getByIdInWorkspace).toHaveBeenCalledWith(currentApp.workspaceId, currentApp.id)
     expect(getByCid).toHaveBeenCalledWith(currentApp.id, 'other-app')
   })
 
@@ -240,7 +243,7 @@ describe('conversation app scoping', () => {
       ConversationsController,
       {
         $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
-        $app: stub<AppService>({ getBySlugInWorkspace: async () => currentApp }),
+        $app: stub<AppService>({ getByIdInWorkspace: async () => currentApp }),
         $conversation: stub<ConversationService>({
           getByCid: async () => created,
           events: async () => [],
@@ -252,10 +255,10 @@ describe('conversation app scoping', () => {
         $worker: stub<WorkerService>({ getForWorkspace: async () => worker }),
       },
       { userId: 7, workspaceId: 11 },
-      { guarded: true, prefix: '/:slug/conversations' },
+      { guarded: true, prefix: '/:appId/conversations' },
     )
 
-    const response = await app.request('/leave-request/conversations/abc123def456/events')
+    const response = await app.request('/5/conversations/abc123def456/events')
 
     expect(await okData(response)).toEqual({
       items: [],

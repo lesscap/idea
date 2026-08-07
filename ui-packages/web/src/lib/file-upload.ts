@@ -1,9 +1,9 @@
-import type { CreateFileUploadResult, UploadedFile } from '@idea/shared'
+import type { CreateFileUploadResult, Id, UploadedFile } from '@idea/shared'
 import { post, RequestError } from './request'
 
-export const uploadAppFile = async (slug: string, file: File): Promise<UploadedFile> => {
+export const uploadAppFile = async (appId: Id, file: File): Promise<UploadedFile> => {
   const contentType = file.type || 'application/octet-stream'
-  const intent = await post<CreateFileUploadResult>(`/apps/${encodeURIComponent(slug)}/files`, {
+  const intent = await post<CreateFileUploadResult>(`/apps/${appId}/files`, {
     filename: file.name,
     contentType,
     size: file.size,

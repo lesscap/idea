@@ -10,7 +10,9 @@ export const scopedApp = async (
 ): Promise<AppRecord | Response | null> => {
   const access = await requireCurrentWorkspace(app, c)
   if (isResponse(access)) return access
-  return app.$app.getBySlugInWorkspace(access.workspaceId, c.req.param('slug') ?? '')
+  const appId = Number(c.req.param('appId'))
+  if (!Number.isSafeInteger(appId) || appId <= 0) return null
+  return app.$app.getByIdInWorkspace(access.workspaceId, appId)
 }
 
 // Loads a conversation only if the app in the URL owns it.

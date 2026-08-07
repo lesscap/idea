@@ -89,7 +89,7 @@ export const AppListPage = () => {
         data-testid="app-list"
       >
         {apps?.map(app => (
-          <div key={app.slug} className="relative">
+          <div key={app.id} className="relative">
             <Link className="block h-full" to={`/apps/${encodeURIComponent(app.slug)}`}>
               <Card
                 className="h-full transition-colors hover:bg-muted/30"
@@ -160,9 +160,7 @@ export const AppListPage = () => {
           open
           onOpenChange={open => !open && setEditing(null)}
           onUpdated={updated =>
-            setApps(
-              current => current?.map(app => (app.slug === editing.slug ? updated : app)) ?? null,
-            )
+            setApps(current => current?.map(app => (app.id === editing.id ? updated : app)) ?? null)
           }
         />
       )}
@@ -172,7 +170,7 @@ export const AppListPage = () => {
           app={deleting}
           open
           onOpenChange={open => !open && setDeleting(null)}
-          onDeleted={slug => setApps(current => current?.filter(app => app.slug !== slug) ?? null)}
+          onDeleted={appId => setApps(current => current?.filter(app => app.id !== appId) ?? null)}
         />
       )}
     </div>

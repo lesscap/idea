@@ -75,12 +75,12 @@ describe('a draft conversation', () => {
     vi.mocked(get).mockResolvedValue({ items: [WORKER] })
     vi.mocked(post).mockResolvedValue({ cid: 'abc123' })
     const created = vi.fn()
-    const { result } = renderHook(() => useConversation('leave-request', 'new', created))
+    const { result } = renderHook(() => useConversation(5, 'new', created))
 
     await waitFor(() => expect(result.current.selectedWorkerId).toBe(7))
     await act(() => result.current.send('第一条消息', ['file123']))
 
-    expect(post).toHaveBeenCalledWith('/apps/leave-request/conversations', {
+    expect(post).toHaveBeenCalledWith('/apps/5/conversations', {
       text: '第一条消息',
       attachmentFids: ['file123'],
       workerId: 7,
@@ -128,7 +128,7 @@ describe('a persisted conversation', () => {
         assignment: ASSIGNMENT,
       })
 
-    const { result } = renderHook(() => useConversation('leave-request', 'conversation-1', vi.fn()))
+    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
 
     await waitFor(() => expect(result.current.pending).toHaveLength(2))
     await act(() => result.current.loadOlder())
@@ -138,7 +138,7 @@ describe('a persisted conversation', () => {
 
     await act(() => result.current.withdraw(7))
 
-    expect(del).toHaveBeenCalledWith('/apps/leave-request/conversations/conversation-1/pending/7')
+    expect(del).toHaveBeenCalledWith('/apps/5/conversations/conversation-1/pending/7')
     expect(result.current.pending.map(item => item.id)).toEqual([8])
 
     act(() => TestEventSource.instances[0]?.emit(said(3, 11, 'Are you OK')))
@@ -164,7 +164,7 @@ describe('a persisted conversation', () => {
         assignment: ASSIGNMENT,
       })
 
-    const { result } = renderHook(() => useConversation('leave-request', 'conversation-1', vi.fn()))
+    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
 
     await waitFor(() => expect(result.current.phase).toBe('queued'))
     expect(result.current.connection).toBe('connecting')
@@ -189,7 +189,7 @@ describe('a persisted conversation', () => {
         assignment: ASSIGNMENT,
       })
 
-    const { result } = renderHook(() => useConversation('leave-request', 'conversation-1', vi.fn()))
+    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
 
     await waitFor(() => expect(result.current.connection).toBe('error'))
     act(() => result.current.retryConnection())

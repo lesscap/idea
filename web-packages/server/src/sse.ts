@@ -13,10 +13,6 @@ import { streamSSE } from 'hono/streaming'
 // Pushing to a queue and draining it in an awaited loop keeps one write in
 // flight at a time.
 
-export type StreamOptions = {
-  onClose?: () => void
-}
-
 // Live only: no history, no replay. History is an ordinary paginated read, and a
 // client that reconnects asks for what it missed by sequence — so this stream
 // carries no resume state and a dropped connection costs one request rather than
@@ -26,7 +22,6 @@ export const streamBus = <T>(
   c: Context,
   subscribe: (push: (item: T) => void) => () => void,
   toData: (item: T) => string,
-  options: StreamOptions = {},
 ) => {
   // The request's own signal rather than the streaming helper's callback: it is
   // the same fact from the source, and it is already aborted if the client left
@@ -77,7 +72,6 @@ export const streamBus = <T>(
       clearInterval(keepalive)
       unsubscribe()
       signal.removeEventListener('abort', nudge)
-      options.onClose?.()
     }
   })
 }

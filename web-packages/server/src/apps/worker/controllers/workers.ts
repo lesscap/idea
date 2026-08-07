@@ -62,11 +62,6 @@ export const WorkersController: Controller = app => {
       c,
       push => app.$commands.subscribe(worker.id, push),
       command => JSON.stringify(command),
-      {
-        // Its child processes died with it, so every turn it held is already
-        // abandoned. Releasing now beats waiting out leases nobody will renew.
-        onClose: () => void app.$turn.releaseWorker(worker.id),
-      },
     )
   })
 

@@ -100,7 +100,6 @@ export type ConversationEvent =
     })
   | (WithRaw & { type: 'thread.started'; providerSessionId: string; model?: string })
   | (WithRaw & { type: 'turn.started'; sourceSequence?: number })
-  | (WithRaw & { type: 'turn.queued'; reason: 'worker_disconnected' })
   | (WithRaw & { type: 'item.started'; item: AgentItem })
   | (WithRaw & { type: 'item.updated'; item: AgentItem })
   | (WithRaw & { type: 'item.completed'; item: AgentItem })

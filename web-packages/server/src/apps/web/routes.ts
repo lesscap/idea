@@ -32,9 +32,9 @@ export const Routes: Record<string, Controller> = {
   '/session': SessionController,
   '/invites': InvitesController,
   '/workspaces': guarded(WorkspacesController),
-  '/apps/:slug/files': guarded(AppFilesController),
-  '/apps/:slug/workers': guarded(AppWorkersController),
-  '/apps/:slug/conversations': guarded(ConversationsController),
+  '/apps/:appId/files': guarded(AppFilesController),
+  '/apps/:appId/workers': guarded(AppWorkersController),
+  '/apps/:appId/conversations': guarded(ConversationsController),
   '/apps': guarded(AppsController),
   '/files': guarded(FilesController),
 }

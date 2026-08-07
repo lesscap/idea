@@ -55,8 +55,6 @@ export const toWireEvent = (event: ConversationEvent): WireEvent => {
 
   if (event.type === 'turn.started') return { type: 'turn.started', ...seq(event.sourceSequence) }
 
-  if (event.type === 'turn.queued') return { type: 'turn.queued', reason: event.reason }
-
   if (
     event.type === 'item.started' ||
     event.type === 'item.updated' ||

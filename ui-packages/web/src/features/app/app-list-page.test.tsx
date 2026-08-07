@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
 vi.mock('./api', () => api)
 
 const app: App = {
+  id: 1,
   slug: 'expense-approval',
   name: '报销审批',
   description: '处理员工报销',
@@ -80,7 +81,7 @@ describe('app management', () => {
     fireEvent.click(screen.getByTestId('edit-app-submit'))
 
     await waitFor(() =>
-      expect(api.updateApp).toHaveBeenCalledWith(app.slug, {
+      expect(api.updateApp).toHaveBeenCalledWith(app.id, {
         name: updated.name,
         slug: updated.slug,
         description: updated.description,
@@ -95,7 +96,7 @@ describe('app management', () => {
   })
 
   it('requires the exact app name before deleting it', async () => {
-    api.deleteApp.mockResolvedValue({ removed: app.slug })
+    api.deleteApp.mockResolvedValue({ removed: app.id })
     draw('admin')
     await openActions()
     fireEvent.click(screen.getByText('删除应用'))
@@ -111,7 +112,7 @@ describe('app management', () => {
     })
     fireEvent.click(submit)
 
-    await waitFor(() => expect(api.deleteApp).toHaveBeenCalledWith(app.slug))
+    await waitFor(() => expect(api.deleteApp).toHaveBeenCalledWith(app.id))
     expect(screen.queryByTestId('app-card')).not.toBeInTheDocument()
   })
 

@@ -280,25 +280,6 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
         'failed',
       )
     })
-
-    // A dropped command stream means the worker's child processes are already
-    // gone; waiting out the leases would only make someone wait longer.
-    it('releases every turn a disconnected worker held', async () => {
-      const alone = await db.prisma.workspace.create({ data: { name: 'lease-release' } })
-      const w = await worker('lease-release', { workspaceId: alone.id })
-      const c = await conversation(w)
-      await db.prisma.turn.create({ data: { conversationId: c.id, userEventSequence: 0 } })
-      await db.app.$turn.claimNext(w)
-
-      expect(await db.app.$turn.releaseWorker(w.id)).toBe(1)
-      expect((await db.app.$conversation.events(c.id)).at(-1)?.event).toEqual({
-        type: 'turn.queued',
-        reason: 'worker_disconnected',
-      })
-      const successor = await worker('lease-successor', { workspaceId: alone.id })
-      await db.app.$conversation.assignWorker(c.id, successor.id)
-      expect(await db.app.$turn.claimNext(successor)).not.toBeNull()
-    })
   })
 
   describe('materialize', () => {

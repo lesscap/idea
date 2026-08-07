@@ -116,12 +116,6 @@ describe('is the agent working', () => {
     expect(isWorking([said(0, 'hello')])).toBe(true)
   })
 
-  it('stays true when a disconnected worker returns the turn to the queue', () => {
-    expect(isWorking([stored(0, { type: 'turn.queued', reason: 'worker_disconnected' })])).toBe(
-      true,
-    )
-  })
-
   // Opening a long conversation reads a WINDOW, and a tool-heavy turn is a long
   // run of item events between two distant boundaries — so the window can land
   // entirely inside one. The server widens it back to the boundary rather than

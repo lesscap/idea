@@ -10,7 +10,6 @@ const SECRET = { ANTHROPIC_API_KEY: 'sk-should-never-leave-the-server' }
 const SAMPLES: Record<ConversationEventType, ConversationEvent> = {
   user_message: { type: 'user_message', text: 'hi', model: 'glm-5.2', raw: SECRET },
   'thread.started': { type: 'thread.started', providerSessionId: 'p1', raw: SECRET },
-  'turn.queued': { type: 'turn.queued', reason: 'worker_disconnected', raw: SECRET },
   'turn.started': { type: 'turn.started', sourceSequence: 3, raw: SECRET },
   'item.started': {
     type: 'item.started',
