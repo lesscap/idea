@@ -6,6 +6,7 @@ import { InvitesController } from './controllers/invites.ts'
 import { SessionController } from './controllers/session.ts'
 import { AppWorkersController } from './controllers/workers.ts'
 import { WorkspacesController } from './controllers/workspaces.ts'
+import { RequirementsController } from './domains/requirement/index.ts'
 import { requireSession } from './middleware/session.ts'
 
 // The browser-facing surface. A sibling `apps/worker/` will mount at
@@ -35,6 +36,7 @@ export const Routes: Record<string, Controller> = {
   '/apps/:appId/files': guarded(AppFilesController),
   '/apps/:appId/workers': guarded(AppWorkersController),
   '/apps/:appId/conversations': guarded(ConversationsController),
+  '/apps/:appId/requirements': guarded(RequirementsController),
   '/apps': guarded(AppsController),
   '/files': guarded(FilesController),
 }

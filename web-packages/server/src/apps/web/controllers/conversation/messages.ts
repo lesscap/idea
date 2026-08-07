@@ -1,7 +1,8 @@
 import { badRequest, failWith, notFound, sendOk } from '../../../../http.ts'
 import type { Controller } from '../../../../types.ts'
 import { SendMessageBody } from '../../schema/index.ts'
-import { isResponse, scopedConversation } from './scoped.ts'
+import { scopedConversation } from '../../services/scope/conversation.ts'
+import { isResponse } from '../../services/scope/workspace.ts'
 
 // Saying something, and taking it back before it goes.
 export const registerMessages: Controller = app => {

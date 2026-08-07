@@ -6,7 +6,8 @@ import type { FileRecord } from '../../../services/file.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
 import { CreateFileBody } from '../schema/index.ts'
-import { isResponse, scopedApp } from './conversation/scoped.ts'
+import { scopedApp } from '../services/scope/app.ts'
+import { isResponse } from '../services/scope/workspace.ts'
 
 const fileUrl = (fid: string): string => `/api/web/files/${fid}`
 const MAX_TEXT_PREVIEW_BYTES = 5 * 1024 * 1024

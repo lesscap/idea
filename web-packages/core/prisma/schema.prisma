@@ -26,6 +26,14 @@ enum AppStatus {
   @@map("app_status")
 }
 
+enum RequirementStatus {
+  draft
+  active
+  archived
+
+  @@map("requirement_status")
+}
+
 enum FileStatus {
   pending
   ready
@@ -63,15 +71,18 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  workspaces      UserWorkspace[]
-  platformAdmin   PlatformAdmin?
-  preference      UserPreference?
-  invitesSent     Invite[]        @relation("InvitedBy")
-  invitesAccepted Invite[]        @relation("AcceptedBy")
-  appsCreated     App[]
-  conversations   Conversation[]
-  filesUploaded   File[]
-  enrolments      WorkerEnrolment[]
+  workspaces                    UserWorkspace[]
+  platformAdmin                 PlatformAdmin?
+  preference                    UserPreference?
+  invitesSent                   Invite[]              @relation("InvitedBy")
+  invitesAccepted               Invite[]              @relation("AcceptedBy")
+  appsCreated                   App[]
+  conversations                 Conversation[]
+  filesUploaded                 File[]
+  enrolments                    WorkerEnrolment[]
+  requirementsCreated           Requirement[]         @relation("RequirementCreatedBy")
+  requirementDraftsUpdated      RequirementDraft[]    @relation("RequirementDraftUpdatedBy")
+  requirementRevisionsConfirmed RequirementRevision[] @relation("RequirementRevisionConfirmedBy")
 
   @@map("users")
 }
@@ -93,7 +104,7 @@ model UserPreference {
   lastWorkspaceId Int?
   updatedAt       DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   // SetNull, not Cascade: deleting a workspace should clear this pointer, not
   // delete the user's whole preference row along with it.
   lastWorkspace Workspace? @relation(fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
@@ -155,23 +166,24 @@ model UserWorkspace {
   @@map("user_workspaces")
 }
 
-// A piece of software being created. Requirements will hang off this later;
-// nothing is reserved for them here.
+// A piece of software being created. Requirement numbering is local to it.
 model App {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  slug        String
-  name        String
-  description String?
-  status      AppStatus @default(draft)
-  createdById Int
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  workspaceId         Int
+  slug                String
+  name                String
+  description         String?
+  status              AppStatus @default(draft)
+  requirementSequence Int       @default(0)
+  createdById         Int
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy     User           @relation(fields: [createdById], references: [id])
   conversations Conversation[]
   files         File[]
+  requirements  Requirement[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, name])
@@ -204,38 +216,109 @@ model File {
 // A conversation with the agent. It belongs to one app; associations with
 // requirements and other resources stay separate until their semantics exist.
 model Conversation {
-  id          Int    @id @default(autoincrement())
-  cid         String @unique
-  appId       Int
-  createdById Int
+  id                Int      @id @default(autoincrement())
+  cid               String   @unique
+  appId             Int
+  createdById       Int
   // The backend is stable for the lifetime of the conversation. The current
   // worker may move, but only to another worker serving this same provider.
-  providerId  Int
+  providerId        Int
   // Current execution machine. Null only after that worker is deleted; the
   // conversation remains durable and can be assigned to a replacement.
-  workerId    Int?
+  workerId          Int?
   // The provider's own session handle, used to resume rather than replay. Null
   // until the first turn has run.
   providerSessionId String?
-  title       String?
+  title             String?
   // Set once a person names it, which stops the automatic title from
   // overwriting a deliberate choice.
-  titleLocked Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  titleLocked       Boolean  @default(false)
+  createdAt         DateTime @default(now())
   // `updatedAt` only moves when a column changes, so it reports a rename as
   // activity and a long conversation as idle. This is the honest "last spoke".
-  lastActiveAt DateTime @default(now())
+  lastActiveAt      DateTime @default(now())
 
-  app       App       @relation(fields: [appId], references: [id], onDelete: Cascade)
-  createdBy User      @relation(fields: [createdById], references: [id])
-  provider  Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  worker    Worker?   @relation(fields: [workerId], references: [id], onDelete: SetNull)
-  events    ConversationEvent[]
-  pending   PendingInput[]
-  turns     Turn[]
+  app                           App                   @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdBy                     User                  @relation(fields: [createdById], references: [id])
+  provider                      Provider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  worker                        Worker?               @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  events                        ConversationEvent[]
+  pending                       PendingInput[]
+  turns                         Turn[]
+  requirementDraftsUpdated      RequirementDraft[]    @relation("RequirementDraftUpdatedInConversation")
+  requirementRevisionsConfirmed RequirementRevision[] @relation("RequirementRevisionConfirmedInConversation")
 
   @@index([appId, lastActiveAt])
   @@map("conversations")
+}
+
+// Stable identity for a requirement. Its mutable text lives in a Draft; text
+// that has been confirmed lives in immutable Revisions.
+model Requirement {
+  id                Int               @id @default(autoincrement())
+  appId             Int
+  number            Int
+  status            RequirementStatus @default(draft)
+  revisionSequence  Int               @default(0)
+  currentRevisionId Int?              @unique
+  createdById       Int
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  app             App                   @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdBy       User                  @relation("RequirementCreatedBy", fields: [createdById], references: [id])
+  draft           RequirementDraft?
+  revisions       RequirementRevision[] @relation("RequirementRevisions")
+  currentRevision RequirementRevision?  @relation("CurrentRequirementRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+
+  @@unique([appId, number])
+  @@index([appId, status])
+  @@map("requirements")
+}
+
+// The one mutable copy. Saving replaces its complete content and advances the
+// version used to protect confirmation from a stale browser dialog.
+model RequirementDraft {
+  requirementId           Int      @id
+  title                   String
+  summary                 String
+  body                    String
+  version                 Int      @default(1)
+  updatedById             Int
+  updatedInConversationId Int?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  requirement           Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  updatedBy             User          @relation("RequirementDraftUpdatedBy", fields: [updatedById], references: [id])
+  updatedInConversation Conversation? @relation("RequirementDraftUpdatedInConversation", fields: [updatedInConversationId], references: [id], onDelete: SetNull)
+
+  @@index([updatedInConversationId])
+  @@map("requirement_drafts")
+}
+
+// A complete snapshot created only by confirmation. There is intentionally no
+// updatedAt: the application exposes no mutation for a Revision.
+model RequirementRevision {
+  id                        Int      @id @default(autoincrement())
+  requirementId             Int
+  number                    Int
+  title                     String
+  summary                   String
+  body                      String
+  confirmedById             Int
+  confirmedInConversationId Int?
+  confirmedAt               DateTime @default(now())
+
+  requirement             Requirement   @relation("RequirementRevisions", fields: [requirementId], references: [id], onDelete: Cascade)
+  confirmedBy             User          @relation("RequirementRevisionConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedInConversation Conversation? @relation("RequirementRevisionConfirmedInConversation", fields: [confirmedInConversationId], references: [id], onDelete: SetNull)
+  currentFor              Requirement?  @relation("CurrentRequirementRevision")
+
+  @@unique([requirementId, number])
+  @@index([requirementId, confirmedAt])
+  @@index([confirmedInConversationId])
+  @@map("requirement_revisions")
 }
 
 // The append-only transcript, and the only account of what happened. `sequence`
@@ -326,22 +409,22 @@ model Turn {
 // heartbeat endpoint exists only so the daemon can tell it has lost the server
 // and exit for its supervisor to restart.
 model Worker {
-  id           Int      @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   // Which workspace this worker serves, and it serves exactly one. That is a
   // security boundary before it is a routing rule: the agent runs untrusted
   // instructions — a message, or text inside a repository it reads — so the
   // process it runs in is confined to one tenant's data, and the claim query
   // refuses to hand it anything else even if that confinement is defeated.
-  workspaceId  Int
+  workspaceId Int
   // Stable per machine, so a restarted daemon recovers its identity rather than
   // leaving a dead row behind. In a container this lives on the workspace's
   // volume, which survives the container being rebuilt.
-  machineId    String
+  machineId   String
   // Display handle, so an operator can tell two workers apart.
-  name         String
-  hostname     String
+  name        String
+  hostname    String
   // Reissued on every registration; only its hash is stored.
-  apiToken     String   @unique
+  apiToken    String   @unique
   // Which agent backend this worker runs. A property of the deployment, not of
   // the tenant: whoever starts the container decides, by giving it that
   // provider's credentials and SDK. Wanting two backends means running two
@@ -349,14 +432,14 @@ model Worker {
   //
   // This IS the routing capability — a separate capability list would be a less
   // precise way of saying the same thing.
-  providerId   Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  providerId  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   // Restrict: a provider still being served by a worker should not be deletable
   // out from under it.
-  provider  Provider  @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  provider      Provider       @relation(fields: [providerId], references: [id], onDelete: Restrict)
   conversations Conversation[]
 
   @@unique([workspaceId, machineId])
@@ -437,7 +520,7 @@ model Invite {
   createdAt    DateTime  @default(now())
 
   workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invitedBy  User      @relation("InvitedBy",  fields: [invitedById],  references: [id])
+  invitedBy  User      @relation("InvitedBy", fields: [invitedById], references: [id])
   acceptedBy User?     @relation("AcceptedBy", fields: [acceptedById], references: [id])
 
   @@index([workspaceId])

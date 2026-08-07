@@ -2,8 +2,8 @@ import { zValidator } from '@hono/zod-validator'
 import { badRequest, conflict, forbidden, sendOk } from '../../../http.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
-import { isResponse, requireAdmin, requireMember } from '../middleware/workspace.ts'
 import { CreateInviteBody, CreateWorkspaceBody, SetRoleBody } from '../schema/index.ts'
+import { isResponse, requireAdmin, requireMember } from '../services/scope/workspace.ts'
 
 const workspaceId = (c: { req: { param: (k: string) => string | undefined } }): number =>
   Number(c.req.param('id'))
