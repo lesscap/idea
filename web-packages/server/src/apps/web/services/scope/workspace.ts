@@ -1,22 +1,16 @@
 import type { Id, Role } from '@idea/shared'
 import type { Context } from 'hono'
-import { badRequest, forbidden, notFound } from '../../../http.ts'
-import type { WebApplication } from '../../../types.ts'
-import { session } from './session.ts'
+import { badRequest, forbidden, notFound } from '../../../../http.ts'
+import type { WebApplication } from '../../../../types.ts'
+import { session } from '../../middleware/session.ts'
 
 export type WorkspaceAccess = {
   readonly workspaceId: Id
   readonly role: Role
 }
 
-// Resolves the caller's role in a workspace, or returns the Response to send.
-//
-// Non-members get 404, not 403. A 403 confirms the id exists, which is enough to
-// enumerate workspaces one number at a time; 404 says nothing either way.
-//
-// This runs on EVERY request rather than trusting `session.workspaceId`. That
-// value only records which workspace is currently selected — the user may have
-// been removed from it since, and a cookie does not update itself.
+// Session state records a selection, not a lasting grant. Membership is
+// resolved on every request so removing a user takes effect immediately.
 export const requireMember = async (
   app: WebApplication,
   c: Context,
@@ -26,7 +20,6 @@ export const requireMember = async (
   return role === null ? notFound(c, 'workspace not found') : { workspaceId, role }
 }
 
-// Same, for the workspace currently selected in the session.
 export const requireCurrentWorkspace = async (
   app: WebApplication,
   c: Context,

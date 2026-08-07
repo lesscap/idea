@@ -1,6 +1,7 @@
 import { notFound, sendOk } from '../../../http.ts'
 import type { Controller } from '../../../types.ts'
-import { isResponse, scopedApp } from './conversation/scoped.ts'
+import { scopedApp } from '../services/scope/app.ts'
+import { isResponse } from '../services/scope/workspace.ts'
 
 // Workers available to a person starting or relocating a conversation. Only
 // live rows cross this boundary; liveness remains the command stream, not a

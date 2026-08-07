@@ -2,7 +2,8 @@ import { zValidator } from '@hono/zod-validator'
 import { failWith, notFound, sendOk } from '../../../../http.ts'
 import type { Controller } from '../../../../types.ts'
 import { AssignConversationWorkerBody } from '../../schema/index.ts'
-import { isResponse, scopedApp } from './scoped.ts'
+import { scopedApp } from '../../services/scope/app.ts'
+import { isResponse } from '../../services/scope/workspace.ts'
 
 export const registerWorkerAssignment: Controller = app => {
   app.patch('/:cid/worker', zValidator('json', AssignConversationWorkerBody), async c => {

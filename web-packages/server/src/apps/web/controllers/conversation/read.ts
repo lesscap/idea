@@ -5,8 +5,9 @@ import type { EventWindow } from '../../../../services/conversation/index.ts'
 import type { Controller } from '../../../../types.ts'
 import { session } from '../../middleware/session.ts'
 import { StartConversationBody } from '../../schema/index.ts'
+import { scopedApp } from '../../services/scope/app.ts'
+import { isResponse } from '../../services/scope/workspace.ts'
 import { toWireEvent } from '../../wire.ts'
-import { isResponse, scopedApp } from './scoped.ts'
 
 // Beyond this a transcript read stops being a window. Nothing in the interface
 // asks for more; a caller that does gets the ceiling rather than an error.

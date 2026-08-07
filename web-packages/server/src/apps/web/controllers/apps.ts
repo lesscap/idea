@@ -1,12 +1,13 @@
 import { zValidator } from '@hono/zod-validator'
-import type { App, Id } from '@idea/shared'
+import type { App } from '@idea/shared'
 import { failWith, notFound, sendOk } from '../../../http.ts'
 import { parsePageQuery } from '../../../paging.ts'
 import type { AppRecord } from '../../../services/app.ts'
 import type { Controller } from '../../../types.ts'
 import { session } from '../middleware/session.ts'
-import { isResponse, requireAdmin, requireCurrentWorkspace } from '../middleware/workspace.ts'
 import { CreateAppBody, UpdateAppBody } from '../schema/index.ts'
+import { positiveId } from '../services/scope/id.ts'
+import { isResponse, requireAdmin, requireCurrentWorkspace } from '../services/scope/workspace.ts'
 
 const toPublicApp = ({
   id,
@@ -17,11 +18,6 @@ const toPublicApp = ({
   createdAt,
   updatedAt,
 }: AppRecord): App => ({ id, slug, name, description, status, createdAt, updatedAt })
-
-const appId = (value: string | undefined): Id | null => {
-  const parsed = Number(value)
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
-}
 
 // Everything here is scoped to the workspace currently selected in the session,
 // which is why no endpoint takes a workspaceId. Membership is re-checked on each
@@ -75,7 +71,7 @@ export const AppsController: Controller = app => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    const id = appId(c.req.param('appId'))
+    const id = positiveId(c.req.param('appId'))
     const found = id === null ? null : await app.$app.getByIdInWorkspace(access.workspaceId, id)
     return found ? sendOk(c, toPublicApp(found)) : notFound(c, 'app not found')
   })
@@ -84,7 +80,7 @@ export const AppsController: Controller = app => {
     const access = await requireCurrentWorkspace(app, c)
     if (isResponse(access)) return access
 
-    const id = appId(c.req.param('appId'))
+    const id = positiveId(c.req.param('appId'))
     if (id === null) return notFound(c, 'app not found')
     const patch = c.req.valid('json')
     const updated = await app.$app.update(access.workspaceId, id, {
@@ -109,7 +105,7 @@ export const AppsController: Controller = app => {
     const denied = requireAdmin(c, access)
     if (denied) return denied
 
-    const id = appId(c.req.param('appId'))
+    const id = positiveId(c.req.param('appId'))
     if (id === null) return notFound(c, 'app not found')
     const removed = await app.$app.remove(access.workspaceId, id)
     if (removed.kind === 'busy') {

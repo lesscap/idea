@@ -2,8 +2,9 @@ import type { StoredEvent } from '@idea/shared'
 import { notFound } from '../../../../http.ts'
 import { streamBus } from '../../../../sse.ts'
 import type { Controller } from '../../../../types.ts'
+import { scopedConversation } from '../../services/scope/conversation.ts'
+import { isResponse } from '../../services/scope/workspace.ts'
 import { toWireEvent } from '../../wire.ts'
-import { isResponse, scopedConversation } from './scoped.ts'
 
 // The live tail of a conversation. History is not here — it comes from
 // `/events`, which already takes `?after=` — so this stream holds no cursor and
