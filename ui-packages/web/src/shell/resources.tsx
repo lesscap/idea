@@ -1,9 +1,11 @@
+import type { Id } from '@idea/shared'
 import { File, FileText, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
 import { FileResource } from '../features/file/file-resource'
+import { RequirementDetail } from '../features/requirement/requirement-detail'
+import { RequirementList } from '../features/requirement/requirement-list'
 import type { Translate } from '../i18n'
-import { Placeholder } from './content/placeholder'
 
 // Every resource the main area can show, in one place. Adding a kind is one
 // entry plus one component — this supplies the route pattern, the tab label and
@@ -24,20 +26,21 @@ import { Placeholder } from './content/placeholder'
 
 export type ResourceParams = Record<string, string | undefined>
 
+export type ResourceContentProps = {
+  params: ResourceParams
+  appId: Id
+  openResource: (ref: string) => void
+  showConversation: (cid: string) => void
+}
+
 type ResourceDef = {
   /** Route pattern, leading slash included: '/requirements/:code'. */
   path: string
   icon: LucideIcon
   /** Tab and nav label. Takes the translator as an argument because this is data, not a hook. */
   title: (__: Translate, params: ResourceParams) => string
-  Content: ComponentType<{ params: ResourceParams }>
+  Content: ComponentType<ResourceContentProps>
 }
-
-const RequirementList = () => <Placeholder titleKey="resource.requirements" />
-
-const RequirementDetail = ({ params }: { params: ResourceParams }) => (
-  <Placeholder titleKey="resource.requirements" detail={params.code} />
-)
 
 export const RESOURCES = {
   requirements: {

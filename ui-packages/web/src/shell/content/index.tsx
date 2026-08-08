@@ -34,6 +34,10 @@ export const ContentColumn = ({
   const __ = useLocale()
   const { url } = workspace
   const activeMatch = url.active === null ? null : matchResource(url.active)
+  const showConversation = (cid: string) => {
+    onExpandConversation()
+    workspace.showConversation(cid)
+  }
 
   return (
     <div
@@ -72,7 +76,12 @@ export const ContentColumn = ({
               {/* Each tab scrolls on its own. Sharing one scroll container would
                   throw away the position that keeping it mounted just saved. */}
               <div className="absolute inset-0 overflow-auto">
-                <Content params={matched.params} />
+                <Content
+                  params={matched.params}
+                  appId={app.id}
+                  openResource={workspace.open}
+                  showConversation={showConversation}
+                />
               </div>
             </Activity>
           )
