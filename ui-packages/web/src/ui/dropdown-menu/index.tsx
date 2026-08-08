@@ -10,6 +10,8 @@ const ROW_ICON = '[&_svg]:size-4 [&_svg]:shrink-0'
 
 export const DropdownMenu = Primitive.Root
 export const DropdownMenuTrigger = Primitive.Trigger
+export const DropdownMenuRadioGroup = Primitive.RadioGroup
+export const DropdownMenuItemIndicator = Primitive.ItemIndicator
 
 export const DropdownMenuContent = ({
   className,
@@ -36,6 +38,21 @@ export const DropdownMenuItem = ({
   <Primitive.Item
     className={cn(
       'relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none',
+      'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      ROW_ICON,
+      className,
+    )}
+    {...props}
+  />
+)
+
+export const DropdownMenuRadioItem = ({
+  className,
+  ...props
+}: ComponentProps<typeof Primitive.RadioItem>) => (
+  <Primitive.RadioItem
+    className={cn(
+      'relative flex cursor-default select-none items-center gap-2 rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none',
       'focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       ROW_ICON,
       className,
