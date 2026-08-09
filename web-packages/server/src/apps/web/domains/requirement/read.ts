@@ -11,9 +11,13 @@ export const registerRequirementReads: Controller = app => {
     if (isResponse(currentApp)) return currentApp
     if (!currentApp) return notFound(c, 'app not found')
 
+    const rawSearch = c.req.query('q')?.trim().slice(0, 100)
     const page = await app.$requirement.list(
       { workspaceId: currentApp.workspaceId, appId: currentApp.id },
-      parsePageQuery(c.req.query()),
+      {
+        ...parsePageQuery(c.req.query()),
+        ...(rawSearch ? { search: rawSearch } : {}),
+      },
     )
     return sendOk(c, page)
   })

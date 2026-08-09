@@ -56,6 +56,27 @@ describe('requirement reads', () => {
     expect(list).toHaveBeenCalledWith({ workspaceId: 11, appId: 5 }, { page: 2, pageSize: 100 })
   })
 
+  it('normalizes and limits the optional search query', async () => {
+    const list = vi.fn(async () => ({ items: [summary], total: 1, page: 1, pageSize: 20 }))
+    const app = mount({ list })
+
+    await app.request('/5/requirements?q=%20Approval%20')
+    expect(list).toHaveBeenLastCalledWith(
+      { workspaceId: 11, appId: 5 },
+      { page: 1, pageSize: 20, search: 'Approval' },
+    )
+
+    await app.request('/5/requirements?q=%20%20')
+    expect(list).toHaveBeenLastCalledWith({ workspaceId: 11, appId: 5 }, { page: 1, pageSize: 20 })
+
+    const longSearch = 'x'.repeat(101)
+    await app.request(`/5/requirements?q=${longSearch}`)
+    expect(list).toHaveBeenLastCalledWith(
+      { workspaceId: 11, appId: 5 },
+      { page: 1, pageSize: 20, search: 'x'.repeat(100) },
+    )
+  })
+
   it('resolves requirement codes inside the same app scope', async () => {
     const byCode = vi.fn(async () => ({ id: summary.id, code: summary.code }))
     const app = mount({ byCode })

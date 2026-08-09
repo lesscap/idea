@@ -15,7 +15,7 @@ import {
 } from '../../domains/requirement.ts'
 import { paged, toOffset } from '../../paging.ts'
 import type { Service } from '../../types.ts'
-import type { RequirementReads } from './types.ts'
+import type { RequirementListQuery, RequirementReads } from './types.ts'
 
 const contentSelect = { title: true, summary: true, body: true } as const
 const listContentSelect = { title: true, summary: true } as const
@@ -118,9 +118,38 @@ const toDetail = (row: DetailRow): RequirementDetail => ({
   updatedAt: row.updatedAt.toISOString(),
 })
 
+const contentContains = (search: string) => ({
+  OR: [
+    { title: { contains: search, mode: 'insensitive' as const } },
+    { summary: { contains: search, mode: 'insensitive' as const } },
+  ],
+})
+
+const listWhere = (
+  workspaceId: number,
+  appId: number,
+  query: RequirementListQuery,
+): Prisma.RequirementWhereInput => {
+  const search = query.search
+  if (!search) return { appId, app: { workspaceId } }
+
+  const number = parseRequirementCode(search.toUpperCase())
+  return {
+    appId,
+    app: { workspaceId },
+    OR: [
+      ...(number === null ? [] : [{ number }]),
+      { currentRevision: { is: contentContains(search) } },
+      {
+        AND: [{ currentRevision: { is: null } }, { draft: { is: contentContains(search) } }],
+      },
+    ],
+  }
+}
+
 export const createRequirementReads: Service<RequirementReads> = app => ({
   list: async ({ workspaceId, appId }, query) => {
-    const where = { appId, app: { workspaceId } }
+    const where = listWhere(workspaceId, appId, query)
     const { offset, limit } = toOffset(query)
     const [rows, total] = await Promise.all([
       app.$prisma.requirement.findMany({

@@ -45,3 +45,5 @@ export {
 export { Input } from './input'
 export { Label } from './label'
 export { Markdown } from './markdown'
+export { Pagination, type PaginationProps } from './pagination'
+export { DataTable, type DataTableColumn, type DataTableProps } from './table'

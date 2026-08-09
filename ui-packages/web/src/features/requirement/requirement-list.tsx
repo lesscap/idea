@@ -1,48 +1,41 @@
-import type { Id, Paged, RequirementStatus, RequirementSummary } from '@idea/shared'
-import { ArrowRight, FileText, RefreshCw } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Id, Paged, RequirementSummary } from '@idea/shared'
+import { FileText, RefreshCw, Search, X } from 'lucide-react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useLocaleControl } from '../../i18n'
-import { Badge, Button } from '../../ui'
+import { Button, Input, Pagination } from '../../ui'
 import { listRequirements, requirementResourceRef } from './api'
+import { RequirementTable } from './requirement-table'
 
 type ListState =
   | { readonly status: 'loading' }
   | { readonly status: 'ready'; readonly page: Paged<RequirementSummary> }
   | { readonly status: 'failed' }
 
-type MoreState = 'idle' | 'loading' | 'failed'
-
-const statusClass: Record<RequirementStatus, string> = {
-  draft: 'border-warning/40 bg-warning/10 text-foreground',
-  active: 'border-success/30 bg-success/10 text-foreground',
-  archived: 'border-border bg-muted text-muted-foreground',
+type ListQuery = {
+  readonly appId: Id
+  readonly page: number
+  readonly search: string
 }
 
 const RequirementListSkeleton = () => (
-  <div className="divide-y divide-border border-y border-border" aria-busy="true">
-    {[1, 2, 3].map(row => (
-      <div key={row} className="flex gap-5 py-5 motion-reduce:animate-none">
-        <div className="h-5 w-12 animate-pulse rounded bg-muted motion-reduce:animate-none" />
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="h-5 w-2/5 animate-pulse rounded bg-muted motion-reduce:animate-none" />
-          <div className="h-4 w-4/5 animate-pulse rounded bg-muted/70 motion-reduce:animate-none" />
+  <div className="h-full overflow-hidden" aria-busy="true">
+    <div className="min-w-[996px]">
+      <div className="h-9 border-border border-b bg-muted" />
+      {[1, 2, 3, 4, 5, 6, 7, 8].map(row => (
+        <div
+          key={row}
+          className="grid h-13 grid-cols-[6rem_26.25rem_7rem_11rem_9.5rem_2.5rem] items-center border-border border-b px-3"
+        >
+          <div className="h-3 w-12 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+          <div className="space-y-1.5">
+            <div className="h-3.5 w-2/5 animate-pulse rounded bg-muted motion-reduce:animate-none" />
+            <div className="h-3 w-3/5 animate-pulse rounded bg-muted/70 motion-reduce:animate-none" />
+          </div>
         </div>
-      </div>
-    ))}
+      ))}
+    </div>
   </div>
 )
-
-const mergePages = (
-  current: Paged<RequirementSummary>,
-  next: Paged<RequirementSummary>,
-): Paged<RequirementSummary> => ({
-  ...next,
-  items: [
-    ...new Map(
-      [...current.items, ...next.items].map(requirement => [requirement.id, requirement]),
-    ).values(),
-  ],
-})
 
 export const RequirementList = ({
   appId,
@@ -53,10 +46,12 @@ export const RequirementList = ({
 }) => {
   const __ = useLocale()
   const { locale } = useLocaleControl()
+  const tableViewportRef = useRef<HTMLDivElement>(null)
+  const requestRef = useRef<object | null>(null)
   const [state, setState] = useState<ListState>({ status: 'loading' })
-  const [moreState, setMoreState] = useState<MoreState>('idle')
+  const [query, setQuery] = useState<ListQuery>({ appId, page: 1, search: '' })
+  const [searchInput, setSearchInput] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const requestRef = useRef<{ readonly attempt: number } | null>(null)
 
   const dateFormatter = useMemo(
     () =>
@@ -67,13 +62,24 @@ export const RequirementList = ({
   )
 
   useEffect(() => {
+    if (query.appId !== appId) {
+      setQuery({ appId, page: 1, search: '' })
+      setSearchInput('')
+      return
+    }
+
     const request = { attempt }
     requestRef.current = request
     setState({ status: 'loading' })
-    setMoreState('idle')
-    listRequirements(appId).then(
+    listRequirements(appId, { page: query.page, search: query.search }).then(
       page => {
-        if (requestRef.current === request) setState({ status: 'ready', page })
+        if (requestRef.current !== request) return
+        const totalPages = Math.max(1, Math.ceil(page.total / page.pageSize))
+        if (query.page > totalPages) {
+          setQuery({ ...query, page: totalPages })
+          return
+        }
+        setState({ status: 'ready', page })
       },
       () => {
         if (requestRef.current === request) setState({ status: 'failed' })
@@ -82,141 +88,146 @@ export const RequirementList = ({
     return () => {
       if (requestRef.current === request) requestRef.current = null
     }
-  }, [appId, attempt])
+  }, [appId, attempt, query])
 
-  const loadMore = () => {
-    if (state.status !== 'ready' || moreState === 'loading') return
-    setMoreState('loading')
-    listRequirements(appId, state.page.page + 1).then(
-      page => {
-        setState(current =>
-          current.status === 'ready'
-            ? { status: 'ready', page: mergePages(current.page, page) }
-            : current,
-        )
-        setMoreState('idle')
-      },
-      () => setMoreState('failed'),
-    )
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const search = searchInput.trim()
+    if (query.appId === appId && query.page === 1 && query.search === search) {
+      setAttempt(value => value + 1)
+      return
+    }
+    setQuery({ appId, page: 1, search })
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    if (query.search !== '') setQuery({ appId, page: 1, search: '' })
+  }
+
+  const changePage = (page: number) => {
+    if (query.appId !== appId || query.page === page) return
+    setQuery({ ...query, page })
+    tableViewportRef.current?.scrollTo?.({ top: 0 })
   }
 
   const page = state.status === 'ready' ? state.page : null
-  const hasMore = page !== null && page.page * page.pageSize < page.total
+  const totalPages = page ? Math.max(1, Math.ceil(page.total / page.pageSize)) : null
+  const hasSearch = query.search !== ''
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-5 sm:p-7 lg:p-9">
-      <header className="flex items-end justify-between gap-4 border-border border-b pb-5">
-        <div>
-          <h1 className="font-semibold text-2xl tracking-[-0.02em]">{__('requirement.heading')}</h1>
-          {page && (
-            <p className="mt-1 text-muted-foreground text-sm">
-              {__('requirement.total', page.total)}
-            </p>
-          )}
-        </div>
-      </header>
-
-      {state.status === 'loading' && <RequirementListSkeleton />}
-
-      {state.status === 'failed' && (
-        <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-center">
-          <FileText className="size-8 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm">{__('requirement.listLoadFailed')}</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAttempt(value => value + 1)}
-          >
-            <RefreshCw />
-            {__('common.retry')}
-          </Button>
-        </div>
-      )}
-
-      {page?.items.length === 0 && (
-        <div className="flex min-h-56 flex-col items-center justify-center gap-2 text-center">
-          <FileText className="size-8 text-muted-foreground" aria-hidden="true" />
-          <p className="font-medium">{__('requirement.empty')}</p>
-          <p className="max-w-md text-muted-foreground text-sm">{__('requirement.emptyHint')}</p>
-        </div>
-      )}
-
-      {page && page.items.length > 0 && (
-        <div
-          className="divide-y divide-border border-y border-border"
-          data-testid="requirement-list"
-        >
-          {page.items.map(requirement => (
-            <button
-              key={requirement.id}
+    <main
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden"
+      data-testid="requirement-list-page"
+      data-state={state.status}
+      data-total={page?.total ?? ''}
+      data-page={query.appId === appId ? query.page : 1}
+      data-total-pages={totalPages ?? ''}
+      data-search={query.appId === appId ? query.search : ''}
+    >
+      <form
+        className="flex min-w-0 shrink-0 items-center gap-2 border-border border-b px-4 py-2"
+        aria-label={__('requirement.search')}
+        onSubmit={submitSearch}
+      >
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            className="h-8 pr-8 pl-8 shadow-none [&::-webkit-search-cancel-button]:appearance-none"
+            value={searchInput}
+            maxLength={100}
+            aria-label={__('requirement.searchPlaceholder')}
+            placeholder={__('requirement.searchPlaceholder')}
+            data-testid="requirement-search-input"
+            onChange={event => setSearchInput(event.target.value)}
+          />
+          {(searchInput !== '' || hasSearch) && (
+            <Button
               type="button"
-              className="group flex w-full items-start gap-4 px-1 py-5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:gap-6 sm:px-3"
-              onClick={() => openResource(requirementResourceRef(requirement.code))}
+              variant="ghost"
+              size="sm"
+              className="absolute top-1/2 right-0.5 size-7 -translate-y-1/2 p-0"
+              aria-label={__('requirement.clearSearch')}
+              data-testid="requirement-search-clear"
+              onClick={clearSearch}
             >
-              <span className="mt-0.5 shrink-0 font-mono text-muted-foreground text-sm">
-                {requirement.code}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-balance font-medium text-base">
-                  {requirement.title || __('requirement.untitled')}
-                </span>
-                {requirement.summary && (
-                  <span className="mt-1 line-clamp-2 block max-w-[70ch] text-muted-foreground text-sm leading-6">
-                    {requirement.summary}
-                  </span>
-                )}
-                <span className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="outline" className={statusClass[requirement.status]}>
-                    {__(`requirement.status.${requirement.status}`)}
-                  </Badge>
-                  {requirement.currentRevisionCode && (
-                    <span className="font-mono text-muted-foreground">
-                      {requirement.currentRevisionCode}
-                    </span>
-                  )}
-                  {requirement.hasDraft && (
-                    <Badge
-                      variant="outline"
-                      className="border-warning/40 bg-warning/10 text-foreground"
-                    >
-                      {__('requirement.hasDraft')}
-                    </Badge>
-                  )}
-                  <span className="text-muted-foreground">
-                    {__(
-                      'requirement.updatedAt',
-                      dateFormatter.format(new Date(requirement.updatedAt)),
-                    )}
-                  </span>
-                </span>
-              </span>
-              <ArrowRight
-                className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-                aria-hidden="true"
-              />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {hasMore && (
-        <div className="flex flex-col items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={moreState === 'loading'}
-            onClick={loadMore}
-          >
-            {moreState === 'loading' ? __('requirement.loadingMore') : __('requirement.loadMore')}
-          </Button>
-          {moreState === 'failed' && (
-            <p className="text-destructive text-sm" role="alert">
-              {__('requirement.loadMoreFailed')}
-            </p>
+              <X />
+            </Button>
           )}
         </div>
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={state.status === 'loading'}
+          data-testid="requirement-search-submit"
+        >
+          {__('requirement.search')}
+        </Button>
+      </form>
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {state.status === 'loading' && <RequirementListSkeleton />}
+
+        {state.status === 'failed' && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
+            <FileText className="size-8 text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm">{__('requirement.listLoadFailed')}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="requirement-retry"
+              onClick={() => setAttempt(value => value + 1)}
+            >
+              <RefreshCw />
+              {__('common.retry')}
+            </Button>
+          </div>
+        )}
+
+        {page?.items.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+            <FileText className="size-8 text-muted-foreground" aria-hidden="true" />
+            <p className="font-medium">
+              {hasSearch ? __('requirement.noSearchResults') : __('requirement.empty')}
+            </p>
+            {!hasSearch && (
+              <p className="max-w-md text-muted-foreground text-sm">
+                {__('requirement.emptyHint')}
+              </p>
+            )}
+          </div>
+        )}
+
+        {page && page.items.length > 0 && (
+          <RequirementTable
+            items={page.items}
+            dateFormatter={dateFormatter}
+            viewportRef={tableViewportRef}
+            onOpen={code => openResource(requirementResourceRef(code))}
+          />
+        )}
+      </div>
+
+      {page && page.total > 0 && (
+        <Pagination
+          page={page.page}
+          total={page.total}
+          pageSize={page.pageSize}
+          ariaLabel={__('requirement.pagination.label')}
+          previousLabel={__('requirement.pagination.previous')}
+          nextLabel={__('requirement.pagination.next')}
+          totalLabel={__('requirement.pagination.total', page.total)}
+          pageLabel={number => __('requirement.pagination.page', number)}
+          className="shrink-0 border-border border-t px-4 py-2"
+          testIdPrefix="requirement-pagination"
+          onPageChange={changePage}
+        />
       )}
     </main>
   )

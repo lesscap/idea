@@ -38,7 +38,7 @@ which workspace it may serve, because it cannot name its own — and the name of
 provider from the registry:
 
 ```bash
-pnpm --filter @idea/core seed:providers   # glm, deepseek (endpoints only, no keys)
+pnpm --filter @idea/core seed:system      # built-in providers; safe in production
 
 # Credentials go in web-packages/worker/.env, named by each provider's tokenEnv:
 #   IDEA_PROVIDER_GLM_TOKEN=…
@@ -46,6 +46,17 @@ pnpm --filter @idea/core seed:providers   # glm, deepseek (endpoints only, no ke
 
 IDEA_ENROLMENT_TOKEN=… IDEA_PROVIDER=glm pnpm --filter @idea/worker dev
 ```
+
+Development-only demo data is kept separate from the built-in system seed and
+can be applied independently:
+
+```bash
+pnpm --filter @idea/core seed:demo
+pnpm --filter @idea/core seed:demo:requirements
+```
+
+`seed:providers` remains an alias for `seed:system` for compatibility. Demo
+commands refuse production-looking databases.
 
 Without one, a message sits queued and nothing answers — which is what
 `scripts/conversation.mjs` says when it times out.
