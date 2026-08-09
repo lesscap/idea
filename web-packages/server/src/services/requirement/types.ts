@@ -13,6 +13,10 @@ export type RequirementScope = {
   readonly appId: Id
 }
 
+export type RequirementListQuery = PageQuery & {
+  readonly search?: string
+}
+
 export type CreateRequirementInput = RequirementScope &
   RequirementContent & {
     readonly createdById: Id
@@ -49,7 +53,7 @@ export type RequirementCommandResult =
   | RequirementWriteFailure
 
 export type RequirementReads = {
-  list: (scope: RequirementScope, query: PageQuery) => Promise<Paged<RequirementSummary>>
+  list: (scope: RequirementScope, query: RequirementListQuery) => Promise<Paged<RequirementSummary>>
   get: (scope: RequirementScope, requirementId: Id) => Promise<RequirementDetail | null>
   byCode: (
     scope: RequirementScope,

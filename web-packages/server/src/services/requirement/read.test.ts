@@ -130,4 +130,45 @@ describe.skipIf(!databaseUrl)('requirement reads', () => {
     expect(first.total).toBe(3)
     expect(second.total).toBe(3)
   })
+
+  it('searches the same requirement content that the list displays', async () => {
+    const draftOnly = await create('Needle Draft Alpha')
+    const confirmed = await create('Needle Confirmed Beta')
+    const confirmation = await db.app.$requirement.confirm({
+      ...scope(),
+      requirementId: confirmed.id,
+      confirmedById: db.userId,
+      expectedDraftVersion: 1,
+    })
+    expect(confirmation.kind).toBe('ok')
+    await db.app.$requirement.saveDraft({
+      ...scope(),
+      requirementId: confirmed.id,
+      updatedById: db.userId,
+      title: 'Hidden Draft Gamma',
+      summary: 'Hidden Draft Gamma summary',
+      body: 'Hidden Draft Gamma body',
+    })
+
+    const search = (value: string) =>
+      db.app.$requirement.list(scope(), { page: 1, pageSize: 20, search: value })
+
+    await expect(search('needle draft alpha')).resolves.toMatchObject({
+      items: [{ id: draftOnly.id }],
+      total: 1,
+    })
+    await expect(search('NEEDLE CONFIRMED BETA')).resolves.toMatchObject({
+      items: [{ id: confirmed.id }],
+      total: 1,
+    })
+    await expect(search('confirmed beta summary')).resolves.toMatchObject({
+      items: [{ id: confirmed.id }],
+      total: 1,
+    })
+    await expect(search('Hidden Draft Gamma')).resolves.toMatchObject({ items: [], total: 0 })
+    await expect(search(confirmed.code.toLowerCase())).resolves.toMatchObject({
+      items: [{ id: confirmed.id }],
+      total: 1,
+    })
+  })
 })

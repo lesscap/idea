@@ -29,20 +29,12 @@ const page = (
   total = items.length,
   pageNumber = 1,
   pageSize = 20,
-) => ({
-  items,
-  total,
-  page: pageNumber,
-  pageSize,
-})
+) => ({ items, total, page: pageNumber, pageSize })
 
 const draw = (openResource = vi.fn()) => {
   render(
     <LocaleProvider initial="zh">
-      <RequirementList
-        appId={7}
-        openResource={openResource}
-      />
+      <RequirementList appId={7} openResource={openResource} />
     </LocaleProvider>,
   )
   return openResource
@@ -55,40 +47,84 @@ describe('requirement list', () => {
     api.listRequirements.mockResolvedValue(page([requirement()]))
     const openResource = draw()
 
-    fireEvent.click(await screen.findByRole('button', { name: /报销申请审批/ }))
+    const row = await screen.findByTestId('requirement-r-1')
+    const listPage = screen.getByTestId('requirement-list-page')
+
+    expect(screen.queryByRole('heading', { name: '需求' })).not.toBeInTheDocument()
+    expect(listPage).toHaveAttribute('data-state', 'ready')
+    expect(listPage).toHaveAttribute('data-total', '1')
+    expect(listPage).toHaveAttribute('data-page', '1')
+    expect(listPage).toHaveAttribute('data-total-pages', '1')
+    expect(screen.getByRole('table', { name: '需求列表' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '编号' })).toBeInTheDocument()
+    expect(row).toHaveAttribute('data-status', 'active')
+    expect(row).toHaveAttribute('data-has-draft', 'true')
+
+    fireEvent.click(row)
 
     expect(screen.getByText('已确认')).toBeInTheDocument()
     expect(screen.getByText('有未确认修改')).toBeInTheDocument()
     expect(openResource).toHaveBeenCalledWith('requirements/R-1')
+    expect(api.listRequirements).toHaveBeenCalledWith(7, { page: 1, search: '' })
   })
 
-  it('appends another page without duplicating requirements', async () => {
+  it('replaces rows when a numbered page is selected', async () => {
     api.listRequirements
-      .mockResolvedValueOnce(page([requirement()], 2, 1, 1))
+      .mockResolvedValueOnce(page([requirement()], 24))
       .mockResolvedValueOnce(
-        page(
-          [requirement(), requirement({ id: 2, number: 2, code: 'R-2', title: '差旅预订' })],
-          2,
-          1,
-          2,
-        ),
+        page([requirement({ id: 24, number: 24, code: 'R-24', title: '审批审计日志' })], 24, 2),
       )
     draw()
 
-    fireEvent.click(await screen.findByRole('button', { name: '加载更多' }))
+    await screen.findByText('报销申请审批')
+    fireEvent.click(screen.getByTestId('requirement-pagination-page-2'))
 
-    expect(await screen.findByText('差旅预订')).toBeInTheDocument()
-    expect(screen.getAllByText('报销申请审批')).toHaveLength(1)
-    expect(api.listRequirements).toHaveBeenNthCalledWith(2, 7, 2)
+    expect(await screen.findByText('审批审计日志')).toBeInTheDocument()
+    expect(screen.queryByText('报销申请审批')).not.toBeInTheDocument()
+    expect(screen.getByTestId('requirement-list-page')).toHaveAttribute('data-page', '2')
+    expect(api.listRequirements).toHaveBeenNthCalledWith(2, 7, { page: 2, search: '' })
   })
 
-  it('retries the initial request after a failure', async () => {
+  it('submits and clears a trimmed search from page one', async () => {
+    api.listRequirements
+      .mockResolvedValueOnce(page([requirement()], 24))
+      .mockResolvedValueOnce(
+        page([requirement({ id: 2, number: 2, code: 'R-2', title: '审批规则' })]),
+      )
+      .mockResolvedValueOnce(page([requirement()], 24))
+    draw()
+
+    const input = await screen.findByTestId('requirement-search-input')
+    fireEvent.change(input, { target: { value: '  审批  ' } })
+    fireEvent.click(screen.getByTestId('requirement-search-submit'))
+
+    await waitFor(() =>
+      expect(api.listRequirements).toHaveBeenNthCalledWith(2, 7, {
+        page: 1,
+        search: '审批',
+      }),
+    )
+    expect(await screen.findByText('审批规则')).toBeInTheDocument()
+    expect(screen.getByTestId('requirement-list-page')).toHaveAttribute('data-search', '审批')
+
+    fireEvent.click(screen.getByTestId('requirement-search-clear'))
+    await waitFor(() =>
+      expect(api.listRequirements).toHaveBeenNthCalledWith(3, 7, { page: 1, search: '' }),
+    )
+    expect(input).toHaveValue('')
+  })
+
+  it('retries the current query after a failure', async () => {
     api.listRequirements
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(page([requirement()]))
     draw()
 
-    fireEvent.click(await screen.findByRole('button', { name: '重试' }))
+    expect(await screen.findByTestId('requirement-list-page')).toHaveAttribute(
+      'data-state',
+      'failed',
+    )
+    fireEvent.click(screen.getByTestId('requirement-retry'))
 
     await waitFor(() => expect(api.listRequirements).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('报销申请审批')).toBeInTheDocument()
