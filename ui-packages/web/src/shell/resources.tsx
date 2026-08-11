@@ -3,7 +3,7 @@ import { File, FileText, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
 import { FileResource } from '../features/file/file-resource'
-import { RequirementDetail } from '../features/requirement/requirement-detail'
+import { RequirementDetail } from '../features/requirement/detail'
 import { RequirementList } from '../features/requirement/requirement-list'
 import type { Translate } from '../i18n'
 

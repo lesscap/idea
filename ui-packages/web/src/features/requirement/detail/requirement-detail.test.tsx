@@ -1,8 +1,8 @@
 import type { RequirementDetail as RequirementDetailValue, RequirementRevision } from '@idea/shared'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { LocaleProvider } from '../../i18n'
-import { RequirementDetail } from './requirement-detail'
+import { LocaleProvider } from '../../../i18n'
+import { RequirementDetail } from './index'
 
 const api = vi.hoisted(() => ({
   getRequirementByCode: vi.fn(),
@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   getRequirementRevision: vi.fn(),
 }))
 
-vi.mock('./api', () => api)
+vi.mock('../api', () => api)
 
 const historical: RequirementRevision = {
   id: 11,
@@ -59,11 +59,7 @@ const detail = (withDraft = true): RequirementDetailValue => ({
 const draw = (showConversation = vi.fn()) => {
   render(
     <LocaleProvider initial="zh">
-      <RequirementDetail
-        params={{ code: 'R-1' }}
-        appId={7}
-        showConversation={showConversation}
-      />
+      <RequirementDetail params={{ code: 'R-1' }} appId={7} showConversation={showConversation} />
     </LocaleProvider>,
   )
   return showConversation
@@ -81,22 +77,35 @@ describe('requirement detail', () => {
     api.getRequirementRevision.mockReset()
   })
 
-  it('defaults to the draft and switches between cached revisions in the same resource', async () => {
+  it('requests a historical revision again after switching away', async () => {
     api.getRequirementRevision.mockResolvedValue(historical)
     const showConversation = draw()
 
     expect(await screen.findByRole('heading', { name: '正在修改的标题' })).toBeInTheDocument()
+    expect(screen.getByTestId('requirement-detail-toolbar')).toHaveTextContent('R-1')
+    expect(screen.getByTestId('requirement-detail-toolbar')).toHaveTextContent('已确认')
+    expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('正在查看')
+    expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('未确认')
+    expect(screen.getByRole('status')).toHaveTextContent('正在查看草稿，未确认')
+    expect(screen.getByTestId('markdown')).toHaveAttribute('data-variant', 'document')
     fireEvent.click(screen.getByRole('button', { name: '查看来源会话' }))
     expect(showConversation).toHaveBeenLastCalledWith('cid-draft')
 
+    const detailRegion = screen.getByRole('main')
+    detailRegion.scrollTop = 120
     await openVersions()
     fireEvent.click(await screen.findByText('v2'))
     expect(await screen.findByRole('heading', { name: '已确认标题' })).toBeInTheDocument()
+    expect(detailRegion.scrollTop).toBe(0)
+    expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('当前版本')
     expect(api.getRequirementRevision).not.toHaveBeenCalled()
 
     await openVersions()
     fireEvent.click(await screen.findByText('v1'))
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载 v1…')
     expect(await screen.findByRole('heading', { name: '第一版标题' })).toBeInTheDocument()
+    expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('历史版本')
+    expect(screen.getByRole('status')).toHaveTextContent('正在查看v1，历史版本')
     expect(api.getRequirementRevision).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: '查看来源会话' }))
     expect(showConversation).toHaveBeenLastCalledWith('cid-history')
@@ -106,15 +115,39 @@ describe('requirement detail', () => {
     await openVersions()
     fireEvent.click(await screen.findByText('v1'))
     expect(await screen.findByRole('heading', { name: '第一版标题' })).toBeInTheDocument()
-    expect(api.getRequirementRevision).toHaveBeenCalledOnce()
+    expect(api.getRequirementRevision).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a historical response after another version is selected', async () => {
+    let resolveRevision: (value: RequirementRevision) => void = () => undefined
+    api.getRequirementRevision.mockReturnValue(
+      new Promise<RequirementRevision>(resolve => {
+        resolveRevision = resolve
+      }),
+    )
+    draw()
+    await screen.findByRole('heading', { name: '正在修改的标题' })
+
+    await openVersions()
+    fireEvent.click(await screen.findByText('v1'))
+    await openVersions()
+    fireEvent.click(await screen.findByText('v2'))
+    await act(async () => resolveRevision(historical))
+
+    expect(screen.getByRole('heading', { name: '已确认标题' })).toBeInTheDocument()
   })
 
   it('defaults to the current revision when no draft exists', async () => {
-    api.getRequirement.mockResolvedValue(detail(false))
+    const currentOnly = detail(false)
+    api.getRequirement.mockResolvedValue({
+      ...currentOnly,
+      revisions: currentOnly.revisions.slice(0, 1),
+    })
     draw()
 
     expect(await screen.findByRole('heading', { name: '已确认标题' })).toBeInTheDocument()
     expect(screen.getByText('当前版本')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '选择需求版本' })).not.toBeInTheDocument()
   })
 
   it('keeps the version selector available when a historical revision needs retrying', async () => {
@@ -131,5 +164,21 @@ describe('requirement detail', () => {
     await waitFor(() => expect(api.getRequirementRevision).toHaveBeenCalledTimes(2))
     expect(await screen.findByRole('heading', { name: '第一版标题' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择需求版本' })).toBeInTheDocument()
+  })
+
+  it('keeps requirement identity visible when no version has content', async () => {
+    api.getRequirement.mockResolvedValue({
+      ...detail(false),
+      status: 'draft',
+      currentRevision: null,
+      revisions: [],
+    })
+    draw()
+
+    const toolbar = await screen.findByTestId('requirement-detail-toolbar')
+    expect(toolbar).toHaveTextContent('R-1')
+    expect(toolbar).toHaveTextContent('草稿')
+    expect(screen.getByText('这个需求暂时没有可查看的内容。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '选择需求版本' })).not.toBeInTheDocument()
   })
 })
