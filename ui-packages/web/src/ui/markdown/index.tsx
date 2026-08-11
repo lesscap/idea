@@ -50,15 +50,33 @@ const Pre = ({ children, ...props }: ComponentProps<'pre'>) => {
   return <pre {...props}>{children}</pre>
 }
 
-export const Markdown = ({ text }: { text: string }) => (
+type MarkdownVariant = 'compact' | 'document'
+
+const variantClass: Record<MarkdownVariant, string> = {
+  compact: [
+    'prose-headings:text-[0.95em]',
+    'prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5',
+    'prose-blockquote:my-2 [&_pre]:my-2 [&_.katex-display]:my-2',
+  ].join(' '),
+  document: [
+    'prose-headings:mt-7 prose-headings:mb-3 prose-headings:tracking-[-0.015em]',
+    'prose-p:my-3 prose-p:leading-7 prose-ul:my-3 prose-ol:my-3 prose-li:my-1',
+    'prose-blockquote:my-4 [&_pre]:my-4 [&_.katex-display]:my-4',
+  ].join(' '),
+}
+
+export const Markdown = ({
+  text,
+  variant = 'compact',
+}: {
+  text: string
+  variant?: MarkdownVariant
+}) => (
   <div
     className={[
       'prose prose-sm max-w-none break-words',
-      // Tightened from the article defaults: this is a chat panel, not a page,
-      // and prose's generous vertical rhythm leaves a short answer looking lost.
-      'prose-headings:font-semibold prose-headings:text-[0.95em]',
-      'prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5',
-      'prose-blockquote:my-2 prose-blockquote:not-italic',
+      'prose-headings:font-semibold prose-blockquote:not-italic',
+      variantClass[variant],
       // Descendant selectors rather than prose-* variants: typography drives
       // code colours through CSS variables, which the variants lose to.
       //
@@ -66,7 +84,7 @@ export const Markdown = ({ text }: { text: string }) => (
       // its own dark code block; put a light background under it, as the line
       // below does, and the code becomes grey on grey. Nothing caught it because
       // no answer had happened to contain a fenced block yet.
-      '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:border',
+      '[&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:border',
       '[&_pre]:border-border [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-xs',
       '[&_pre]:text-foreground [&_pre_code]:bg-transparent [&_pre_code]:text-foreground',
       '[&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1',
@@ -75,12 +93,13 @@ export const Markdown = ({ text }: { text: string }) => (
       'prose-code:before:hidden prose-code:after:hidden',
       // A long equation scrolls sideways rather than widening the panel, same
       // rule as the table below.
-      '[&_.katex-display]:my-2 [&_.katex-display]:overflow-x-auto',
+      '[&_.katex-display]:overflow-x-auto',
       '[&_.katex-display]:overflow-y-hidden',
       // A wide table scrolls inside the panel rather than stretching it and
       // making the whole conversation scroll sideways.
       '[&_table]:block [&_table]:w-max [&_table]:max-w-full [&_table]:overflow-x-auto',
     ].join(' ')}
+    data-variant={variant}
     data-testid="markdown"
   >
     <ReactMarkdown

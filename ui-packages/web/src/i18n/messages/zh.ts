@@ -118,9 +118,13 @@ export const zh = {
     },
     version: {
       choose: '选择需求版本',
+      viewing: '正在查看',
+      viewingAnnouncement: '正在查看{0}，{1}',
+      loadingAnnouncement: '正在加载 {0}…',
       draft: '草稿',
       unconfirmed: '未确认',
       current: '当前版本',
+      historical: '历史版本',
       unknown: '未知版本',
       confirmedAt: '确认于 {0}',
       updatedAt: '更新于 {0}',

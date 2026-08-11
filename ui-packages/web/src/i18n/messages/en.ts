@@ -117,9 +117,13 @@ export const en: typeof zh = {
     },
     version: {
       choose: 'Choose requirement version',
+      viewing: 'Viewing',
+      viewingAnnouncement: 'Viewing {0}, {1}',
+      loadingAnnouncement: 'Loading {0}…',
       draft: 'Draft',
       unconfirmed: 'Unconfirmed',
       current: 'Current version',
+      historical: 'Historical version',
       unknown: 'Unknown version',
       confirmedAt: 'Confirmed {0}',
       updatedAt: 'Updated {0}',
