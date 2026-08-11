@@ -53,6 +53,7 @@ can be applied independently:
 ```bash
 pnpm --filter @idea/core seed:demo
 pnpm --filter @idea/core seed:demo:requirements
+pnpm --filter @idea/server seed:demo:requirement-media
 ```
 
 `seed:providers` remains an alias for `seed:system` for compatibility. Demo

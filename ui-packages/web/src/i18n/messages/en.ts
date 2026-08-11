@@ -103,6 +103,9 @@ export const en: typeof zh = {
     revisionLoadFailed: 'Could not load this revision. Try again.',
     contentUnavailable: 'This requirement has no content available to view.',
     sourceConversation: 'View source conversation',
+    attachments: 'Attachments',
+    imageUnavailable: 'Image unavailable or not associated with this content',
+    openImage: 'Open image {0}',
     pagination: {
       label: 'Requirement list pagination',
       previous: 'Previous',

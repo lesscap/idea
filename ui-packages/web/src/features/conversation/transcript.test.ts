@@ -1,6 +1,6 @@
 import type { WireEvent } from '@idea/shared'
 import { describe, expect, it } from 'vitest'
-import { isWorking, phaseOf, toBubbles, type WireStored } from './transcript'
+import { filesInBubbles, isWorking, phaseOf, toBubbles, type WireStored } from './transcript'
 import { mergeEvents } from './use-conversation'
 
 // The two rules here are the ones that go wrong quietly: an answer rendered
@@ -94,6 +94,21 @@ describe('folding a transcript into what is drawn', () => {
     ])
 
     expect(bubble).toEqual({ kind: 'them', key: 'seq:0', text: '', attachments: [attachment] })
+  })
+
+  it('collects unique conversation files for private markdown references', () => {
+    const file = {
+      fid: 'file123',
+      filename: 'flow.png',
+      contentType: 'image/png',
+      size: 16,
+    }
+    const bubbles = toBubbles([
+      stored(0, { type: 'user_message', text: 'first', attachments: [file] }),
+      stored(1, { type: 'user_message', text: 'again', attachments: [file] }),
+    ])
+
+    expect(filesInBubbles(bubbles)).toEqual([file])
   })
 })
 

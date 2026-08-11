@@ -2,6 +2,7 @@ import type { Id } from '@idea/shared'
 import { File, FileText, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
+import type { FileDescriptor } from '../features/file/api'
 import { FileResource } from '../features/file/file-resource'
 import { RequirementDetail } from '../features/requirement/detail'
 import { RequirementList } from '../features/requirement/requirement-list'
@@ -30,6 +31,7 @@ export type ResourceContentProps = {
   params: ResourceParams
   appId: Id
   openResource: (ref: string) => void
+  openFile: (file: FileDescriptor) => void
   showConversation: (cid: string) => void
 }
 

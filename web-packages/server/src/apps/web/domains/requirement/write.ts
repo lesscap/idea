@@ -25,6 +25,23 @@ const sendResult = (c: Context, result: RequirementWriteResult): Response => {
   if (result.kind === 'draft_missing') {
     return failWith(c, 409, 'requirement_draft_missing', 'requirement has no draft')
   }
+  if (result.kind === 'file_not_found') {
+    return failWith(c, 404, 'requirement_file_not_found', 'requirement file not found')
+  }
+  if (result.kind === 'file_not_ready') {
+    return failWith(c, 409, 'requirement_file_not_ready', 'requirement file is not ready')
+  }
+  if (result.kind === 'invalid_image_file') {
+    return failWith(c, 400, 'invalid_requirement_image', 'requirement image must be an image file')
+  }
+  if (result.kind === 'duplicate_file_reference') {
+    return failWith(
+      c,
+      400,
+      'duplicate_requirement_file',
+      'requirement file references must be unique',
+    )
+  }
   return failWith(c, 409, 'draft_version_conflict', 'requirement draft has changed')
 }
 

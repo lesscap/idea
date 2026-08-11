@@ -2,6 +2,7 @@ import type { App } from '@idea/shared'
 import { MessageSquare } from 'lucide-react'
 import { Activity } from 'react'
 import { AppDashboard } from '../../features/app/app-dashboard'
+import { fileResourceRef } from '../../features/file/api'
 import { useLocale } from '../../i18n'
 import { matchResource } from '../resources'
 import type { Workspace } from '../url/use-workspace-url'
@@ -80,6 +81,7 @@ export const ContentColumn = ({
                   params={matched.params}
                   appId={app.id}
                   openResource={workspace.open}
+                  openFile={file => workspace.open(fileResourceRef(file))}
                   showConversation={showConversation}
                 />
               </div>

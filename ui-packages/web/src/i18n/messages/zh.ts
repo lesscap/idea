@@ -104,6 +104,9 @@ export const zh = {
     revisionLoadFailed: '无法加载这个历史版本，请重试。',
     contentUnavailable: '这个需求暂时没有可查看的内容。',
     sourceConversation: '查看来源会话',
+    attachments: '附件',
+    imageUnavailable: '图片不可用或未关联到当前内容',
+    openImage: '打开图片 {0}',
     pagination: {
       label: '需求列表分页',
       previous: '上一页',

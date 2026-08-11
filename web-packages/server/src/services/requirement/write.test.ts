@@ -22,6 +22,25 @@ describe.skipIf(!databaseUrl)('requirement writes', () => {
 
   const scope = () => ({ workspaceId: db.workspaceId, appId: db.appId })
 
+  const file = (
+    fid: string,
+    contentType: string,
+    status: 'pending' | 'ready' = 'ready',
+    appId = db.appId,
+  ) =>
+    db.prisma.file.create({
+      data: {
+        fid,
+        appId,
+        uploadedById: db.userId,
+        filename: `${fid}.${contentType.startsWith('image/') ? 'png' : 'md'}`,
+        contentType,
+        size: 32,
+        storageKey: `requirement-tests/${fid}`,
+        status,
+      },
+    })
+
   const conversation = async (appId: number, cid: string) => {
     await db.prisma.conversation.create({
       data: { cid, appId, createdById: db.userId, providerId },
@@ -110,6 +129,85 @@ describe.skipIf(!databaseUrl)('requirement writes', () => {
       where: { requirementId: requirement.id, number: 1 },
     })
     expect(original).toMatchObject({ title: 'Confirmed once', summary: 'Confirmed once summary' })
+  })
+
+  it('replaces draft files and snapshots them when confirming', async () => {
+    await Promise.all([
+      file('requirement-image', 'image/png'),
+      file('requirement-attachment', 'text/markdown'),
+    ])
+    const created = await db.app.$requirement.create({
+      ...scope(),
+      ...content('Files'),
+      createdById: db.userId,
+      imageFids: ['requirement-image'],
+      attachmentFids: ['requirement-attachment'],
+    })
+    expect(created).toMatchObject({
+      kind: 'ok',
+      requirement: {
+        draft: {
+          images: [{ fid: 'requirement-image' }],
+          attachments: [{ fid: 'requirement-attachment' }],
+        },
+      },
+    })
+    if (created.kind !== 'ok') throw new Error(`requirement creation failed: ${created.kind}`)
+
+    const confirmed = await confirm(created.requirement.id, 1)
+    expect(confirmed).toMatchObject({
+      kind: 'ok',
+      requirement: {
+        draft: null,
+        currentRevision: {
+          images: [{ fid: 'requirement-image' }],
+          attachments: [{ fid: 'requirement-attachment' }],
+        },
+      },
+    })
+
+    const replaced = await save(created.requirement.id, 'New draft')
+    expect(replaced).toMatchObject({
+      kind: 'ok',
+      requirement: {
+        draft: { images: [], attachments: [] },
+        currentRevision: {
+          images: [{ fid: 'requirement-image' }],
+          attachments: [{ fid: 'requirement-attachment' }],
+        },
+      },
+    })
+  })
+
+  it('rejects unavailable, non-image and duplicate file references', async () => {
+    const otherApp = await db.prisma.app.create({
+      data: {
+        workspaceId: db.workspaceId,
+        slug: 'requirement-file-other',
+        name: 'Requirement file other',
+        createdById: db.userId,
+      },
+    })
+    await Promise.all([
+      file('pending-image', 'image/png', 'pending'),
+      file('not-an-image', 'text/plain'),
+      file('foreign-image', 'image/png', 'ready', otherApp.id),
+    ])
+    const createWith = (imageFids: readonly string[], attachmentFids: readonly string[] = []) =>
+      db.app.$requirement.create({
+        ...scope(),
+        ...content('Rejected files'),
+        createdById: db.userId,
+        imageFids,
+        attachmentFids,
+      })
+
+    await expect(createWith(['pending-image'])).resolves.toEqual({ kind: 'file_not_ready' })
+    await expect(createWith(['not-an-image'])).resolves.toEqual({ kind: 'invalid_image_file' })
+    await expect(createWith(['foreign-image'])).resolves.toEqual({ kind: 'file_not_found' })
+    await expect(createWith(['not-an-image'], ['not-an-image'])).resolves.toEqual({
+      kind: 'duplicate_file_reference',
+    })
   })
 
   it('allows only one confirmation of the same draft version', async () => {

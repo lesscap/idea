@@ -1,15 +1,17 @@
-import type { Id } from '@idea/shared'
+import type { Attachment, Id } from '@idea/shared'
 import { ChevronLeft } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
 import { uploadAppFile } from '../../lib/file-upload'
-import { Button, Markdown } from '../../ui'
+import { AppMarkdown } from '../../parts/app-markdown'
+import { Button } from '../../ui'
 import type { FileDescriptor } from '../file/api'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
 import { ActivityBlock, Step } from './activity-group'
 import { SentAttachments } from './attachment-view'
 import { Composer } from './composer'
 import { ConversationStatus } from './conversation-status'
+import { filesInBubbles } from './transcript'
 import { useConversation } from './use-conversation'
 import { NewConversationWorker, RecoveryWorker } from './worker-picker'
 
@@ -71,9 +73,11 @@ const Said = ({
 
 const Drawn = ({
   item,
+  files,
   onOpenFile,
 }: {
   item: StreamItem
+  files: readonly Attachment[]
   onOpenFile: (file: FileDescriptor) => void
 }) => {
   if (isActivityGroup(item)) return <ActivityBlock group={item} />
@@ -88,7 +92,7 @@ const Drawn = ({
   if (item.kind === 'agent')
     return (
       <div className="max-w-[70ch] text-[15px] leading-relaxed" data-testid="bubble-agent">
-        <Markdown text={item.text} />
+        <AppMarkdown text={item.text} files={files} onOpenFile={onOpenFile} />
       </div>
     )
 
@@ -160,6 +164,7 @@ export const ConversationPanel = ({
   const anchor = useRef<number | null>(null)
 
   const stream = useMemo(() => groupActivity(bubbles, activityLive), [bubbles, activityLive])
+  const files = useMemo(() => filesInBubbles(bubbles), [bubbles])
   const lastStreamItem = stream.at(-1)
   const statusPhase =
     phase === 'working' &&
@@ -268,7 +273,7 @@ export const ConversationPanel = ({
               </div>
             )}
             {stream.map(item => (
-              <Drawn key={item.key} item={item} onOpenFile={onOpenFile} />
+              <Drawn key={item.key} item={item} files={files} onOpenFile={onOpenFile} />
             ))}
             <ConversationStatus
               connection={connection}

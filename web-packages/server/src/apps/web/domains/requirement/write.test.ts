@@ -29,6 +29,8 @@ const detail: RequirementDetail = {
     title: '审批规则',
     summary: '',
     body: '',
+    images: [],
+    attachments: [],
     version: 1,
     updatedAt: '2026-08-07T00:00:00.000Z',
     updatedInConversationCid: null,
@@ -69,6 +71,8 @@ describe('requirement writes', () => {
       title: '审批规则',
       summary: '',
       body: '',
+      imageFids: [],
+      attachmentFids: [],
     })
   })
 
@@ -93,6 +97,8 @@ describe('requirement writes', () => {
       title: '新版',
       summary: '摘要',
       body: '正文',
+      imageFids: [],
+      attachmentFids: [],
     })
   })
 
@@ -126,5 +132,33 @@ describe('requirement writes', () => {
 
     expect(response.status).toBe(400)
     expect(create).not.toHaveBeenCalled()
+  })
+
+  it('rejects duplicate file references before calling the service', async () => {
+    const create = vi.fn<RequirementService['create']>()
+    const app = mount({ create })
+
+    const response = await app.request(
+      '/5/requirements',
+      json({ title: '附件', imageFids: ['same'], attachmentFids: ['same'] }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('exposes invalid image files as a stable bad-request code', async () => {
+    const create = vi.fn<RequirementService['create']>(async () => ({
+      kind: 'invalid_image_file',
+    }))
+    const app = mount({ create })
+
+    const response = await app.request(
+      '/5/requirements',
+      json({ title: '图片', imageFids: ['text-file'] }),
+    )
+
+    expect(response.status).toBe(400)
+    expect((await failure(response)).code).toBe('invalid_requirement_image')
   })
 })

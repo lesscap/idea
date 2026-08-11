@@ -18,16 +18,20 @@ export type RequirementListQuery = PageQuery & {
 }
 
 export type CreateRequirementInput = RequirementScope &
-  RequirementContent & {
+  Omit<RequirementContent, 'images' | 'attachments'> & {
     readonly createdById: Id
     readonly conversationCid?: string
+    readonly imageFids?: readonly string[]
+    readonly attachmentFids?: readonly string[]
   }
 
 export type SaveRequirementDraftInput = RequirementScope &
-  RequirementContent & {
+  Omit<RequirementContent, 'images' | 'attachments'> & {
     readonly requirementId: Id
     readonly updatedById: Id
     readonly conversationCid?: string
+    readonly imageFids?: readonly string[]
+    readonly attachmentFids?: readonly string[]
   }
 
 export type ConfirmRequirementInput = RequirementScope & {
@@ -43,6 +47,10 @@ export type RequirementWriteFailure =
   | { readonly kind: 'archived' }
   | { readonly kind: 'draft_missing' }
   | { readonly kind: 'draft_version_conflict' }
+  | { readonly kind: 'file_not_found' }
+  | { readonly kind: 'file_not_ready' }
+  | { readonly kind: 'invalid_image_file' }
+  | { readonly kind: 'duplicate_file_reference' }
 
 export type RequirementWriteResult =
   | { readonly kind: 'ok'; readonly requirement: RequirementDetail }

@@ -119,6 +119,13 @@ export const toBubbles = (events: readonly WireStored[]): Bubble[] => {
   return [...byKey.values()]
 }
 
+export const filesInBubbles = (bubbles: readonly Bubble[]): readonly Attachment[] => {
+  const files = bubbles.flatMap(bubble =>
+    bubble.kind === 'them' ? (bubble.attachments ?? []) : [],
+  )
+  return [...new Map(files.map(file => [file.fid, file])).values()]
+}
+
 // Which events open and close a turn, mirroring isAgentWorking in @idea/shared —
 // but over the wire projection, which is all the browser has. Deliberately not
 // read off a status column: the transcript already says, and a second source
