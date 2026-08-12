@@ -238,6 +238,9 @@ model Conversation {
   // The provider's own session handle, used to resume rather than replay. Null
   // until the first turn has run.
   providerSessionId String?
+  // Conversation-wide runtime overrides. Null means use the provider default.
+  model             String?
+  effort            String?
   title             String?
   // Set once a person names it, which stops the automatic title from
   // overwriting a deliberate choice.

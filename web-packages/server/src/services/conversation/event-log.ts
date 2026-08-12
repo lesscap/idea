@@ -1,7 +1,7 @@
 import type { Prisma } from '@idea/core'
 import type { ConversationEvent, ConversationEventType, Id, StoredEvent } from '@idea/shared'
 import type { Service, ServiceApplication } from '../../types.ts'
-import type { AppendHook, ConversationService } from './types.ts'
+import type { AppendHook, ConversationService, EventFactory } from './types.ts'
 
 // The transcript, and the only account of what happened. Appends lock the
 // conversation row before assigning max(sequence)+1, serialising one transcript
@@ -40,7 +40,7 @@ export const writeEvent = async (
 const storeNextEvent = async (
   tx: Prisma.TransactionClient,
   conversationId: Id,
-  event: ConversationEvent,
+  eventInput: ConversationEvent | EventFactory,
   after?: AppendHook,
 ): Promise<StoredEvent> => {
   // UPDATE takes the row lock through Prisma's schema-aware query and also
@@ -49,6 +49,7 @@ const storeNextEvent = async (
     where: { id: conversationId },
     data: { lastActiveAt: new Date() },
   })
+  const event = typeof eventInput === 'function' ? await eventInput(tx) : eventInput
   const last = await tx.conversationEvent.findFirst({
     where: { conversationId },
     orderBy: { sequence: 'desc' },
@@ -63,7 +64,7 @@ const storeNextEvent = async (
 const appendOnce = async (
   app: ServiceApplication,
   conversationId: Id,
-  event: ConversationEvent,
+  event: ConversationEvent | EventFactory,
   after?: AppendHook,
 ): Promise<StoredEvent> => {
   const stored = await app.$prisma.$transaction(tx =>

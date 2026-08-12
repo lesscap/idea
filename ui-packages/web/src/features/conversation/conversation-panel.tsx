@@ -140,6 +140,9 @@ export const ConversationPanel = ({
     phase,
     working,
     activityLive,
+    stopping,
+    stopFailed,
+    stop,
     assignment,
     workers,
     workersStatus,
@@ -149,6 +152,8 @@ export const ConversationPanel = ({
     assignWorker,
     assigningWorker,
     workerAssignmentFailed,
+    modelConfiguration,
+    configureModel,
     connection,
     retryConnection,
     hasOlder,
@@ -302,8 +307,14 @@ export const ConversationPanel = ({
             onUpload={file => uploadAppFile(appId, file)}
             onOpenFile={onOpenFile}
             onWithdraw={withdraw}
+            running={activityLive}
+            stopping={stopping}
+            stopFailed={stopFailed}
+            onStop={stop}
             exclusiveSubmit={conversationId === 'new'}
             disabled={composerDisabled}
+            modelConfiguration={modelConfiguration}
+            onConfigureModel={configureModel}
           />
         </>
       )}

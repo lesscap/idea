@@ -17,6 +17,8 @@ const view = (row: {
   providerId: number
   workerId: number | null
   providerSessionId: string | null
+  model: string | null
+  effort: string | null
   title: string | null
   lastActiveAt: Date
 }): Conversation => ({
@@ -26,6 +28,8 @@ const view = (row: {
   providerId: row.providerId,
   workerId: row.workerId,
   providerSessionId: row.providerSessionId,
+  model: row.model,
+  effort: row.effort as Conversation['effort'],
   title: row.title,
   lastActiveAt: row.lastActiveAt.toISOString(),
 })
@@ -37,13 +41,22 @@ const SELECT = {
   providerId: true,
   workerId: true,
   providerSessionId: true,
+  model: true,
+  effort: true,
   title: true,
   lastActiveAt: true,
 } as const
 
 type ConversationRecords = Pick<
   ConversationService,
-  'start' | 'rememberSession' | 'assignWorker' | 'nameIfUnnamed' | 'listForApp' | 'getByCid' | 'get'
+  | 'start'
+  | 'rememberSession'
+  | 'configureModel'
+  | 'assignWorker'
+  | 'nameIfUnnamed'
+  | 'listForApp'
+  | 'getByCid'
+  | 'get'
 >
 
 export const createConversationRecords: Service<ConversationRecords> = app => ({
@@ -54,16 +67,28 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
   //
   // Nothing is published: the id has not left this function yet, so there is no
   // subscriber to tell.
-  start: async ({ appId, createdById, providerId, workerId, text, attachments }) => {
+  start: async ({
+    appId,
+    createdById,
+    providerId,
+    workerId,
+    defaultModel,
+    text,
+    attachments,
+    model,
+    effort,
+  }) => {
     const event: ConversationEvent = {
       type: 'user_message',
       text,
       ...(attachments?.length ? { attachments } : {}),
+      model: model ?? defaultModel,
+      ...(effort ? { effort } : {}),
     }
     return app.$prisma.$transaction(async tx => {
       const conversation = view(
         await tx.conversation.create({
-          data: { cid: nanoid(12), appId, createdById, providerId, workerId },
+          data: { cid: nanoid(12), appId, createdById, providerId, workerId, model, effort },
           select: SELECT,
         }),
       )
@@ -81,6 +106,20 @@ export const createConversationRecords: Service<ConversationRecords> = app => ({
       data: { providerSessionId },
     })
   },
+
+  configureModel: (conversationId, input) =>
+    app.$conversation.appendEvent(
+      conversationId,
+      {
+        type: 'system',
+        action: 'model',
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.effort ? { effort: input.effort } : {}),
+      },
+      async tx => {
+        await tx.conversation.update({ where: { id: conversationId }, data: input })
+      },
+    ),
 
   assignWorker: async (conversationId, workerId) => {
     const assigned = await app.$prisma.conversation.updateMany({

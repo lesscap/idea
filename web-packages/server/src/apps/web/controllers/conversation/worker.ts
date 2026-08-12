@@ -27,6 +27,7 @@ export const registerWorkerAssignment: Controller = app => {
       const assigned = await app.$conversation.assignWorker(conversation.id, worker.id)
       if (!assigned)
         return failWith(c, 409, 'conversation_running', 'conversation is currently running')
+      await app.$conversation.configureModel(conversation.id, { model: null, effort: null })
     }
 
     app.$commands.publish(worker.id, { type: 'work_available' })

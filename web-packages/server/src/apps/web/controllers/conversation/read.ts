@@ -76,8 +76,11 @@ export const registerRead: Controller = app => {
       createdById: session(c).userId,
       providerId: worker.providerId,
       workerId: worker.id,
+      defaultModel: worker.defaultModel,
       text: input.text,
       attachments: resolved.attachments,
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
     })
     app.$commands.publish(worker.id, { type: 'work_available' })
     const { cid, title, lastActiveAt } = conversation
@@ -95,13 +98,14 @@ export const registerRead: Controller = app => {
     const found = await app.$conversation.getByCid(currentApp.id, c.req.param('cid'))
     if (!found) return notFound(c, 'conversation not found')
 
-    const [events, pending, execution, worker] = await Promise.all([
+    const [events, pending, execution, worker, provider] = await Promise.all([
       app.$conversation.events(found.id, windowFrom(c.req.query())),
       app.$pendingInput.list(found.id),
       app.$turn.execution(found.id),
       found.workerId === null
         ? Promise.resolve(null)
         : app.$worker.getForWorkspace(currentApp.workspaceId, found.workerId),
+      app.$provider.get(found.providerId),
     ])
 
     return sendOk(c, {
@@ -123,6 +127,14 @@ export const registerRead: Controller = app => {
               online: worker.online,
             }
           : null,
+      },
+      modelConfiguration: {
+        kind: provider?.kind ?? null,
+        defaultModel: provider?.config.model ?? null,
+        models: provider?.config.models ?? [],
+        efforts: provider?.config.efforts ?? {},
+        model: found.model,
+        effort: found.effort,
       },
     })
   })

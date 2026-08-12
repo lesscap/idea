@@ -13,6 +13,9 @@ const workers: WorkerOption[] = [
     providerId: 5,
     providerLabel: 'GLM',
     providerKind: 'claude',
+    defaultModel: 'glm-5.2',
+    models: [],
+    efforts: {},
   },
   {
     id: 2,
@@ -21,6 +24,9 @@ const workers: WorkerOption[] = [
     providerId: 6,
     providerLabel: 'DeepSeek',
     providerKind: 'claude',
+    defaultModel: 'deepseek-v4-pro[1m]',
+    models: [],
+    efforts: {},
   },
 ]
 

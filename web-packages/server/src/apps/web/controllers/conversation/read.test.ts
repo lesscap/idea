@@ -4,6 +4,7 @@ import type { AppRecord, AppService } from '../../../../services/app.ts'
 import type { Conversation, ConversationService } from '../../../../services/conversation/index.ts'
 import type { FileService } from '../../../../services/file.ts'
 import type { PendingInputService } from '../../../../services/pending-input.ts'
+import type { ProviderService } from '../../../../services/provider.ts'
 import type { TurnService } from '../../../../services/turn.ts'
 import type { WorkerOption, WorkerService } from '../../../../services/worker.ts'
 import type { WorkspaceService } from '../../../../services/workspace.ts'
@@ -23,6 +24,8 @@ const created: Conversation = {
   providerId: 3,
   workerId: 7,
   providerSessionId: null,
+  model: null,
+  effort: null,
   title: null,
   lastActiveAt: '2026-07-28T00:00:00.000Z',
 }
@@ -37,6 +40,9 @@ const worker: WorkerOption = {
   online: true,
   providerLabel: 'GLM',
   providerKind: 'claude',
+  defaultModel: 'glm-5.2',
+  models: [],
+  efforts: { 'glm-5.2': ['low'] },
 }
 
 const currentApp: AppRecord = {
@@ -51,12 +57,22 @@ const currentApp: AppRecord = {
   updatedAt: '2026-07-28T00:00:00.000Z',
 }
 
+const provider = {
+  id: 3,
+  name: 'glm',
+  label: 'GLM',
+  kind: 'claude',
+  enabled: true,
+  config: { model: 'glm-5.2', efforts: { 'glm-5.2': ['low'] } },
+} as const
+
 const mount = (
   conversation: Partial<ConversationService>,
   file: Partial<FileService> = {
     resolveAttachments: async () => ({ kind: 'ok', attachments: [] }),
   },
   pendingInput: Partial<PendingInputService> = { list: async () => [] },
+  turn: Partial<TurnService> = { execution: async () => ({ state: 'idle' }) },
 ) => {
   const publish = vi.fn()
   const getByIdInWorkspace = vi.fn(async () => currentApp)
@@ -69,7 +85,8 @@ const mount = (
         $conversation: stub<ConversationService>(conversation),
         $file: stub<FileService>(file),
         $pendingInput: stub<PendingInputService>(pendingInput),
-        $turn: stub<TurnService>({ execution: async () => ({ state: 'idle' }) }),
+        $provider: stub<ProviderService>({ get: async () => provider }),
+        $turn: stub<TurnService>(turn),
         $worker: stub<WorkerService>({ getForWorkspace: async () => worker }),
         $commands: stub<CommandBus>({ publish }),
       },
@@ -102,6 +119,7 @@ describe('starting a conversation', () => {
       createdById: 7,
       providerId: worker.providerId,
       workerId: worker.id,
+      defaultModel: worker.defaultModel,
       text: '第一条消息',
       attachments: [],
     })
@@ -131,6 +149,7 @@ describe('starting a conversation', () => {
       createdById: 7,
       providerId: worker.providerId,
       workerId: worker.id,
+      defaultModel: worker.defaultModel,
       text: '',
       attachments: [attachment],
     })
@@ -177,6 +196,24 @@ describe('sending an attachment', () => {
     expect(response.status).toBe(200)
     expect(resolveAttachments).toHaveBeenCalledWith(created.appId, [attachment.fid])
     expect(enqueue).toHaveBeenCalledWith(created.id, { text: '', attachments: [attachment] })
+  })
+})
+
+describe('stopping a running turn', () => {
+  it('marks the turn and sends the abort command to its worker', async () => {
+    const requestAbort = vi.fn().mockResolvedValue(91)
+    const { app, publish } = mount({ getByCid: async () => created }, undefined, undefined, {
+      requestAbort,
+    })
+
+    const response = await app.request('/5/conversations/abc123def456/abort', {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(200)
+    expect(await okData(response)).toEqual({ requested: true })
+    expect(requestAbort).toHaveBeenCalledWith(created.id)
+    expect(publish).toHaveBeenCalledWith(created.workerId, { type: 'abort', turnId: 91 })
   })
 })
 
@@ -253,6 +290,7 @@ describe('conversation app scoping', () => {
           execution: async () => ({ state: 'queued' }),
         }),
         $worker: stub<WorkerService>({ getForWorkspace: async () => worker }),
+        $provider: stub<ProviderService>({ get: async () => provider }),
       },
       { userId: 7, workspaceId: 11 },
       { guarded: true, prefix: '/:appId/conversations' },
@@ -267,6 +305,14 @@ describe('conversation app scoping', () => {
       assignment: {
         providerId: created.providerId,
         worker: { id: 7, name: 'mac-mini', hostname: 'mini.local', online: true },
+      },
+      modelConfiguration: {
+        kind: 'claude',
+        defaultModel: 'glm-5.2',
+        models: [],
+        efforts: { 'glm-5.2': ['low'] },
+        model: null,
+        effort: null,
       },
     })
   })

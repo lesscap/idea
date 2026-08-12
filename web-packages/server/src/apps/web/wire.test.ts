@@ -30,7 +30,7 @@ const SAMPLES: Record<ConversationEventType, ConversationEvent> = {
   'turn.failed': { type: 'turn.failed', error: { message: 'boom' }, raw: SECRET },
   'turn.aborted': { type: 'turn.aborted', reason: 'interrupted', raw: SECRET },
   'turn.heartbeat': { type: 'turn.heartbeat', raw: SECRET },
-  system: { type: 'system', action: 'provider_retry', raw: SECRET },
+  system: { type: 'system', action: 'model', model: 'gpt-5.6-sol', effort: 'high', raw: SECRET },
   error: { type: 'error', message: 'nope', raw: SECRET },
   raw: { type: 'raw', raw: SECRET },
 }
@@ -59,5 +59,14 @@ describe('the wire boundary', () => {
   // beats dropping it silently or showing the user an error that is really ours.
   it('reports an unmapped event as a system note', () => {
     expect(toWireEvent(SAMPLES.raw)).toEqual({ type: 'system', action: 'unmapped_provider_event' })
+  })
+
+  it('keeps model configuration system events', () => {
+    expect(toWireEvent(SAMPLES.system)).toEqual({
+      type: 'system',
+      action: 'model',
+      model: 'gpt-5.6-sol',
+      effort: 'high',
+    })
   })
 })

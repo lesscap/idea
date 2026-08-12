@@ -1,4 +1,4 @@
-import type { Id } from '@idea/shared'
+import type { AgentEffort, Id } from '@idea/shared'
 import type { Service } from '../types.ts'
 
 // Which agent backends exist, and how to reach them.
@@ -16,9 +16,11 @@ import type { Service } from '../types.ts'
 // involves handling one.
 
 export type ProviderConfig = {
-  readonly baseUrl: string
   readonly model: string
-  readonly tokenEnv: string
+  readonly models?: readonly string[]
+  readonly efforts?: Readonly<Record<string, readonly AgentEffort[]>>
+  readonly baseUrl?: string
+  readonly tokenEnv?: string
 }
 
 export type Provider = {

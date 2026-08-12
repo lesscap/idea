@@ -1,6 +1,7 @@
 import type { StoredEvent } from '@idea/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { asContext, userPrompt } from '../agent/context.ts'
+import { claudeEffort } from '../agent/env.ts'
 import { runClaude } from './session.ts'
 
 const query = vi.hoisted(() => vi.fn())
@@ -20,6 +21,12 @@ const stored = (sequence: number, event: StoredEvent['event']): StoredEvent => (
 })
 
 describe('Claude conversation context', () => {
+  it('rejects minimal effort instead of silently promoting it to low', () => {
+    expect(() => claudeEffort('minimal')).toThrow('claude does not support minimal effort')
+    expect(claudeEffort('low')).toBe('low')
+    expect(claudeEffort(null)).toBeUndefined()
+  })
+
   it('includes historical attachment paths and the current message once', () => {
     const previous = stored(0, {
       type: 'user_message',
@@ -56,11 +63,15 @@ describe('Claude conversation context', () => {
       prompt: 'hello',
       worktree: '/tmp/worktree',
       sessions: '/tmp/sessions',
+      codexHome: '/tmp/codex',
       provider: {
         baseUrl: 'https://provider.example',
         model: 'model-1',
         tokenEnv: 'IDEA_PROVIDER_GLM_TOKEN',
       },
+      model: 'model-1',
+      effort: null,
+      images: [],
       resume: null,
       scope: 't1',
       signal: new AbortController().signal,

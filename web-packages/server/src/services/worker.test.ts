@@ -1,5 +1,5 @@
 import { sha256 } from '@idea/core'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createCommandBus } from '../command-bus.ts'
 import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 import { createWorkerService } from './worker.ts'
@@ -49,5 +49,44 @@ describe.skipIf(!databaseUrl)('worker registration', () => {
     expect(
       (await db.prisma.worker.findUniqueOrThrow({ where: { id: created.worker.id } })).providerId,
     ).toBe(created.worker.providerId)
+  })
+
+  it('exposes the model-specific effort configuration of an online worker', async () => {
+    const provider = await db.prisma.provider.create({
+      data: {
+        name: 'worker-efforts',
+        label: 'Worker Efforts',
+        kind: 'codex',
+        config: {
+          model: 'model-a',
+          models: ['model-a', 'model-b'],
+          efforts: { 'model-a': ['low', 'high'], 'model-b': ['minimal'] },
+        },
+      },
+    })
+    const worker = await db.prisma.worker.create({
+      data: {
+        workspaceId: db.workspaceId,
+        providerId: provider.id,
+        machineId: 'machine-efforts',
+        name: 'machine-efforts',
+        hostname: 'test.local',
+        apiToken: sha256('worker-efforts-token'),
+      },
+    })
+    const disconnect = db.app.$commands.subscribe(worker.id, vi.fn())
+
+    try {
+      const option = (await db.app.$worker.listOnline(db.workspaceId)).find(
+        candidate => candidate.id === worker.id,
+      )
+      expect(option).toMatchObject({
+        defaultModel: 'model-a',
+        models: ['model-a', 'model-b'],
+        efforts: { 'model-a': ['low', 'high'], 'model-b': ['minimal'] },
+      })
+    } finally {
+      disconnect()
+    }
   })
 })

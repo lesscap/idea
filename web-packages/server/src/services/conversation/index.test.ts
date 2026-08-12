@@ -41,6 +41,7 @@ describe.skipIf(!databaseUrl)('conversation persistence', () => {
       appId: db.appId,
       createdById: db.userId,
       ...target,
+      defaultModel: 'test-model',
       text,
     })
 
@@ -112,7 +113,13 @@ describe.skipIf(!databaseUrl)('naming a conversation', () => {
   afterAll(async () => db?.close())
 
   const start = (text: string) =>
-    db.app.$conversation.start({ appId: db.appId, createdById: db.userId, ...target, text })
+    db.app.$conversation.start({
+      appId: db.appId,
+      createdById: db.userId,
+      ...target,
+      defaultModel: 'test-model',
+      text,
+    })
 
   it('names one that has none', async () => {
     const conversation = await start('我想做一个报销审批系统')

@@ -413,29 +413,35 @@ behind NAT on any machine.
 
 ```
 IDEA_ENROLMENT_TOKEN   which workspace this worker may serve
-IDEA_PROVIDER          which backend it runs, by registry name (glm, deepseek)
+IDEA_PROVIDER          which backend it runs, by registry name (glm, deepseek, codex)
 IDEA_WORKER_HOME       where repos, worktrees and agent sessions live
 WORKER_SLOTS           how many turns may run at once (default 4)
 ```
 
-Which backend to use is nobody's decision in advance: a conversation is stamped
-with whichever worker claims its first turn and stays on that one, because resume
-and the event vocabulary both depend on not switching mid-way.
+The worker selected for the first message fixes the conversation's Provider.
+Workers may move within that Provider; the native thread stays the same and the
+model/effort may change between turns from Composer or `/model <model> [effort]`.
+Provider `models` are suggestions only, so a newly available model may be typed
+before the registry is updated; the SDK reports unsupported combinations on the
+next turn.
+
+Codex uses its normal local login under
+`$IDEA_WORKER_HOME/apps/_scratch/codex`. Authenticate that persistent worker
+home before starting a Codex worker:
+
+```
+pnpm --filter @idea/worker codex:login
+```
 
 Nothing is kept alive between turns. A conversation resumes from the transcript
 on the server, the branch in its repository, and the agent's own session beside
 the worktree — so idle conversations cost no processes, and concurrency is a slot
 count rather than a process count.
 
-**The agent has no tools.** `tools: []` in the SDK options, verified by there
-being no tool call anywhere in a transcript. This is the line that lets a worker
-run on a personal machine at all, and it moves only when the worker runs in a
-container: opening up the filesystem and the shell is exactly what makes that
-container necessary.
-
-> Note that `allowedTools: []` does NOT do this. It is the auto-approve list, so
-> an empty one leaves every tool available and merely unapproved — the agent will
-> still reach for Bash. `tools: []` is the option that disables them.
+The worker is the execution boundary. Claude Code runs with its native tool
+surface and Codex runs with `workspace-write` plus `approvalPolicy: never`, so a
+worker should be deployed only in the workspace-scoped container or machine it
+is intended to modify.
 
 Per-workspace also gives the container a job to do beyond isolation: a
 workspace's skills, repositories and sessions all live in one volume, so loading

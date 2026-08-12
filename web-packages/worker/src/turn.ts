@@ -1,6 +1,7 @@
+import { join } from 'node:path'
 import { asContext, userPrompt } from './agent/context.ts'
 import { type AgentAdapter, agentFor, type ProviderConfig } from './agent/index.ts'
-import { materializeAttachments } from './attachments.ts'
+import { attachmentPath, materializeAttachments } from './attachments.ts'
 import { extractSeed } from './claude/title.ts'
 import type { ClaimedTurn, Conversation, Provider, WorkerClient } from './client.ts'
 import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
@@ -11,6 +12,34 @@ import { ensureRepo, ensureWorktree, repoLayout } from './worktree.ts'
 // point is to survive stretches that produce no events — without renewal the
 // reaper takes the turn and runs it a second time.
 const HEARTBEAT_MS = 20_000
+
+const startLeaseRenewal = (
+  renew: () => Promise<void>,
+  failed: (error: unknown) => void,
+): (() => Promise<void>) => {
+  let stopped = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let running: Promise<void> | null = null
+
+  const schedule = () => {
+    timer = setTimeout(() => {
+      if (stopped) return
+      running = renew()
+        .catch(failed)
+        .finally(() => {
+          running = null
+          if (!stopped) schedule()
+        })
+    }, HEARTBEAT_MS)
+  }
+  schedule()
+
+  return async () => {
+    stopped = true
+    clearTimeout(timer)
+    await running
+  }
+}
 
 // Conversations belong directly to a workspace. Their future associations with
 // apps and requirements are not single-valued, so until those have their own
@@ -23,18 +52,25 @@ export const runTurn = async (
   claimed: ClaimedTurn,
   conversation: Conversation,
   provider: Provider,
+  controller: AbortController,
   log: (message: string) => void,
 ): Promise<void> => {
-  const controller = new AbortController()
   const agent = agentFor(provider.kind)
-  // Runs for the whole turn, including the stretches that emit nothing.
-  // Cleared in `finally` so a failure cannot leave a timer holding a lease on a
-  // turn nobody is running.
-  const renewing = setInterval(() => {
-    void client.heartbeat(claimed.id).catch(() => {})
-  }, HEARTBEAT_MS)
+  const heartbeat = async () => {
+    const state = await client.heartbeat(claimed.id)
+    if (state.abortRequested) controller.abort()
+  }
+  let stopRenewal: () => Promise<void> = async () => undefined
 
   try {
+    await heartbeat()
+    controller.signal.throwIfAborted()
+    // Schedule only after the first renewal completes, and only after each
+    // subsequent request settles. Slow network calls therefore cannot overlap
+    // and accumulate while the agent is quiet.
+    stopRenewal = startLeaseRenewal(heartbeat, error =>
+      log(`turn ${claimed.id} heartbeat failed: ${String(error)}`),
+    )
     await client.emit(claimed.id, {
       type: 'turn.started',
       sourceSequence: claimed.userEventSequence,
@@ -42,7 +78,7 @@ export const runTurn = async (
 
     ensureRepo(root, WORKSPACE_REPO, null)
     const worktree = ensureWorktree(root, WORKSPACE_REPO, conversation.id)
-    const { sessions } = repoLayout(root, WORKSPACE_REPO)
+    const { sessions, codex } = repoLayout(root, WORKSPACE_REPO)
 
     const events = await client.events(claimed.id)
     const said = events.find(
@@ -50,27 +86,46 @@ export const runTurn = async (
     )
     if (said?.event.type !== 'user_message') throw new Error('turn user message not found')
     await materializeAttachments(client, worktree, events)
+    const current =
+      provider.kind === 'codex'
+        ? {
+            ...said.event,
+            attachments: said.event.attachments?.filter(
+              attachment => !attachment.contentType.startsWith('image/'),
+            ),
+          }
+        : said.event
 
     // Resuming keeps the agent's own memory of the conversation. When there is
     // nothing local to resume — another machine ran the earlier turns, or the
     // directory was cleared — a fresh session with the transcript as context
     // keeps the conversation unbroken for the person, which is what matters.
-    const resume = agent.canResume(sessions, conversation.providerSessionId)
+    const stateHome = provider.kind === 'codex' ? codex : sessions
+    const resume = agent.canResume(stateHome, conversation.providerSessionId)
       ? conversation.providerSessionId
       : null
     const prompt = resume
-      ? userPrompt(said.event)
+      ? userPrompt(current)
       : asContext(
           events.filter(event => event.sequence < claimed.userEventSequence),
-          said.event,
+          current,
         )
     log(`turn ${claimed.id} in ${worktree} (${resume ? 'resuming' : 'new session'})`)
+    const model = said.event.model ?? provider.config.model
+    const effort = said.event.effort ?? null
+    const images = (said.event.attachments ?? [])
+      .filter(attachment => attachment.contentType.startsWith('image/'))
+      .map(attachment => join(worktree, attachmentPath(attachment)))
 
     for await (const event of agent.run({
       prompt,
       worktree,
       sessions,
+      codexHome: codex,
       provider: provider.config,
+      model,
+      effort,
+      images,
       resume,
       scope: `t${claimed.id}`,
       signal: controller.signal,
@@ -81,6 +136,8 @@ export const runTurn = async (
       await client.emit(claimed.id, event)
     }
 
+    await stopRenewal()
+    controller.signal.throwIfAborted()
     await client.finish(claimed.id, 'completed')
 
     // Name it after the opening turn. The transcript read below may also contain
@@ -90,19 +147,45 @@ export const runTurn = async (
       await nameConversation(
         client,
         claimed.id,
-        { agent, provider: provider.config, worktree, sessions },
+        { agent, provider: provider.config, worktree, sessions: stateHome },
         log,
       )
   } catch (error) {
+    if (controller.signal.aborted) {
+      log(`turn ${claimed.id} stopped`)
+      await client
+        .emit(claimed.id, {
+          type: 'turn.aborted',
+          reason: 'interrupted',
+          sourceSequence: claimed.userEventSequence,
+        })
+        .catch(closeError =>
+          log(`turn ${claimed.id} could not record abort: ${String(closeError)}`),
+        )
+      await client
+        .finish(claimed.id, 'aborted')
+        .catch(closeError =>
+          log(`turn ${claimed.id} could not finish abort: ${String(closeError)}`),
+        )
+      return
+    }
+
     const message = error instanceof Error ? error.message : String(error)
     log(`turn ${claimed.id} failed: ${message}`)
     // Recorded before the turn closes, so a failure reads as something that
     // happened rather than as a conversation that simply stopped.
-    await client.emit(claimed.id, { type: 'turn.failed', error: { message } }).catch(() => {})
-    await client.finish(claimed.id, 'failed').catch(() => {})
+    await client
+      .emit(claimed.id, { type: 'turn.failed', error: { message } })
+      .catch(closeError =>
+        log(`turn ${claimed.id} could not record failure: ${String(closeError)}`),
+      )
+    await client
+      .finish(claimed.id, 'failed')
+      .catch(closeError =>
+        log(`turn ${claimed.id} could not finish failure: ${String(closeError)}`),
+      )
   } finally {
-    clearInterval(renewing)
-    controller.abort()
+    await stopRenewal()
   }
 }
 
