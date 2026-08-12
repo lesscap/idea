@@ -17,6 +17,7 @@ const PROVIDERS = [
     config: {
       baseUrl: 'https://open.bigmodel.cn/api/anthropic',
       model: 'glm-5.2',
+      efforts: { 'glm-5.2': [] },
       tokenEnv: 'IDEA_PROVIDER_GLM_TOKEN',
     },
   },
@@ -28,7 +29,23 @@ const PROVIDERS = [
     config: {
       baseUrl: 'https://api.deepseek.com/anthropic',
       model: 'deepseek-v4-pro[1m]',
+      efforts: { 'deepseek-v4-pro[1m]': [] },
       tokenEnv: 'IDEA_PROVIDER_DEEPSEEK_TOKEN',
+    },
+  },
+  {
+    name: 'codex',
+    label: 'Codex',
+    kind: 'codex',
+    sortOrder: 2,
+    config: {
+      model: 'gpt-5.6-sol',
+      models: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'],
+      efforts: {
+        'gpt-5.6-sol': ['minimal', 'low', 'medium', 'high', 'xhigh'],
+        'gpt-5.6-terra': ['minimal', 'low', 'medium', 'high', 'xhigh'],
+        'gpt-5.6-luna': ['minimal', 'low', 'medium', 'high', 'xhigh'],
+      },
     },
   },
 ]
@@ -43,7 +60,7 @@ try {
       update: rest,
       create: { name, ...rest },
     })
-    console.log(`  ${name} → ${provider.config.baseUrl} (${provider.config.model})`)
+    console.log(`  ${name} → ${provider.config.model}`)
   }
 } finally {
   await dispose()

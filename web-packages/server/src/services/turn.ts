@@ -34,7 +34,7 @@ export type TurnService = {
   execution: (conversationId: Id) => Promise<ConversationExecution>
   renewLease: (turnId: Id, workerId: Id) => Promise<boolean>
   finish: (turnId: Id, workerId: Id, outcome: TurnOutcome) => Promise<boolean>
-  requestAbort: (turnId: Id) => Promise<boolean>
+  requestAbort: (conversationId: Id) => Promise<Id | null>
   isAbortRequested: (turnId: Id) => Promise<boolean>
   // Returns how many turns were returned to the queue and how many gave up.
   reap: () => Promise<{ requeued: number; failed: number }>
@@ -159,12 +159,18 @@ export const createTurnService: Service<TurnService> = app => {
     // A request, not an action: only the worker running the turn can actually
     // stop it. It sees this on its next check and ends the turn itself, which
     // keeps the transcript's closing event honest about what happened.
-    requestAbort: async turnId => {
+    requestAbort: async conversationId => {
+      const running = await app.$prisma.turn.findFirst({
+        where: { conversationId, status: 'running' },
+        select: { id: true },
+      })
+      if (!running) return null
+
       const marked = await app.$prisma.turn.updateMany({
-        where: { id: turnId, status: { in: ['queued', 'running'] } },
+        where: { id: running.id, status: 'running' },
         data: { abortRequestedAt: new Date() },
       })
-      return marked.count === 1
+      return marked.count === 1 ? running.id : null
     },
 
     isAbortRequested: async turnId => {

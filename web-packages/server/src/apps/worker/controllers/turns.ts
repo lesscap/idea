@@ -50,7 +50,10 @@ export const TurnsController: Controller = app => {
   app.get('/:id/events', zValidator('param', ClaimTurnParams), async c => {
     const worker = currentWorker(c)
     const { id } = c.req.valid('param')
-    const turn = await holds(id, worker.id)
+    // A completed opening turn reads its transcript once more to generate the
+    // conversation title. Reads remain scoped to the currently assigned worker;
+    // only mutation and lease operations require a running turn.
+    const turn = await holds(id, worker.id, false)
     if (!turn) return notFound(c, 'turn not found')
 
     // No window here. The worker builds the agent's context from the transcript,
@@ -80,8 +83,11 @@ export const TurnsController: Controller = app => {
     // tool call would otherwise fill the log with them. Without the renewal the
     // reaper would take the turn away mid-work and run it a second time.
     if (parsed.data.type === 'turn.heartbeat') {
-      const renewed = await app.$turn.renewLease(id, worker.id)
-      return sendOk(c, { renewed })
+      const [renewed, abortRequested] = await Promise.all([
+        app.$turn.renewLease(id, worker.id),
+        app.$turn.isAbortRequested(id),
+      ])
+      return sendOk(c, { renewed, abortRequested })
     }
 
     const event = parsed.data as ConversationEvent

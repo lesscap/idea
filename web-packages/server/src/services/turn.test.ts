@@ -32,7 +32,7 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     db.prisma.provider.upsert({
       where: { name },
       update: {},
-      create: { name, label: name, kind: 'claude', config: {} },
+      create: { name, label: name, kind: 'claude', config: { model: name } },
       select: { id: true },
     })
 
@@ -171,6 +171,23 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
     })
   })
 
+  describe('requesting an abort', () => {
+    it('marks only the running turn for the conversation', async () => {
+      const c = await conversation()
+      const queued = await db.prisma.turn.create({
+        data: { conversationId: c.id, userEventSequence: 0 },
+      })
+
+      expect(await db.app.$turn.requestAbort(c.id)).toBeNull()
+      expect(await db.app.$turn.isAbortRequested(queued.id)).toBe(false)
+
+      const claimed = await db.app.$turn.claimNext(c.worker)
+
+      expect(await db.app.$turn.requestAbort(c.id)).toBe(claimed?.id)
+      expect(await db.app.$turn.isAbortRequested(claimed!.id)).toBe(true)
+    })
+  })
+
   // A worker runs untrusted instructions, so the server does not rely on it
   // staying confined. These are the checks that hold even if it does not.
   describe('what a worker may reach', () => {
@@ -283,6 +300,38 @@ describe.skipIf(!databaseUrl)('turn lifecycle', () => {
   })
 
   describe('materialize', () => {
+    it('stamps the latest conversation model settings onto the materialized turn', async () => {
+      const c = await conversation()
+      await db.app.$conversation.configureModel(c.id, {
+        model: 'future-model',
+        effort: 'high',
+      })
+      await db.app.$pendingInput.enqueue(c.id, { text: 'use the new model' })
+
+      const stored = await db.app.$pendingInput.materialize(c.id)
+
+      expect(stored?.event).toMatchObject({
+        type: 'user_message',
+        text: 'use the new model',
+        model: 'future-model',
+        effort: 'high',
+      })
+    })
+
+    it('stamps the provider default when the conversation has no override', async () => {
+      const c = await conversation()
+      await db.prisma.provider.update({
+        where: { id: c.worker.providerId },
+        data: { config: { model: 'provider-default' } },
+      })
+      await db.app.$pendingInput.enqueue(c.id, { text: 'use the default' })
+
+      const stored = await db.app.$pendingInput.materialize(c.id)
+
+      expect(stored?.event).toMatchObject({ model: 'provider-default' })
+      expect((await db.app.$conversation.get(c.id))?.model).toBeNull()
+    })
+
     it('merges everything pending into one message and one turn', async () => {
       const c = await conversation()
       const attachment = {

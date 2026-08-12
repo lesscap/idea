@@ -3,6 +3,10 @@ import { attachmentPrompt } from '../attachments.ts'
 
 type UserMessage = Extract<ConversationEvent, { type: 'user_message' }>
 
+export const SYSTEM_PROMPT =
+  'You are helping someone who does not write software describe what they need. ' +
+  'Ask about what is unclear, one thing at a time, in their language.'
+
 export const userPrompt = (message: UserMessage): string => {
   const attachments = message.attachments ?? []
   const files =

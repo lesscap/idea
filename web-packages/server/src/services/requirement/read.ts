@@ -1,5 +1,6 @@
 import type { Prisma } from '@idea/core'
 import type {
+  Attachment,
   RequirementContent,
   RequirementDetail,
   RequirementDraft,
@@ -15,16 +16,22 @@ import {
 } from '../../domains/requirement.ts'
 import { paged, toOffset } from '../../paging.ts'
 import type { Service } from '../../types.ts'
+import { fileSelect, toAttachment } from './files.ts'
 import type { RequirementListQuery, RequirementReads } from './types.ts'
 
 const contentSelect = { title: true, summary: true, body: true } as const
 const listContentSelect = { title: true, summary: true } as const
 const conversationSelect = { select: { cid: true } } as const
+const filesSelect = {
+  select: { role: true, position: true, file: { select: fileSelect } },
+  orderBy: { position: 'asc' as const },
+} as const
 const draftSelect = {
   ...contentSelect,
   version: true,
   updatedAt: true,
   updatedInConversation: conversationSelect,
+  files: filesSelect,
 } as const
 const revisionSelect = {
   id: true,
@@ -32,6 +39,7 @@ const revisionSelect = {
   ...contentSelect,
   confirmedAt: true,
   confirmedInConversation: conversationSelect,
+  files: filesSelect,
 } as const
 const revisionSummarySelect = {
   id: true,
@@ -64,10 +72,22 @@ type RevisionSummaryRow = Prisma.RequirementRevisionGetPayload<{
   select: typeof revisionSummarySelect
 }>
 
-const toContent = (row: RequirementContent): RequirementContent => ({
+type ContentRow = Pick<RequirementContent, 'title' | 'summary' | 'body'> & {
+  readonly files: readonly {
+    readonly role: 'image' | 'attachment'
+    readonly file: Attachment
+  }[]
+}
+
+const filesByRole = (row: ContentRow, role: 'image' | 'attachment'): readonly Attachment[] =>
+  row.files.filter(item => item.role === role).map(item => toAttachment(item.file))
+
+const toContent = (row: ContentRow): RequirementContent => ({
   title: row.title,
   summary: row.summary,
   body: row.body,
+  images: filesByRole(row, 'image'),
+  attachments: filesByRole(row, 'attachment'),
 })
 
 const toDraft = (row: NonNullable<DetailRow['draft']>): RequirementDraft => ({

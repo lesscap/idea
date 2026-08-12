@@ -94,3 +94,12 @@ describe('diagrams', () => {
     expect(document.querySelectorAll('[id^=dmermaid-]')).toHaveLength(0)
   })
 })
+
+describe('code highlighting', () => {
+  it('highlights a labelled code fence', () => {
+    const { container } = render(<Markdown text={'```typescript\nconst answer = 42\n```'} />)
+
+    expect(container.querySelector('code')).toHaveClass('hljs', 'language-typescript')
+    expect(container.querySelector('.hljs-keyword')).toHaveTextContent('const')
+  })
+})

@@ -1,5 +1,13 @@
 import type { Prisma } from '@idea/core'
-import type { Attachment, ConversationEvent, Id, Paged, PageQuery, StoredEvent } from '@idea/shared'
+import type {
+  AgentEffort,
+  Attachment,
+  ConversationEvent,
+  Id,
+  Paged,
+  PageQuery,
+  StoredEvent,
+} from '@idea/shared'
 
 export type Conversation = {
   readonly id: Id
@@ -8,6 +16,8 @@ export type Conversation = {
   readonly providerId: Id
   readonly workerId: Id | null
   readonly providerSessionId: string | null
+  readonly model: string | null
+  readonly effort: AgentEffort | null
   readonly title: string | null
   readonly lastActiveAt: string
 }
@@ -16,6 +26,7 @@ export type Conversation = {
 // materialize to create the turn that points at the event it just wrote —
 // event and turn have to land together or not at all.
 export type AppendHook = (tx: Prisma.TransactionClient, sequence: number) => Promise<void>
+export type EventFactory = (tx: Prisma.TransactionClient) => Promise<ConversationEvent>
 
 // How much of a transcript to read.
 //
@@ -35,8 +46,11 @@ export type ConversationService = {
     createdById: Id
     providerId: Id
     workerId: Id
+    defaultModel: string
     text: string
     attachments?: readonly Attachment[]
+    model?: string | null
+    effort?: AgentEffort | null
   }) => Promise<Conversation>
   listForApp: (appId: Id, query: PageQuery) => Promise<Paged<Conversation>>
   getByCid: (appId: Id, cid: string) => Promise<Conversation | null>
@@ -44,12 +58,16 @@ export type ConversationService = {
   events: (conversationId: Id, window?: EventWindow) => Promise<StoredEvent[]>
   appendEvent: (
     conversationId: Id,
-    event: ConversationEvent,
+    event: ConversationEvent | EventFactory,
     after?: AppendHook,
   ) => Promise<StoredEvent>
   // The provider's own handle for this conversation, so a later turn can resume
   // rather than start over.
   rememberSession: (conversationId: Id, providerSessionId: string) => Promise<void>
+  configureModel: (
+    conversationId: Id,
+    input: { model: string | null; effort: AgentEffort | null },
+  ) => Promise<StoredEvent>
   assignWorker: (conversationId: Id, workerId: Id) => Promise<boolean>
   // Names a conversation, but only while it has no name. False means someone got
   // there first — which the caller reports rather than retries.

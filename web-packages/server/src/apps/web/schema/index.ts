@@ -101,9 +101,18 @@ const ConversationMessageBody = z
   })
 
 export const StartConversationBody = ConversationMessageBody.and(
-  z.object({ workerId: z.number().int().positive() }),
+  z.object({
+    workerId: z.number().int().positive(),
+    model: z.string().trim().min(1).max(128).nullable().optional(),
+    effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']).nullable().optional(),
+  }),
 )
 export const SendMessageBody = ConversationMessageBody
+
+export const ConfigureConversationModelBody = z.object({
+  model: z.string().trim().min(1).max(128).nullable(),
+  effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']).nullable(),
+})
 
 export const AssignConversationWorkerBody = z.object({
   workerId: z.number().int().positive(),

@@ -53,11 +53,23 @@ const WORKER = {
   providerId: 3,
   providerLabel: 'GLM',
   providerKind: 'claude',
+  defaultModel: 'glm-5.2',
+  models: ['glm-5.2'],
+  efforts: { 'glm-5.2': [] },
 }
 
 const ASSIGNMENT = {
   providerId: 3,
   worker: { id: 7, name: 'mac-mini', hostname: 'mini.local', online: true },
+}
+
+const MODEL_CONFIGURATION = {
+  kind: 'claude',
+  defaultModel: 'glm-5.2',
+  models: ['glm-5.2'],
+  efforts: { 'glm-5.2': [] },
+  model: null,
+  effort: null,
 }
 
 beforeEach(() => {
@@ -78,6 +90,7 @@ describe('a draft conversation', () => {
     const { result } = renderHook(() => useConversation(5, 'new', created))
 
     await waitFor(() => expect(result.current.selectedWorkerId).toBe(7))
+    expect(result.current.modelConfiguration.efforts).toEqual({ 'glm-5.2': [] })
     await act(() => result.current.send('第一条消息', ['file123']))
 
     expect(post).toHaveBeenCalledWith('/apps/5/conversations', {
@@ -90,6 +103,85 @@ describe('a draft conversation', () => {
 })
 
 describe('a persisted conversation', () => {
+  it('requests a stop and clears the stopping state when the turn aborts', async () => {
+    vi.stubGlobal('EventSource', TestEventSource)
+    vi.mocked(get)
+      .mockResolvedValueOnce({ items: [WORKER] })
+      .mockResolvedValueOnce({
+        items: [],
+        pending: [],
+        execution: { state: 'running' },
+        assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
+      })
+    vi.mocked(post).mockResolvedValue({ requested: true })
+
+    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+
+    await waitFor(() => expect(result.current.activityLive).toBe(true))
+    await act(() => result.current.stop())
+
+    expect(post).toHaveBeenCalledWith('/apps/5/conversations/conversation-1/abort')
+    expect(result.current.stopping).toBe(true)
+
+    act(() =>
+      TestEventSource.instances[0]?.emit({
+        id: 9,
+        sequence: 9,
+        createdAt: '2026-07-29T00:00:00.000Z',
+        event: { type: 'turn.aborted', reason: 'interrupted' },
+      }),
+    )
+
+    expect(result.current.activityLive).toBe(false)
+    expect(result.current.stopping).toBe(false)
+  })
+
+  it('clears stopping from authoritative state after the event stream reconnects', async () => {
+    vi.stubGlobal('EventSource', TestEventSource)
+    vi.mocked(get)
+      .mockResolvedValueOnce({ items: [WORKER] })
+      .mockResolvedValueOnce({
+        items: [],
+        pending: [],
+        execution: { state: 'running' },
+        assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        pending: [],
+        execution: { state: 'idle' },
+        assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
+      })
+    vi.mocked(post).mockResolvedValue({ requested: true })
+
+    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+
+    await waitFor(() => expect(result.current.activityLive).toBe(true))
+    act(() => TestEventSource.instances[0]?.open())
+    await act(() => result.current.stop())
+    expect(result.current.stopping).toBe(true)
+
+    act(() => {
+      TestEventSource.instances[0]?.fail()
+      TestEventSource.instances[0]?.open()
+    })
+    await waitFor(() => expect(result.current.stopping).toBe(false))
+
+    act(() =>
+      TestEventSource.instances[0]?.emit({
+        id: 10,
+        sequence: 10,
+        createdAt: '2026-07-29T00:00:00.000Z',
+        event: { type: 'turn.started' },
+      }),
+    )
+    expect(result.current.activityLive).toBe(true)
+    expect(result.current.stopping).toBe(false)
+  })
+
   it('keeps withdrawn and materialized input out of the queue', async () => {
     vi.stubGlobal('EventSource', TestEventSource)
     vi.mocked(get)
@@ -107,6 +199,7 @@ describe('a persisted conversation', () => {
         ],
         execution: { state: 'running' },
         assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
       })
       .mockResolvedValueOnce({
         items: [
@@ -120,12 +213,14 @@ describe('a persisted conversation', () => {
         pending: [],
         execution: { state: 'running' },
         assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
       })
       .mockResolvedValueOnce({
         items: [],
         pending: [],
         execution: { state: 'running' },
         assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
       })
 
     const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
@@ -162,6 +257,7 @@ describe('a persisted conversation', () => {
         pending: [],
         execution: { state: 'queued' },
         assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
       })
 
     const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
@@ -187,6 +283,7 @@ describe('a persisted conversation', () => {
         pending: [],
         execution: { state: 'idle' },
         assignment: ASSIGNMENT,
+        modelConfiguration: MODEL_CONFIGURATION,
       })
 
     const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))

@@ -14,14 +14,29 @@ export const AppWorkersController: Controller = app => {
 
     const workers = await app.$worker.listOnline(currentApp.workspaceId)
     return sendOk(c, {
-      items: workers.map(({ id, name, hostname, providerId, providerLabel, providerKind }) => ({
-        id,
-        name,
-        hostname,
-        providerId,
-        providerLabel,
-        providerKind,
-      })),
+      items: workers.map(
+        ({
+          id,
+          name,
+          hostname,
+          providerId,
+          providerLabel,
+          providerKind,
+          defaultModel,
+          models,
+          efforts,
+        }) => ({
+          id,
+          name,
+          hostname,
+          providerId,
+          providerLabel,
+          providerKind,
+          defaultModel,
+          models,
+          efforts,
+        }),
+      ),
     })
   })
 }

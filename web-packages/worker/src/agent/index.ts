@@ -1,17 +1,24 @@
-import type { ConversationEvent } from '@idea/shared'
+import type { AgentEffort, ConversationEvent } from '@idea/shared'
 import { claudeAdapter } from '../claude/adapter.ts'
+import { codexAdapter } from '../codex/adapter.ts'
 
 export type ProviderConfig = {
-  baseUrl: string
   model: string
-  tokenEnv: string
+  models?: readonly string[]
+  efforts?: Readonly<Record<string, readonly AgentEffort[]>>
+  baseUrl?: string
+  tokenEnv?: string
 }
 
 export type AgentRunOptions = {
   prompt: string
   worktree: string
   sessions: string
+  codexHome: string
   provider: ProviderConfig
+  model: string
+  effort: AgentEffort | null
+  images: readonly string[]
   resume: string | null
   scope: string
   signal: AbortSignal
@@ -37,6 +44,7 @@ export type AgentAdapter = {
 
 const ADAPTERS: Readonly<Record<string, AgentAdapter>> = {
   claude: claudeAdapter,
+  codex: codexAdapter,
 }
 
 export const agentFor = (kind: string): AgentAdapter => {

@@ -1,4 +1,5 @@
 import type { Id } from '../ids.ts'
+import type { Attachment } from './conversation-event.ts'
 
 export type RequirementStatus = 'draft' | 'active' | 'archived'
 
@@ -6,6 +7,8 @@ export type RequirementContent = {
   readonly title: string
   readonly summary: string
   readonly body: string
+  readonly images: readonly Attachment[]
+  readonly attachments: readonly Attachment[]
 }
 
 export type RequirementDraft = RequirementContent & {

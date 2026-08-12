@@ -26,6 +26,20 @@ describe.skipIf(!databaseUrl)('requirement reads', () => {
     return result.requirement
   }
 
+  const file = (fid: string, contentType: string) =>
+    db.prisma.file.create({
+      data: {
+        fid,
+        appId: db.appId,
+        uploadedById: db.userId,
+        filename: fid,
+        contentType,
+        size: 8,
+        storageKey: `requirement-read-tests/${fid}`,
+        status: 'ready',
+      },
+    })
+
   it('returns confirmed content while retaining a newer draft for editing', async () => {
     const requirement = await create('Confirmed title')
 
@@ -100,6 +114,35 @@ describe.skipIf(!databaseUrl)('requirement reads', () => {
     await expect(
       db.app.$requirement.revision(wrongApp, requirement.id, revisionId),
     ).resolves.toBeNull()
+  })
+
+  it('returns ordered file descriptors from a historical revision', async () => {
+    await Promise.all([file('read-image-a', 'image/png'), file('read-image-b', 'image/jpeg')])
+    const created = await db.app.$requirement.create({
+      ...scope(),
+      createdById: db.userId,
+      title: 'Requirement files',
+      summary: '',
+      body: '![B](idea-file:read-image-b)',
+      imageFids: ['read-image-b', 'read-image-a'],
+    })
+    expect(created.kind).toBe('ok')
+    if (created.kind !== 'ok') throw new Error(`requirement creation failed: ${created.kind}`)
+    const confirmed = await db.app.$requirement.confirm({
+      ...scope(),
+      requirementId: created.requirement.id,
+      confirmedById: db.userId,
+      expectedDraftVersion: 1,
+    })
+    expect(confirmed.kind).toBe('ok')
+    if (confirmed.kind !== 'ok')
+      throw new Error(`requirement confirmation failed: ${confirmed.kind}`)
+    const revisionId = confirmed.requirement.currentRevision?.id
+    if (revisionId === undefined) throw new Error('confirmed requirement has no current revision')
+
+    await expect(
+      db.app.$requirement.revision(scope(), created.requirement.id, revisionId),
+    ).resolves.toMatchObject({ images: [{ fid: 'read-image-b' }, { fid: 'read-image-a' }] })
   })
 
   it('uses id to stabilize pagination when update times match', async () => {

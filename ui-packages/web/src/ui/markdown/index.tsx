@@ -1,10 +1,16 @@
 import { type ComponentProps, isValidElement, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, {
+  type Components,
+  defaultUrlTransform,
+  type UrlTransform,
+} from 'react-markdown'
+import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { normalizeMath } from './math'
 import { MermaidDiagram } from './mermaid'
+import styles from './syntax.module.scss'
 
 // Renders what the agent writes.
 //
@@ -50,33 +56,24 @@ const Pre = ({ children, ...props }: ComponentProps<'pre'>) => {
   return <pre {...props}>{children}</pre>
 }
 
-type MarkdownVariant = 'compact' | 'document'
-
-const variantClass: Record<MarkdownVariant, string> = {
-  compact: [
-    'prose-headings:text-[0.95em]',
-    'prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5',
-    'prose-blockquote:my-2 [&_pre]:my-2 [&_.katex-display]:my-2',
-  ].join(' '),
-  document: [
-    'prose-headings:mt-7 prose-headings:mb-3 prose-headings:tracking-[-0.015em]',
-    'prose-p:my-3 prose-p:leading-7 prose-ul:my-3 prose-ol:my-3 prose-li:my-1',
-    'prose-blockquote:my-4 [&_pre]:my-4 [&_.katex-display]:my-4',
-  ].join(' '),
-}
-
 export const Markdown = ({
   text,
-  variant = 'compact',
+  className,
+  components,
+  urlTransform = defaultUrlTransform,
 }: {
   text: string
-  variant?: MarkdownVariant
+  className?: string
+  components?: Components
+  urlTransform?: UrlTransform
 }) => (
   <div
     className={[
       'prose prose-sm max-w-none break-words',
       'prose-headings:font-semibold prose-blockquote:not-italic',
-      variantClass[variant],
+      'prose-headings:text-[0.95em]',
+      'prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5',
+      'prose-blockquote:my-2 [&_pre]:my-2 [&_.katex-display]:my-2',
       // Descendant selectors rather than prose-* variants: typography drives
       // code colours through CSS variables, which the variants lose to.
       //
@@ -94,17 +91,19 @@ export const Markdown = ({
       // A long equation scrolls sideways rather than widening the panel, same
       // rule as the table below.
       '[&_.katex-display]:overflow-x-auto',
-      '[&_.katex-display]:overflow-y-hidden',
+      '[&_.katex-display]:overflow-y-hidden [&_.katex-display]:py-1',
       // A wide table scrolls inside the panel rather than stretching it and
       // making the whole conversation scroll sideways.
       '[&_table]:block [&_table]:w-max [&_table]:max-w-full [&_table]:overflow-x-auto',
+      styles.syntax,
+      className,
     ].join(' ')}
-    data-variant={variant}
     data-testid="markdown"
   >
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
+      rehypePlugins={[rehypeHighlight, rehypeKatex]}
+      urlTransform={urlTransform}
       components={{
         pre: Pre,
         // The transcript is the application; a link should not navigate away
@@ -112,6 +111,7 @@ export const Markdown = ({
         a: ({ node: _node, ...props }) => (
           <a {...props} target="_blank" rel="noopener noreferrer" />
         ),
+        ...components,
       }}
     >
       {normalizeMath(text)}

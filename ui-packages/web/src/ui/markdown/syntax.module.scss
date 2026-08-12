@@ -1,0 +1,50 @@
+.syntax {
+  :global(.hljs-comment),
+  :global(.hljs-quote) {
+    color: color-mix(in oklab, var(--muted-foreground) 82%, transparent);
+    font-style: italic;
+  }
+
+  :global(.hljs-keyword),
+  :global(.hljs-selector-tag),
+  :global(.hljs-literal),
+  :global(.hljs-section),
+  :global(.hljs-link) {
+    color: light-dark(oklch(48% 0.16 292), oklch(76% 0.12 292));
+  }
+
+  :global(.hljs-string),
+  :global(.hljs-title),
+  :global(.hljs-name),
+  :global(.hljs-type),
+  :global(.hljs-attribute),
+  :global(.hljs-symbol),
+  :global(.hljs-bullet),
+  :global(.hljs-addition) {
+    color: light-dark(oklch(43% 0.11 154), oklch(75% 0.12 154));
+  }
+
+  :global(.hljs-number),
+  :global(.hljs-meta),
+  :global(.hljs-built_in),
+  :global(.hljs-builtin-name),
+  :global(.hljs-params) {
+    color: light-dark(oklch(48% 0.13 55), oklch(77% 0.12 72));
+  }
+
+  :global(.hljs-variable),
+  :global(.hljs-template-variable),
+  :global(.hljs-selector-id),
+  :global(.hljs-selector-class),
+  :global(.hljs-deletion) {
+    color: light-dark(oklch(49% 0.18 24), oklch(76% 0.13 24));
+  }
+
+  :global(.hljs-emphasis) {
+    font-style: italic;
+  }
+
+  :global(.hljs-strong) {
+    font-weight: 650;
+  }
+}

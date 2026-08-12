@@ -41,6 +41,13 @@ enum FileStatus {
   @@map("file_status")
 }
 
+enum RequirementFileRole {
+  image
+  attachment
+
+  @@map("requirement_file_role")
+}
+
 enum TurnStatus {
   queued
   running
@@ -206,8 +213,10 @@ model File {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  app        App  @relation(fields: [appId], references: [id], onDelete: Cascade)
-  uploadedBy User @relation(fields: [uploadedById], references: [id])
+  app                  App                       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  uploadedBy           User                      @relation(fields: [uploadedById], references: [id])
+  requirementDrafts    RequirementDraftFile[]
+  requirementRevisions RequirementRevisionFile[]
 
   @@index([appId, createdAt])
   @@map("files")
@@ -229,6 +238,9 @@ model Conversation {
   // The provider's own session handle, used to resume rather than replay. Null
   // until the first turn has run.
   providerSessionId String?
+  // Conversation-wide runtime overrides. Null means use the provider default.
+  model             String?
+  effort            String?
   title             String?
   // Set once a person names it, which stops the automatic title from
   // overwriting a deliberate choice.
@@ -289,9 +301,10 @@ model RequirementDraft {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
-  requirement           Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  updatedBy             User          @relation("RequirementDraftUpdatedBy", fields: [updatedById], references: [id])
-  updatedInConversation Conversation? @relation("RequirementDraftUpdatedInConversation", fields: [updatedInConversationId], references: [id], onDelete: SetNull)
+  requirement           Requirement            @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  updatedBy             User                   @relation("RequirementDraftUpdatedBy", fields: [updatedById], references: [id])
+  updatedInConversation Conversation?          @relation("RequirementDraftUpdatedInConversation", fields: [updatedInConversationId], references: [id], onDelete: SetNull)
+  files                 RequirementDraftFile[]
 
   @@index([updatedInConversationId])
   @@map("requirement_drafts")
@@ -310,15 +323,46 @@ model RequirementRevision {
   confirmedInConversationId Int?
   confirmedAt               DateTime @default(now())
 
-  requirement             Requirement   @relation("RequirementRevisions", fields: [requirementId], references: [id], onDelete: Cascade)
-  confirmedBy             User          @relation("RequirementRevisionConfirmedBy", fields: [confirmedById], references: [id])
-  confirmedInConversation Conversation? @relation("RequirementRevisionConfirmedInConversation", fields: [confirmedInConversationId], references: [id], onDelete: SetNull)
-  currentFor              Requirement?  @relation("CurrentRequirementRevision")
+  requirement             Requirement               @relation("RequirementRevisions", fields: [requirementId], references: [id], onDelete: Cascade)
+  confirmedBy             User                      @relation("RequirementRevisionConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedInConversation Conversation?             @relation("RequirementRevisionConfirmedInConversation", fields: [confirmedInConversationId], references: [id], onDelete: SetNull)
+  currentFor              Requirement?              @relation("CurrentRequirementRevision")
+  files                   RequirementRevisionFile[]
 
   @@unique([requirementId, number])
   @@index([requirementId, confirmedAt])
   @@index([confirmedInConversationId])
   @@map("requirement_revisions")
+}
+
+model RequirementDraftFile {
+  requirementId Int
+  fileId        Int
+  role          RequirementFileRole
+  position      Int
+
+  requirement RequirementDraft @relation(fields: [requirementId], references: [requirementId], onDelete: Cascade)
+  file        File             @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, fileId])
+  @@unique([requirementId, role, position])
+  @@index([fileId])
+  @@map("requirement_draft_files")
+}
+
+model RequirementRevisionFile {
+  revisionId Int
+  fileId     Int
+  role       RequirementFileRole
+  position   Int
+
+  revision RequirementRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  file     File                @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([revisionId, fileId])
+  @@unique([revisionId, role, position])
+  @@index([fileId])
+  @@map("requirement_revision_files")
 }
 
 // The append-only transcript, and the only account of what happened. `sequence`

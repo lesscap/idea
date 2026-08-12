@@ -111,11 +111,28 @@ export const createPendingInputService: Service<PendingInputService> = app => {
     materialize: async conversationId => {
       const expected = await rowsFor(conversationId)
       if (expected.length === 0) return null
-
       try {
         return await app.$conversation.appendEvent(
           conversationId,
-          mergePending(expected),
+          async tx => {
+            const configuration = await tx.conversation.findUniqueOrThrow({
+              where: { id: conversationId },
+              select: { model: true, effort: true, provider: { select: { config: true } } },
+            })
+            const provider = configuration.provider.config as { model: string }
+            return {
+              ...mergePending(expected),
+              model: configuration.model ?? provider.model,
+              ...(configuration.effort
+                ? {
+                    effort: configuration.effort as Extract<
+                      ConversationEvent,
+                      { type: 'user_message' }
+                    >['effort'],
+                  }
+                : {}),
+            }
+          },
           // Runs inside appendEvent's transaction, which already holds this
           // conversation's row lock — so concurrent materialize calls arrive
           // here one at a time. The checks below still matter: the lock orders

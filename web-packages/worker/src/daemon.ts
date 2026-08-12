@@ -63,6 +63,7 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
   log(`workspace root: ${root}`)
 
   const abort = new AbortController()
+  const activeTurns = new Map<number, AbortController>()
   let running = 0
   let draining = false
   let exitCode = 0
@@ -70,6 +71,9 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
   const stop = (code: number) => {
     exitCode = code
     abort.abort()
+    activeTurns.forEach(controller => {
+      controller.abort()
+    })
   }
 
   // Claims until there is nothing more it may take. `draining` collapses
@@ -90,14 +94,19 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
 
         running++
         const { turn, conversation, provider } = claimed
+        const turnController = new AbortController()
+        activeTurns.set(turn.id, turnController)
         // Deliberately not awaited: the loop goes back for more work while this
         // turn runs, which is what the slots are for.
-        void runTurn(client, root, turn, conversation, provider, log).finally(() => {
-          running--
-          // Finishing frees both a slot and the conversation, so something that
-          // was unclaimable a moment ago may be claimable now.
-          void drain()
-        })
+        void runTurn(client, root, turn, conversation, provider, turnController, log).finally(
+          () => {
+            activeTurns.delete(turn.id)
+            running--
+            // Finishing frees both a slot and the conversation, so something that
+            // was unclaimable a moment ago may be claimable now.
+            void drain()
+          },
+        )
       }
     } finally {
       draining = false
@@ -112,6 +121,7 @@ export const runDaemon = async (config: WorkerConfig): Promise<void> => {
       try {
         await client.stream(command => {
           if (command.type === 'work_available') void drain()
+          if (command.type === 'abort') activeTurns.get(command.turnId)?.abort()
         }, abort.signal)
       } catch (error) {
         if (abort.signal.aborted) return

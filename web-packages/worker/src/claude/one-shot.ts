@@ -1,5 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { ProviderConfig } from '../agent/index.ts'
+import { agentEnv } from '../agent/env.ts'
 import type { SdkMessage } from './sdk-types.ts'
 
 // Ask the model one question, take back one string.
@@ -39,8 +40,11 @@ export const oneShot = async (input: {
   systemPrompt: string
   prompt: string
 }): Promise<OneShotResult> => {
-  const token = process.env[input.provider.tokenEnv]
-  if (!token) return { kind: 'error', reason: `${input.provider.tokenEnv} is not set` }
+  const { baseUrl, tokenEnv } = input.provider
+  if (!baseUrl || !tokenEnv)
+    return { kind: 'error', reason: 'claude provider needs baseUrl and tokenEnv' }
+  const token = process.env[tokenEnv]
+  if (!token) return { kind: 'error', reason: `${tokenEnv} is not set` }
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -73,9 +77,9 @@ export const oneShot = async (input: {
           if (stderr.length > STDERR_TAIL) stderr.shift()
         },
         env: {
-          ...process.env,
+          ...agentEnv(),
           CLAUDE_CONFIG_DIR: input.sessions,
-          ANTHROPIC_BASE_URL: input.provider.baseUrl,
+          ANTHROPIC_BASE_URL: baseUrl,
           ANTHROPIC_AUTH_TOKEN: token,
         },
         model: input.provider.model,

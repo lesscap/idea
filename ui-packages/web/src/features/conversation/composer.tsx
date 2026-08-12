@@ -1,5 +1,5 @@
-import type { UploadedFile } from '@idea/shared'
-import { ArrowUp, Clock3, X } from 'lucide-react'
+import type { AgentEffort, UploadedFile } from '@idea/shared'
+import { ArrowUp, Clock3, Square, X } from 'lucide-react'
 import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
@@ -8,7 +8,10 @@ import {
   ComposerAttachmentTray,
   useComposerAttachments,
 } from './composer-attachments'
-import type { PendingInput } from './use-conversation'
+import { parseModelCommand } from './model-command'
+import { ModelControl } from './model-control'
+import type { ModelConfiguration, PendingInput } from './use-conversation'
+import { useModelCommand } from './use-model-command'
 
 // Where someone says what they want.
 //
@@ -61,21 +64,34 @@ export const Composer = ({
   onUpload,
   onOpenFile,
   onWithdraw,
+  running,
+  stopping,
+  stopFailed,
+  onStop,
   exclusiveSubmit,
   disabled,
+  modelConfiguration,
+  onConfigureModel,
 }: {
   pending: readonly PendingInput[]
   onSend: (text: string, attachmentFids: readonly string[]) => Promise<unknown>
   onUpload: (file: File) => Promise<UploadedFile>
   onOpenFile: (file: UploadedFile) => void
   onWithdraw: (id: number) => Promise<unknown>
+  running: boolean
+  stopping: boolean
+  stopFailed: boolean
+  onStop: () => Promise<void>
   exclusiveSubmit: boolean
   disabled: boolean
+  modelConfiguration: ModelConfiguration
+  onConfigureModel: (model: string | null, effort: AgentEffort | null) => Promise<unknown>
 }) => {
   const __ = useLocale()
   const [draft, setDraft] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [sendFailed, setSendFailed] = useState(false)
+  const [commandFailed, setCommandFailed] = useState(false)
   const [withdrawal, setWithdrawal] = useState<Withdrawal>(null)
   const [dragging, setDragging] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -83,12 +99,46 @@ export const Composer = ({
   const attachments = useComposerAttachments(onUpload)
   useAutosize(ref, draft)
 
+  const configure = async (model: string | null, effort: AgentEffort | null) => {
+    if (submittingRef.current) return
+    const commandDraft = draft.trim().startsWith('/model') ? draft : ''
+    setCommandFailed(false)
+    submittingRef.current = true
+    setSubmitting(true)
+    if (commandDraft) setDraft('')
+    try {
+      await onConfigureModel(model, effort)
+    } catch {
+      if (commandDraft) setDraft(current => current || commandDraft)
+      setCommandFailed(true)
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
+  }
+  const command = useModelCommand(
+    draft,
+    [...new Set([modelConfiguration.defaultModel, ...modelConfiguration.models])].filter(
+      (model): model is string => model !== null,
+    ),
+    model => {
+      void configure(model, null)
+    },
+  )
+
   const canSend =
     !disabled && !attachments.unsettled && (draft.trim() !== '' || attachments.ready.length > 0)
 
   const submit = () => {
     const text = draft.trim()
     if (!canSend || submittingRef.current) return
+    const parsed = parseModelCommand(text)
+    if (parsed?.kind === 'invalid') {
+      setCommandFailed(true)
+      return
+    }
+    if (parsed?.kind === 'reset') return void configure(null, null)
+    if (parsed?.kind === 'apply') return void configure(parsed.model, parsed.effort)
     const attachmentFids = attachments.ready.map(file => file.fid)
     setSendFailed(false)
 
@@ -175,6 +225,16 @@ export const Composer = ({
           {__('transcript.status.sendFailed')}
         </p>
       )}
+      {commandFailed && (
+        <p className="mb-2 px-1 text-destructive text-xs" role="alert">
+          {__('shell.model.invalid')}
+        </p>
+      )}
+      {stopFailed && (
+        <p className="mb-2 px-1 text-destructive text-xs" role="alert">
+          {__('transcript.status.stopFailed')}
+        </p>
+      )}
 
       <fieldset
         disabled={disabled || (exclusiveSubmit && submitting)}
@@ -202,6 +262,25 @@ export const Composer = ({
           attachments.add(event.dataTransfer.files)
         }}
       >
+        {command.suggestions.length > 0 && (
+          <div className="border-border border-b p-1" role="listbox">
+            {command.suggestions.map((suggestion, index) => (
+              <button
+                key={suggestion.label}
+                type="button"
+                className={`block w-full rounded-md px-2 py-1.5 text-left text-sm ${
+                  command.active === index ? 'bg-muted' : ''
+                }`}
+                role="option"
+                aria-selected={command.active === index}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => void configure(suggestion.model, null)}
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        )}
         <ComposerAttachmentTray state={attachments} onOpen={onOpenFile} />
         <textarea
           ref={ref}
@@ -214,6 +293,7 @@ export const Composer = ({
           onChange={event => {
             setDraft(event.target.value)
             setSendFailed(false)
+            setCommandFailed(false)
           }}
           onPaste={event => {
             if (event.clipboardData.files.length === 0) return
@@ -224,6 +304,7 @@ export const Composer = ({
           // holds it and merges it with whatever else arrives before that turn
           // ends, so a thought delivered in pieces gets one reply.
           onKeyDown={event => {
+            if (command.onKeyDown(event)) return
             if (event.key !== 'Enter' || event.shiftKey) return
             // Enter also confirms a candidate in an IME. Sending here would
             // ship half a pinyin string — and this interface is Chinese first,
@@ -234,16 +315,36 @@ export const Composer = ({
           }}
         />
         <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <ComposerAttachmentButton state={attachments} />
+          <div className="flex min-w-0 items-center gap-1">
+            <ComposerAttachmentButton state={attachments} />
+            <ModelControl
+              configuration={modelConfiguration}
+              disabled={disabled || submitting}
+              onChange={configure}
+            />
+          </div>
           {/* Colour follows whether there is anything to send, so the one
               saturated element in the panel is never idle. Disabled goes
               neutral rather than the default half-opacity, which on a coloured
               button is still the accent, only weaker. */}
           <Button
+            variant="secondary"
+            size="icon"
+            className="size-8 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+            aria-label={stopping ? __('shell.stopping') : __('shell.stop')}
+            data-testid="composer-stop"
+            hidden={!running}
+            disabled={stopping}
+            onClick={() => void onStop()}
+          >
+            <Square className="fill-current" />
+          </Button>
+          <Button
             size="icon"
             className="size-8 shrink-0 rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
             aria-label={__('shell.send')}
             data-testid="composer-send"
+            hidden={running}
             disabled={!canSend || submitting}
             onClick={submit}
           >

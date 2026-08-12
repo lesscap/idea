@@ -1,6 +1,7 @@
 import type { Prisma } from '@idea/core'
 import { requirementIsWritable } from '../../domains/requirement.ts'
 import type { Service } from '../../types.ts'
+import { resolveRequirementFiles } from './files.ts'
 import type { RequirementCommandResult, RequirementCommands } from './types.ts'
 
 type Transaction = Prisma.TransactionClient
@@ -24,6 +25,14 @@ const hasPrismaCode = (error: unknown, code: string): boolean =>
 export const createRequirementCommands: Service<RequirementCommands> = app => ({
   create: input =>
     app.$prisma.$transaction(async tx => {
+      const files = await resolveRequirementFiles(
+        tx,
+        input.appId,
+        input.imageFids ?? [],
+        input.attachmentFids ?? [],
+      )
+      if (files.kind !== 'ok') return files
+
       const source = await conversationId(tx, input.appId, input.conversationCid)
       if (source === null) return { kind: 'conversation_not_found' }
 
@@ -52,6 +61,7 @@ export const createRequirementCommands: Service<RequirementCommands> = app => ({
               body: input.body,
               updatedById: input.createdById,
               updatedInConversationId: source,
+              files: { create: [...files.references] },
             },
           },
         },
@@ -79,6 +89,13 @@ export const createRequirementCommands: Service<RequirementCommands> = app => ({
 
       const source = await conversationId(tx, input.appId, input.conversationCid)
       if (source === null) return { kind: 'conversation_not_found' }
+      const files = await resolveRequirementFiles(
+        tx,
+        input.appId,
+        input.imageFids ?? [],
+        input.attachmentFids ?? [],
+      )
+      if (files.kind !== 'ok') return files
       const updatedInConversationId =
         source === undefined ? requirement.draft?.updatedInConversationId : source
 
@@ -94,6 +111,15 @@ export const createRequirementCommands: Service<RequirementCommands> = app => ({
         update: { ...content, version: { increment: 1 } },
         create: { requirementId: requirement.id, ...content },
       })
+      await tx.requirementDraftFile.deleteMany({ where: { requirementId: requirement.id } })
+      if (files.references.length > 0) {
+        await tx.requirementDraftFile.createMany({
+          data: files.references.map(reference => ({
+            requirementId: requirement.id,
+            ...reference,
+          })),
+        })
+      }
       await tx.requirement.update({
         where: { id: requirement.id },
         data: { updatedAt: new Date() },
@@ -112,7 +138,7 @@ export const createRequirementCommands: Service<RequirementCommands> = app => ({
         select: {
           id: true,
           status: true,
-          draft: true,
+          draft: { include: { files: { orderBy: { position: 'asc' } } } },
         },
       })
       if (!requirement) return { kind: 'not_found' }
@@ -145,6 +171,13 @@ export const createRequirementCommands: Service<RequirementCommands> = app => ({
           body: requirement.draft.body,
           confirmedById: input.confirmedById,
           confirmedInConversationId,
+          files: {
+            create: requirement.draft.files.map(({ fileId, role, position }) => ({
+              fileId,
+              role,
+              position,
+            })),
+          },
         },
         select: { id: true },
       })

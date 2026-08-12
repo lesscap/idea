@@ -1,4 +1,6 @@
-import type { Id } from '@idea/shared'
+import type { Id, WorkerCommand } from '@idea/shared'
+
+export type { WorkerCommand } from '@idea/shared'
 
 // Server→worker push, keyed by worker.
 //
@@ -11,14 +13,6 @@ import type { Id } from '@idea/shared'
 // Which is also why presence on this bus is the only definition of "connected".
 // Nothing writes a last-seen timestamp anywhere, so nothing has to sweep for
 // stale ones or agree on a timeout.
-
-export type WorkerCommand =
-  // Something is queued. The worker decides what it can take; the server does
-  // not name a turn, because by the time this lands another worker may have it.
-  | { type: 'work_available' }
-  // Stop a specific turn. Carries the id because the worker has to match it
-  // against what it is actually running.
-  | { type: 'abort'; turnId: Id }
 
 type Send = (command: WorkerCommand) => void
 

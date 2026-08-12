@@ -1,4 +1,4 @@
-import type { Attachment, ConversationExecution, Id } from '@idea/shared'
+import type { AgentEffort, Attachment, ConversationExecution, Id } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from '../../lib/request'
 import { phaseOf, toBubbles, type WireStored } from './transcript'
@@ -35,6 +35,18 @@ export type WorkerOption = {
   providerId: number
   providerLabel: string
   providerKind: string
+  defaultModel: string
+  models: readonly string[]
+  efforts: Readonly<Record<string, readonly AgentEffort[]>>
+}
+
+export type ModelConfiguration = {
+  kind: string | null
+  defaultModel: string | null
+  models: readonly string[]
+  efforts: Readonly<Record<string, readonly AgentEffort[]>>
+  model: string | null
+  effort: AgentEffort | null
 }
 
 export type WorkerAssignment = {
@@ -79,6 +91,7 @@ type TranscriptPage = {
   pending: PendingInput[]
   execution: ConversationExecution
   assignment: WorkerAssignment
+  modelConfiguration: ModelConfiguration
 }
 
 type WorkersPage = { items: WorkerOption[] }
@@ -100,11 +113,23 @@ export const useConversation = (
   const [workers, setWorkers] = useState<WorkerOption[]>([])
   const [workersStatus, setWorkersStatus] = useState<WorkersStatus>('loading')
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null)
+  const [modelConfiguration, setModelConfiguration] = useState<ModelConfiguration>({
+    kind: null,
+    defaultModel: null,
+    models: [],
+    efforts: {},
+    model: null,
+    effort: null,
+  })
+  const [draftModel, setDraftModel] = useState<string | null>(null)
+  const [draftEffort, setDraftEffort] = useState<AgentEffort | null>(null)
   const [assigningWorker, setAssigningWorker] = useState(false)
   const [workerAssignmentFailed, setWorkerAssignmentFailed] = useState(false)
   const [connection, setConnection] = useState<ConnectionStatus>('connecting')
   const [connectionAttempt, setConnectionAttempt] = useState(0)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [stopping, setStopping] = useState(false)
+  const [stopFailed, setStopFailed] = useState(false)
   // The resume point, and the cursor going the other way. Refs, so reading them
   // does not make every arriving event restart the stream.
   const lastSeq = useRef(-1)
@@ -136,6 +161,19 @@ export const useConversation = (
     void refreshWorkers()
   }, [refreshWorkers])
 
+  useEffect(() => {
+    if (persistedId !== null) return
+    // A worker selects the Provider and therefore its defaults. Any worker
+    // change starts the draft from those defaults again.
+    if (selectedWorkerId === null) {
+      setDraftModel(null)
+      setDraftEffort(null)
+      return
+    }
+    setDraftModel(null)
+    setDraftEffort(null)
+  }, [persistedId, selectedWorkerId])
+
   const apply = useCallback((incoming: WireStored[]) => {
     setEvents(previous => {
       const next = mergeEvents(previous, incoming)
@@ -159,6 +197,8 @@ export const useConversation = (
       setExecution({ state: 'idle' })
       setAssignment(null)
       setConnection('closed')
+      setStopping(false)
+      setStopFailed(false)
       return
     }
 
@@ -166,7 +206,17 @@ export const useConversation = (
     setPending([])
     setExecution({ state: 'idle' })
     setAssignment(null)
+    setModelConfiguration({
+      kind: null,
+      defaultModel: null,
+      models: [],
+      efforts: {},
+      model: null,
+      effort: null,
+    })
     setConnection('connecting')
+    setStopping(false)
+    setStopFailed(false)
     lastSeq.current = -1
     oldestSeq.current = null
 
@@ -183,7 +233,12 @@ export const useConversation = (
           if (boundId.current === persistedId && pendingRequest.current === request) {
             setPending(page.pending)
             setExecution(page.execution)
+            if (page.execution.state !== 'running') {
+              setStopping(false)
+              setStopFailed(false)
+            }
             setAssignment(page.assignment)
+            setModelConfiguration(page.modelConfiguration)
           }
           loaded = true
           if (stream.readyState === EventSource.OPEN) setConnection('open')
@@ -216,13 +271,24 @@ export const useConversation = (
             incoming.event.type === 'turn.completed' ||
             incoming.event.type === 'turn.failed' ||
             incoming.event.type === 'turn.aborted'
-          )
+          ) {
             setExecution({ state: 'idle' })
+            setStopping(false)
+            setStopFailed(false)
+          }
           apply([incoming])
           // A queued batch is deleted in the same transaction that writes its
           // user_message. Read the authoritative queue after that commit rather
           // than clearing locally: newer input may already be waiting.
           if (incoming.event.type === 'user_message') void backfill(`?after=${incoming.sequence}`)
+          if (incoming.event.type === 'system' && incoming.event.action === 'model') {
+            const configured = incoming.event
+            setModelConfiguration(current => ({
+              ...current,
+              model: configured.model ?? null,
+              effort: configured.effort ?? null,
+            }))
+          }
         } catch {
           // A frame that will not parse is not worth tearing the stream down for.
         }
@@ -289,7 +355,12 @@ export const useConversation = (
     if (boundId.current === persistedId && pendingRequest.current === request) {
       setPending(page.pending)
       setExecution(page.execution)
+      if (page.execution.state !== 'running') {
+        setStopping(false)
+        setStopFailed(false)
+      }
       setAssignment(page.assignment)
+      setModelConfiguration(page.modelConfiguration)
     }
   }
 
@@ -300,6 +371,8 @@ export const useConversation = (
         text,
         attachmentFids,
         workerId: selectedWorkerId,
+        ...(draftModel ? { model: draftModel } : {}),
+        ...(draftEffort ? { effort: draftEffort } : {}),
       })
       onConversationCreated(created.cid)
       return
@@ -309,6 +382,21 @@ export const useConversation = (
     await refreshPending()
   }
 
+  const stop = async () => {
+    if (persistedId === null || execution.state !== 'running' || stopping) return
+    setStopping(true)
+    setStopFailed(false)
+    try {
+      const result = await post<{ requested: boolean }>(`${base}/${persistedId}/abort`)
+      if (result.requested) return
+      await refreshPending()
+      setStopping(false)
+    } catch {
+      setStopping(false)
+      setStopFailed(true)
+    }
+  }
+
   const assignWorker = async (workerId: number) => {
     if (persistedId === null || assigningWorker) return
     setAssigningWorker(true)
@@ -316,6 +404,7 @@ export const useConversation = (
     try {
       const next = await patch<WorkerAssignment>(`${base}/${persistedId}/worker`, { workerId })
       setAssignment(next)
+      setModelConfiguration(current => ({ ...current, model: null, effort: null }))
     } catch (error) {
       setWorkerAssignmentFailed(true)
       throw error
@@ -333,6 +422,31 @@ export const useConversation = (
   }
 
   const phase = phaseOf(events, execution)
+  const selectedWorker = workers.find(worker => worker.id === selectedWorkerId) ?? null
+  const activeModelConfiguration =
+    persistedId === null
+      ? {
+          kind: selectedWorker?.providerKind ?? null,
+          defaultModel: selectedWorker?.defaultModel ?? null,
+          models: selectedWorker?.models ?? [],
+          efforts: selectedWorker?.efforts ?? {},
+          model: draftModel,
+          effort: draftEffort,
+        }
+      : modelConfiguration
+
+  const configureModel = async (model: string | null, effort: AgentEffort | null) => {
+    if (persistedId === null) {
+      setDraftModel(model)
+      setDraftEffort(effort)
+      return
+    }
+    const configured = await patch<{ model: string | null; effort: AgentEffort | null }>(
+      `${base}/${persistedId}/model`,
+      { model, effort },
+    )
+    setModelConfiguration(current => ({ ...current, ...configured }))
+  }
 
   return {
     bubbles: toBubbles(events),
@@ -340,6 +454,9 @@ export const useConversation = (
     phase,
     working: execution.state !== 'idle',
     activityLive: execution.state === 'running',
+    stopping,
+    stopFailed,
+    stop,
     assignment,
     workers,
     workersStatus,
@@ -349,6 +466,8 @@ export const useConversation = (
     assignWorker,
     assigningWorker,
     workerAssignmentFailed,
+    modelConfiguration: activeModelConfiguration,
+    configureModel,
     connection,
     retryConnection: () => setConnectionAttempt(attempt => attempt + 1),
     // Sequence 0 is the first thing ever said, so holding it means there is

@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { ConversationEvent } from '@idea/shared'
 import type { AgentRunOptions } from '../agent/index.ts'
+import { SYSTEM_PROMPT } from '../agent/context.ts'
+import { claudeEffort } from '../agent/env.ts'
 import { claudeEvents } from './events.ts'
 import type { SdkMessage } from './sdk-types.ts'
 
@@ -35,13 +37,12 @@ export const canResume = (sessions: string, sessionId: string | null): boolean =
 // Minimal on purpose. What to ask and in what order belongs to a skill, and
 // this is the seam it will be injected at — not a place to accumulate
 // instructions in the meantime.
-const SYSTEM_PROMPT =
-  'You are helping someone who does not write software describe what they need. ' +
-  'Ask about what is unclear, one thing at a time, in their language.'
-
 export const runClaude = (options: AgentRunOptions): AsyncIterable<ConversationEvent> => {
-  const token = process.env[options.provider.tokenEnv]
-  if (!token) throw new Error(`${options.provider.tokenEnv} is not set`)
+  const effort = claudeEffort(options.effort)
+  const { baseUrl, tokenEnv } = options.provider
+  if (!baseUrl || !tokenEnv) throw new Error('claude provider needs baseUrl and tokenEnv')
+  const token = process.env[tokenEnv]
+  if (!token) throw new Error(`${tokenEnv} is not set`)
   const inheritedEnv = Object.fromEntries(
     Object.entries(process.env).filter(
       ([name]) => name !== 'IDEA_ENROLMENT_TOKEN' && !/^IDEA_PROVIDER_.*_TOKEN$/.test(name),
@@ -79,10 +80,11 @@ export const runClaude = (options: AgentRunOptions): AsyncIterable<ConversationE
         IS_SANDBOX: '1',
         CLAUDE_CONFIG_DIR: options.sessions,
         CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1',
-        ANTHROPIC_BASE_URL: options.provider.baseUrl,
+        ANTHROPIC_BASE_URL: baseUrl,
         ANTHROPIC_AUTH_TOKEN: token,
       },
-      model: options.provider.model,
+      model: options.model,
+      ...(effort ? { effort } : {}),
     },
   }) as AsyncIterable<SdkMessage>
 

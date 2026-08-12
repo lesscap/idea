@@ -78,6 +78,8 @@ export type ConversationExecution =
   | { readonly state: 'queued' }
   | { readonly state: 'running' }
 
+export type AgentEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
 // The provider's untouched payload. Kept server-side for replay and for working
 // out what an adapter got wrong — and never sent anywhere, because it can carry
 // an environment dump, a credential passed as a tool argument, or the full
@@ -96,7 +98,7 @@ export type ConversationEvent =
       // Stamped per turn rather than read from the conversation at replay time,
       // so replaying an old turn reproduces the choices in force when it ran.
       model?: string
-      effort?: string
+      effort?: AgentEffort
     })
   | (WithRaw & { type: 'thread.started'; providerSessionId: string; model?: string })
   | (WithRaw & { type: 'turn.started'; sourceSequence?: number })
@@ -117,7 +119,13 @@ export type ConversationEvent =
   | (WithRaw & { type: 'turn.heartbeat' })
   // Provider noise that is not the user's problem: transport fallbacks,
   // reconnect notices. Deliberately not `error`.
-  | (WithRaw & { type: 'system'; action: string; message?: string })
+  | (WithRaw & {
+      type: 'system'
+      action: string
+      message?: string
+      model?: string
+      effort?: AgentEffort
+    })
   | (WithRaw & { type: 'error'; message: string })
   // Nothing the adapter recognised. Lets a new provider run before every one of
   // its events has a mapping, instead of failing the turn.

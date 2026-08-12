@@ -1,6 +1,7 @@
 import { randomToken, sha256 } from '@idea/core'
-import type { Id } from '@idea/shared'
+import type { AgentEffort, Id } from '@idea/shared'
 import type { Service } from '../types.ts'
+import type { ProviderConfig } from './provider.ts'
 
 // Agent daemons, each serving exactly one workspace.
 //
@@ -30,6 +31,9 @@ export type WorkerOption = Worker & {
   readonly online: boolean
   readonly providerLabel: string
   readonly providerKind: string
+  readonly defaultModel: string
+  readonly models: readonly string[]
+  readonly efforts: Readonly<Record<string, readonly AgentEffort[]>>
 }
 
 export type RegisterInput = {
@@ -98,18 +102,26 @@ const view = (row: {
 })
 
 const option = (
-  row: Parameters<typeof view>[0] & { provider: { kind: string; label: string } },
+  row: Parameters<typeof view>[0] & {
+    provider: { kind: string; label: string; config: unknown }
+  },
   online: boolean,
-): WorkerOption => ({
-  ...view(row),
-  online,
-  providerLabel: row.provider.label,
-  providerKind: row.provider.kind,
-})
+): WorkerOption => {
+  const config = row.provider.config as ProviderConfig
+  return {
+    ...view(row),
+    online,
+    providerLabel: row.provider.label,
+    providerKind: row.provider.kind,
+    defaultModel: config.model,
+    models: config.models ?? [],
+    efforts: config.efforts ?? {},
+  }
+}
 
 const OPTION_SELECT = {
   ...SELECT,
-  provider: { select: { kind: true, label: true } },
+  provider: { select: { kind: true, label: true, config: true } },
 } as const
 
 export const createWorkerService: Service<WorkerService> = app => ({

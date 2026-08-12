@@ -37,6 +37,7 @@ export type RepoLayout = {
   root: string
   repo: string
   sessions: string
+  codex: string
   worktrees: string
 }
 
@@ -50,6 +51,7 @@ export const repoLayout = (root: string, repoKey: string): RepoLayout => {
     root: base,
     repo: join(base, 'repo'),
     sessions: join(base, 'claude'),
+    codex: join(base, 'codex'),
     worktrees: join(base, 'worktrees'),
   }
 }

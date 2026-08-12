@@ -90,6 +90,8 @@ export const toWireEvent = (event: ConversationEvent): WireEvent => {
       type: 'system',
       action: event.action,
       ...(event.message ? { message: event.message } : {}),
+      ...(event.model ? { model: event.model } : {}),
+      ...(event.effort ? { effort: event.effort } : {}),
     }
 
   if (event.type === 'error') return { type: 'error', message: event.message }

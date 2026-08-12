@@ -19,6 +19,8 @@ const historical: RequirementRevision = {
   title: '第一版标题',
   summary: '第一版摘要',
   body: '第一版正文',
+  images: [],
+  attachments: [],
   confirmedAt: '2026-08-01T00:00:00.000Z',
   confirmedInConversationCid: 'cid-history',
 }
@@ -34,6 +36,8 @@ const detail = (withDraft = true): RequirementDetailValue => ({
         title: '正在修改的标题',
         summary: '尚未确认的摘要',
         body: '草稿正文',
+        images: [],
+        attachments: [],
         updatedAt: '2026-08-08T00:00:00.000Z',
         updatedInConversationCid: 'cid-draft',
       }
@@ -45,6 +49,8 @@ const detail = (withDraft = true): RequirementDetailValue => ({
     title: '已确认标题',
     summary: '已确认摘要',
     body: '当前正文',
+    images: [],
+    attachments: [],
     confirmedAt: '2026-08-07T00:00:00.000Z',
     confirmedInConversationCid: 'cid-current',
   },
@@ -56,10 +62,15 @@ const detail = (withDraft = true): RequirementDetailValue => ({
   updatedAt: '2026-08-08T00:00:00.000Z',
 })
 
-const draw = (showConversation = vi.fn()) => {
+const draw = (showConversation = vi.fn(), openFile = vi.fn()) => {
   render(
     <LocaleProvider initial="zh">
-      <RequirementDetail params={{ code: 'R-1' }} appId={7} showConversation={showConversation} />
+      <RequirementDetail
+        params={{ code: 'R-1' }}
+        appId={7}
+        showConversation={showConversation}
+        openFile={openFile}
+      />
     </LocaleProvider>,
   )
   return showConversation
@@ -87,7 +98,7 @@ describe('requirement detail', () => {
     expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('正在查看')
     expect(screen.getByTestId('requirement-version-menu')).toHaveTextContent('未确认')
     expect(screen.getByRole('status')).toHaveTextContent('正在查看草稿，未确认')
-    expect(screen.getByTestId('markdown')).toHaveAttribute('data-variant', 'document')
+    expect(screen.getByTestId('markdown')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看来源会话' }))
     expect(showConversation).toHaveBeenLastCalledWith('cid-draft')
 
@@ -148,6 +159,40 @@ describe('requirement detail', () => {
     expect(await screen.findByRole('heading', { name: '已确认标题' })).toBeInTheDocument()
     expect(screen.getByText('当前版本')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '选择需求版本' })).not.toBeInTheDocument()
+  })
+
+  it('renders private inline images and opens images and attachments as file resources', async () => {
+    const image = {
+      fid: 'image-1',
+      filename: '流程图.png',
+      contentType: 'image/png',
+      size: 128,
+    }
+    const attachment = {
+      fid: 'attachment-1',
+      filename: '验收说明.md',
+      contentType: 'text/markdown',
+      size: 256,
+    }
+    const value = detail()
+    api.getRequirement.mockResolvedValue({
+      ...value,
+      draft: value.draft
+        ? {
+            ...value.draft,
+            body: '![状态流转](idea-file:image-1)',
+            images: [image],
+            attachments: [attachment],
+          }
+        : null,
+    })
+    const openFile = vi.fn()
+    draw(vi.fn(), openFile)
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开图片 流程图.png' }))
+    expect(openFile).toHaveBeenLastCalledWith(image)
+    fireEvent.click(screen.getByRole('button', { name: /验收说明\.md/ }))
+    expect(openFile).toHaveBeenLastCalledWith(attachment)
   })
 
   it('keeps the version selector available when a historical revision needs retrying', async () => {

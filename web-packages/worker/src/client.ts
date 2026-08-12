@@ -1,4 +1,4 @@
-import type { ConversationEvent, StoredEvent } from '@idea/shared'
+import type { AgentEffort, ConversationEvent, StoredEvent, WorkerCommand } from '@idea/shared'
 import type { ProviderConfig } from './agent/index.ts'
 
 // The only way this process reaches anything shared. The worker holds no
@@ -21,6 +21,8 @@ export type Conversation = {
   // The provider's handle for this conversation. Null before the first turn, or
   // after one had to start a new session.
   providerSessionId: string | null
+  model: string | null
+  effort: AgentEffort | null
   title: string | null
 }
 
@@ -46,7 +48,7 @@ export type WorkerClient = {
   events: (turnId: number, after?: number) => Promise<StoredEvent[]>
   downloadFile: (fid: string) => Promise<Response>
   emit: (turnId: number, event: ConversationEvent) => Promise<void>
-  heartbeat: (turnId: number) => Promise<boolean>
+  heartbeat: (turnId: number) => Promise<{ renewed: boolean; abortRequested: boolean }>
   finish: (turnId: number, outcome: 'completed' | 'failed' | 'aborted') => Promise<void>
   // Names the conversation this turn belongs to. False means it already had a
   // name — a person got there first — which is an outcome to log, not retry.
@@ -54,7 +56,7 @@ export type WorkerClient = {
   // The watchdog's ping. Rejects when the server cannot be reached, which is the
   // signal the daemon uses to exit.
   ping: () => Promise<void>
-  stream: (onCommand: (command: { type: string }) => void, signal: AbortSignal) => Promise<void>
+  stream: (onCommand: (command: WorkerCommand) => void, signal: AbortSignal) => Promise<void>
 }
 
 // Unwraps the API envelope, or throws with whatever the server said went wrong.
@@ -138,9 +140,13 @@ export const createClient = (server: string, token?: string): WorkerClient => {
       await post(`/turns/${turnId}/events`, event)
     },
 
-    heartbeat: async turnId =>
-      (await post<{ renewed?: boolean }>(`/turns/${turnId}/events`, { type: 'turn.heartbeat' }))
-        .renewed === true,
+    heartbeat: async turnId => {
+      const state = await post<{ renewed?: boolean; abortRequested?: boolean }>(
+        `/turns/${turnId}/events`,
+        { type: 'turn.heartbeat' },
+      )
+      return { renewed: state.renewed === true, abortRequested: state.abortRequested === true }
+    },
 
     finish: async (turnId, outcome) => {
       await post(`/turns/${turnId}/finish`, { outcome })
@@ -181,7 +187,7 @@ export const createClient = (server: string, token?: string): WorkerClient => {
             .find(line => line.startsWith('data:'))
             ?.slice(5)
             .trim()
-          if (data) onCommand(JSON.parse(data))
+          if (data) onCommand(JSON.parse(data) as WorkerCommand)
         }
       }
     },

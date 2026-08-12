@@ -1,4 +1,4 @@
-import type { Id, RequirementDetail as RequirementDetailValue } from '@idea/shared'
+import type { Attachment, Id, RequirementDetail as RequirementDetailValue } from '@idea/shared'
 import { FileQuestion, RefreshCw } from 'lucide-react'
 import { useRef } from 'react'
 import { useLocale } from '../../../i18n'
@@ -16,7 +16,7 @@ const DetailSkeleton = () => (
         <div className="h-8 animate-pulse rounded bg-muted/70 motion-reduce:animate-none" />
       </div>
     </div>
-    <div className="px-4 py-8 @min-[40rem]:px-8 @min-[64rem]:px-10">
+    <div className="px-4 py-6 @min-[40rem]:px-6">
       <div className="max-w-[72ch] space-y-4">
         <div className="h-9 w-3/4 animate-pulse rounded bg-muted motion-reduce:animate-none" />
         <div className="h-4 w-full animate-pulse rounded bg-muted/70 motion-reduce:animate-none" />
@@ -51,6 +51,7 @@ const ReadyDetail = ({
   selectVersion,
   retryRevision,
   showConversation,
+  openFile,
 }: {
   requirement: RequirementDetailValue
   selected: RequirementVersionSelection | null
@@ -58,6 +59,7 @@ const ReadyDetail = ({
   selectVersion: (selection: RequirementVersionSelection) => void
   retryRevision: () => void
   showConversation: (cid: string) => void
+  openFile: (file: Attachment) => void
 }) => {
   const scrollRef = useRef<HTMLElement>(null)
   const chooseVersion = (selection: RequirementVersionSelection) => {
@@ -79,7 +81,7 @@ const ReadyDetail = ({
         onSelect={chooseVersion}
         onShowConversation={showConversation}
       />
-      <RequirementDocument state={content} onRetry={retryRevision} />
+      <RequirementDocument state={content} onRetry={retryRevision} onOpenFile={openFile} />
     </main>
   )
 }
@@ -88,10 +90,12 @@ export const RequirementDetail = ({
   params,
   appId,
   showConversation,
+  openFile,
 }: {
   params: { readonly code?: string }
   appId: Id
   showConversation: (cid: string) => void
+  openFile: (file: Attachment) => void
 }) => {
   const detail = useRequirementDetailState(appId, params.code ?? '')
 
@@ -106,6 +110,7 @@ export const RequirementDetail = ({
       selectVersion={detail.selectVersion}
       retryRevision={detail.retryRevision}
       showConversation={showConversation}
+      openFile={openFile}
     />
   )
 }

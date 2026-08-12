@@ -1,5 +1,6 @@
 import type { Controller } from '../../../../types.ts'
 import { registerMessages } from './messages.ts'
+import { registerModelConfiguration } from './model.ts'
 import { registerRead } from './read.ts'
 import { registerStream } from './stream.ts'
 import { registerWorkerAssignment } from './worker.ts'
@@ -12,5 +13,6 @@ export const ConversationsController: Controller = app => {
   registerRead(app)
   registerStream(app)
   registerMessages(app)
+  registerModelConfiguration(app)
   registerWorkerAssignment(app)
 }

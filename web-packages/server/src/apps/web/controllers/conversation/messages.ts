@@ -6,6 +6,18 @@ import { isResponse } from '../../services/scope/workspace.ts'
 
 // Saying something, and taking it back before it goes.
 export const registerMessages: Controller = app => {
+  app.post('/:cid/abort', async c => {
+    const found = await scopedConversation(app, c, c.req.param('cid'))
+    if (isResponse(found)) return found
+    if (!found) return notFound(c, 'conversation not found')
+
+    const turnId = await app.$turn.requestAbort(found.id)
+    if (turnId !== null && found.workerId !== null)
+      app.$commands.publish(found.workerId, { type: 'abort', turnId })
+
+    return sendOk(c, { requested: turnId !== null })
+  })
+
   // Typed, not yet sent. It becomes a message the moment nothing is running; if
   // a turn is in flight it waits and merges with whatever else arrives before
   // that turn ends, so a thought delivered in three bursts gets one considered
