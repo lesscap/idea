@@ -1,10 +1,17 @@
 import type { Controller } from '../../types.ts'
 import { AppsController } from './controllers/apps.ts'
-import { ConversationsController } from './controllers/conversation/index.ts'
-import { AppFilesController, FilesController } from './controllers/files.ts'
+import {
+  ConversationsController,
+  WorkspaceConversationsController,
+} from './controllers/conversation/index.ts'
+import {
+  AppFilesController,
+  FilesController,
+  WorkspaceFilesController,
+} from './controllers/files.ts'
 import { InvitesController } from './controllers/invites.ts'
 import { SessionController } from './controllers/session.ts'
-import { AppWorkersController } from './controllers/workers.ts'
+import { AppWorkersController, WorkspaceWorkersController } from './controllers/workers.ts'
 import { WorkspacesController } from './controllers/workspaces.ts'
 import { RequirementsController } from './domains/requirement/index.ts'
 import { requireSession } from './middleware/session.ts'
@@ -37,6 +44,9 @@ export const Routes: Record<string, Controller> = {
   '/apps/:appId/workers': guarded(AppWorkersController),
   '/apps/:appId/conversations': guarded(ConversationsController),
   '/apps/:appId/requirements': guarded(RequirementsController),
+  '/workspace/files': guarded(WorkspaceFilesController),
+  '/workspace/workers': guarded(WorkspaceWorkersController),
+  '/workspace/conversations': guarded(WorkspaceConversationsController),
   '/apps': guarded(AppsController),
   '/files': guarded(FilesController),
 }

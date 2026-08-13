@@ -1,6 +1,8 @@
-import type { AgentEffort, Attachment, ConversationExecution, Id } from '@idea/shared'
+import type { AgentEffort, Attachment, ConversationExecution } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from '../../lib/request'
+import { conversationsPath, workersPath } from './api'
+import type { ConversationScope } from './scope'
 import { phaseOf, toBubbles, type WireStored } from './transcript'
 
 // One conversation, kept current from two sources folded into one ordered list:
@@ -100,11 +102,12 @@ type WorkersPage = { items: WorkerOption[] }
 // it would send the first message into a conversation the URL never learns about,
 // and the draft would sit there looking unsent. That should not compile.
 export const useConversation = (
-  appId: Id,
+  scope: ConversationScope,
   conversationId: string | null,
   onConversationCreated: (id: string) => void,
 ) => {
-  const base = `/apps/${appId}/conversations`
+  const base = conversationsPath(scope)
+  const workerBase = workersPath(scope)
   const persistedId = conversationId === 'new' ? null : conversationId
   const [events, setEvents] = useState<WireStored[]>([])
   const [pending, setPending] = useState<PendingInput[]>([])
@@ -144,7 +147,7 @@ export const useConversation = (
   const refreshWorkers = useCallback(async () => {
     setWorkersStatus('loading')
     try {
-      const page = await get<WorkersPage>(`/apps/${appId}/workers`)
+      const page = await get<WorkersPage>(workerBase)
       setWorkers(page.items)
       setSelectedWorkerId(current =>
         current !== null && page.items.some(worker => worker.id === current)
@@ -155,7 +158,7 @@ export const useConversation = (
     } catch {
       setWorkersStatus('error')
     }
-  }, [appId])
+  }, [workerBase])
 
   useEffect(() => {
     void refreshWorkers()

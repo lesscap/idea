@@ -1,9 +1,9 @@
 import type { SharedStateData } from '../store'
 
-export type LayoutState = Pick<SharedStateData, 'sideCollapsed' | 'conversationCollapsed'>
+export type LayoutState = Pick<SharedStateData, 'workspaceSidebarCollapsed' | 'studioChatCollapsed'>
 
-const SIDE_KEY = 'idea.shell.side-collapsed'
-const CONVERSATION_KEY = 'idea.shell.conversation-collapsed'
+const WORKSPACE_SIDE_KEY = 'idea.workspace.sidebar-collapsed'
+const STUDIO_CHAT_KEY = 'idea.studio.chat-collapsed'
 
 const readFlag = (key: string): boolean => {
   try {
@@ -22,11 +22,11 @@ const writeFlag = (key: string, value: boolean): void => {
 }
 
 export const readLayoutState = (): LayoutState => ({
-  sideCollapsed: readFlag(SIDE_KEY),
-  conversationCollapsed: readFlag(CONVERSATION_KEY),
+  workspaceSidebarCollapsed: readFlag(WORKSPACE_SIDE_KEY),
+  studioChatCollapsed: readFlag(STUDIO_CHAT_KEY),
 })
 
-export const persistSideCollapsed = (value: boolean): void => writeFlag(SIDE_KEY, value)
-
-export const persistConversationCollapsed = (value: boolean): void =>
-  writeFlag(CONVERSATION_KEY, value)
+export const persistWorkspaceSidebarCollapsed = (value: boolean): void =>
+  writeFlag(WORKSPACE_SIDE_KEY, value)
+export const persistStudioChatCollapsed = (value: boolean): void =>
+  writeFlag(STUDIO_CHAT_KEY, value)

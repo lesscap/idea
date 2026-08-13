@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { parseArgs } from 'node:util'
 import { hashPassword } from '../crypto.ts'
 import { createPrisma } from '../db.ts'
+import { ensureWorkspaceSystemApp } from '../system-app.ts'
 
 // Ensures an administrator exists. SAFE TO RUN IN PRODUCTION, and safe to run
 // repeatedly — it converges on the target state rather than assuming a blank
@@ -112,6 +113,9 @@ try {
     } else {
       done.push('already workspace admin')
     }
+
+    await ensureWorkspaceSystemApp(tx, ws.id, user.id)
+    done.push('workspace system app ready')
   })
 
   for (const line of done) console.log(`  ${line}`)

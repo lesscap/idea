@@ -71,6 +71,69 @@ export const NewConversationWorker = ({
   )
 }
 
+export const NewConversationWorkerControl = ({
+  workers,
+  status,
+  selectedId,
+  onSelect,
+  onRefresh,
+}: WorkerListProps & {
+  selectedId: number | null
+  onSelect: (workerId: number) => void
+}) => {
+  const __ = useLocale()
+
+  if (status === 'loading') {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 text-muted-foreground text-xs"
+        disabled
+        data-testid="worker-control-loading"
+      >
+        <Monitor />
+        {__('common.loading')}
+      </Button>
+    )
+  }
+
+  if (status === 'error' || workers.length === 0) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 px-2 text-muted-foreground text-xs"
+        data-testid="worker-control-retry"
+        onClick={onRefresh}
+      >
+        <RefreshCw />
+        {status === 'error' ? __('shell.worker.loadFailed') : __('shell.worker.none')}
+      </Button>
+    )
+  }
+
+  return (
+    <label className="relative flex min-w-0 items-center text-muted-foreground text-xs">
+      <Monitor className="pointer-events-none absolute left-2 size-3.5" aria-hidden="true" />
+      <select
+        className="h-8 max-w-48 appearance-none rounded-md border-0 bg-transparent py-1 pr-7 pl-7 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={__('shell.worker.choose')}
+        data-testid="worker-control"
+        value={selectedId ?? ''}
+        onChange={event => onSelect(Number(event.target.value))}
+      >
+        {workers.map(worker => (
+          <option key={worker.id} value={worker.id}>
+            {worker.name} · {worker.providerLabel}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2 size-3.5" aria-hidden="true" />
+    </label>
+  )
+}
+
 export const RecoveryWorker = ({
   assignment,
   workers,

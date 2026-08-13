@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentProps, ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import { Composer } from './composer'
@@ -29,6 +30,9 @@ const draw = ({
   stopFailed = false,
   exclusiveSubmit = false,
   disabled = false,
+  sendBlocked = false,
+  layout = 'panel',
+  workerControl,
   modelConfiguration = {
     kind: 'claude',
     defaultModel: 'glm-5.2',
@@ -50,30 +54,47 @@ const draw = ({
   stopFailed?: boolean
   exclusiveSubmit?: boolean
   disabled?: boolean
+  sendBlocked?: boolean
+  layout?: 'panel' | 'launcher'
+  workerControl?: ReactNode
   modelConfiguration?: ModelConfiguration
 } = {}) => {
-  render(
+  const props: ComponentProps<typeof Composer> = {
+    pending,
+    onSend,
+    onUpload,
+    onOpenFile,
+    onWithdraw,
+    running,
+    stopping,
+    stopFailed,
+    onStop,
+    exclusiveSubmit,
+    disabled,
+    sendBlocked,
+    layout,
+    workerControl,
+    modelConfiguration,
+    onConfigureModel,
+  }
+  const node = (overrides: Partial<ComponentProps<typeof Composer>> = {}) => (
     <LocaleProvider>
-      <Composer
-        pending={pending}
-        onSend={onSend}
-        onUpload={onUpload}
-        onOpenFile={onOpenFile}
-        onWithdraw={onWithdraw}
-        running={running}
-        stopping={stopping}
-        stopFailed={stopFailed}
-        onStop={onStop}
-        exclusiveSubmit={exclusiveSubmit}
-        disabled={disabled}
-        modelConfiguration={modelConfiguration}
-        onConfigureModel={onConfigureModel}
-      />
-    </LocaleProvider>,
+      <Composer {...props} {...overrides} />
+    </LocaleProvider>
   )
+  const view = render(node())
   const box = screen.getByTestId('composer')
   fireEvent.change(box, { target: { value: '你好' } })
-  return { box, onSend, onUpload, onOpenFile, onConfigureModel, onStop }
+  return {
+    box,
+    onSend,
+    onUpload,
+    onOpenFile,
+    onConfigureModel,
+    onStop,
+    rerender: (overrides: Partial<ComponentProps<typeof Composer>>) =>
+      view.rerender(node(overrides)),
+  }
 }
 
 describe('sending with the keyboard', () => {
@@ -231,6 +252,37 @@ describe('the arrow', () => {
     expect(box).toBeDisabled()
     expect(screen.getByTestId('composer-file-input')).toBeDisabled()
     expect(screen.getByTestId('composer-send')).toBeDisabled()
+  })
+
+  it('keeps launcher input available while sending is blocked and preserves its draft', async () => {
+    const workerAction = vi.fn()
+    const { box, onSend, rerender } = draw({
+      layout: 'launcher',
+      sendBlocked: true,
+      workerControl: (
+        <button type="button" onClick={workerAction}>
+          重试工作站
+        </button>
+      ),
+    })
+
+    expect(box).not.toBeDisabled()
+    expect(screen.getByTestId('composer-file-input')).not.toBeDisabled()
+    expect(screen.getByTestId('composer-send')).toBeDisabled()
+    expect(screen.getByTestId('composer').closest('[data-composer-layout]')).toHaveAttribute(
+      'data-composer-layout',
+      'launcher',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '重试工作站' }))
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(workerAction).toHaveBeenCalledOnce()
+    expect(onSend).not.toHaveBeenCalled()
+
+    rerender({ sendBlocked: false })
+    expect(box).toHaveValue('你好')
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter' }))
+    expect(onSend).toHaveBeenCalledWith('你好', [])
   })
 })
 

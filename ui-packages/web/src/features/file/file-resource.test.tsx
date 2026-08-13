@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { Activity } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
-import { matchResource } from '../../shell/resources'
+import { matchResource } from '../../shell/app-studio/resources'
 import { fileResourceRef } from './api'
 import { FileResource } from './file-resource'
 

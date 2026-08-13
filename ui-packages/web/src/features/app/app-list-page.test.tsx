@@ -1,6 +1,6 @@
 import type { App } from '@idea/shared'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SharedStoreProvider } from '../../core/store'
 import { LocaleProvider } from '../../i18n'
@@ -9,7 +9,6 @@ import { AppListPage } from './app-list-page'
 
 const api = vi.hoisted(() => ({
   listApps: vi.fn(),
-  createApp: vi.fn(),
   updateApp: vi.fn(),
   deleteApp: vi.fn(),
 }))
@@ -26,12 +25,15 @@ const app: App = {
   updatedAt: '2026-08-01T00:00:00.000Z',
 }
 
+const Location = () => <output data-testid="location">{useLocation().pathname}</output>
+
 const draw = (role: 'admin' | 'member') =>
   render(
     <LocaleProvider initial="zh">
       <SharedStoreProvider initial={{ workspaceId: 1, role }}>
         <MemoryRouter initialEntries={['/apps']}>
           <AppListPage />
+          <Location />
         </MemoryRouter>
       </SharedStoreProvider>
     </LocaleProvider>,
@@ -45,53 +47,73 @@ const openActions = async () => {
 describe('app management', () => {
   beforeEach(() => {
     api.listApps.mockReset().mockResolvedValue({ items: [app], total: 1, page: 1, pageSize: 20 })
-    api.createApp.mockReset()
     api.updateApp.mockReset()
     api.deleteApp.mockReset()
   })
 
-  it('offers editing to members without exposing permanent deletion', async () => {
+  it('starts app creation from the workspace home conversation', async () => {
+    draw('admin')
+
+    fireEvent.click(await screen.findByTestId('app-create'))
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/')
+    expect(screen.queryByTestId('app-name')).not.toBeInTheDocument()
+  })
+
+  it('does not expose dormant app statuses in the list', async () => {
+    api.listApps.mockResolvedValue({
+      items: [
+        app,
+        { ...app, id: 2, slug: 'active-app', name: '使用中的应用', status: 'active' },
+        { ...app, id: 3, slug: 'archived-app', name: '归档应用', status: 'archived' },
+      ],
+      total: 3,
+      page: 1,
+      pageSize: 20,
+    })
+
+    draw('admin')
+
+    await screen.findByText('使用中的应用')
+    expect(screen.queryByText('草稿')).not.toBeInTheDocument()
+    expect(screen.queryByText('使用中')).not.toBeInTheDocument()
+    expect(screen.queryByText('已归档')).not.toBeInTheDocument()
+  })
+
+  it('offers renaming to members without exposing permanent deletion', async () => {
     draw('member')
 
     await openActions()
 
-    expect(screen.getByText('编辑应用')).toBeInTheDocument()
+    expect(screen.getByText('重命名')).toBeInTheDocument()
     expect(screen.queryByText('删除应用')).not.toBeInTheDocument()
   })
 
-  it('updates the card and its destination after editing', async () => {
+  it('renames the app without changing its URL or description', async () => {
     const updated = {
       ...app,
-      slug: 'expense-review',
       name: '费用审批',
-      description: '新的简介',
     }
     api.updateApp.mockResolvedValue(updated)
     draw('admin')
     await openActions()
-    fireEvent.click(screen.getByText('编辑应用'))
+    fireEvent.click(screen.getByText('重命名'))
 
-    fireEvent.change(await screen.findByTestId('edit-app-name'), {
+    fireEvent.change(await screen.findByTestId('rename-app-name'), {
       target: { value: updated.name },
     })
-    fireEvent.change(screen.getByTestId('edit-app-slug'), { target: { value: updated.slug } })
-    fireEvent.change(screen.getByTestId('edit-app-description'), {
-      target: { value: updated.description },
-    })
-    fireEvent.click(screen.getByTestId('edit-app-submit'))
+    fireEvent.click(screen.getByTestId('rename-app-submit'))
 
     await waitFor(() =>
       expect(api.updateApp).toHaveBeenCalledWith(app.id, {
         name: updated.name,
-        slug: updated.slug,
-        description: updated.description,
       }),
     )
     expect(await screen.findByText(updated.name)).toBeInTheDocument()
-    expect(screen.getByTestId('app-card')).toHaveAttribute('data-app-slug', updated.slug)
+    expect(screen.getByTestId('app-card')).toHaveAttribute('data-app-slug', app.slug)
     expect(screen.getByRole('link', { name: new RegExp(updated.name) })).toHaveAttribute(
       'href',
-      '/apps/expense-review',
+      '/apps/expense-approval/dashboard/overview',
     )
   })
 

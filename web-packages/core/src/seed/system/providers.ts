@@ -1,4 +1,6 @@
 import 'dotenv/config'
+import { pathToFileURL } from 'node:url'
+import type { PrismaClient } from '@prisma/client'
 import { createPrisma } from '../../db.ts'
 
 // Built-in agent backends. Safe to run in production and repeatedly: labels,
@@ -50,18 +52,31 @@ const PROVIDERS = [
   },
 ]
 
-const [prisma, dispose] = createPrisma(process.env.DATABASE_URL ?? '')
+export const ensureSystemProviders = async (
+  prisma: Pick<PrismaClient, 'provider'>,
+): Promise<string[]> =>
+  Promise.all(
+    PROVIDERS.map(async provider => {
+      const { name, ...rest } = provider
+      await prisma.provider.upsert({
+        where: { name },
+        update: rest,
+        create: { name, ...rest },
+      })
+      return `${name} → ${provider.config.model}`
+    }),
+  )
 
-try {
-  for (const provider of PROVIDERS) {
-    const { name, ...rest } = provider
-    await prisma.provider.upsert({
-      where: { name },
-      update: rest,
-      create: { name, ...rest },
+const main = async () => {
+  const [prisma, dispose] = createPrisma(process.env.DATABASE_URL ?? '')
+  try {
+    const done = await ensureSystemProviders(prisma)
+    done.forEach(line => {
+      console.log(`  ${line}`)
     })
-    console.log(`  ${name} → ${provider.config.model}`)
+  } finally {
+    await dispose()
   }
-} finally {
-  await dispose()
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main()

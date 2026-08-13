@@ -15,47 +15,47 @@
  * Tailwind's default content detection already covers.
  */
 /*
- * Palette: teal primary on warm neutrals.
- *
- * Teal (hue ~196) rather than green: green is bound tightly to "success /
- * approved" in business software, so a green primary makes every main button
- * read as a confirmation and leaves real success messages with nothing
- * distinctive left. Teal steps out of that semantic zone while still avoiding
- * the default blue every admin template ships with.
- *
- * Neutrals carry a faint warm cast (hue ~80) instead of the usual cool grey.
- * Cool grey next to teal collapses the whole interface into one cold register;
- * a warm neutral makes the teal read as a deliberate accent.
- *
- * Every foreground/background pair here was measured against WCAG, not eyeballed.
- * Ratios in the comments are computed, and the primary sits at L=0.50 because
- * L=0.55 only reaches 4.46:1 — just under AA, which is what made the old buttons
- * look bright with weak-looking text on them.
+ * Restrained product palette. Structure is carried by neutral surfaces; orange
+ * is reserved for brand and focus, never used as decorative fill.
  */
 :root {
   /* 6px, not 8px: at button scale 8px starts reading consumer-app rather than tool. */
   --radius: 0.375rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.22 0.008 80); /* 17.32:1 on background */
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.2 0 0);
+  --canvas: oklch(0.968 0 0);
+  --shell: oklch(0.982 0 0);
+  --nav-active: oklch(0.925 0 0);
+  --nav-hover: oklch(0.945 0 0);
+  --brand: oklch(0.65 0.2 38);
+  --brand-foreground: oklch(0.99 0 0);
+
+  /* Stable identity colours. They stay deliberately quieter than the brand
+     accent while retaining at least 6.8:1 contrast against their foreground. */
+  --avatar-1: oklch(0.48 0.095 38);
+  --avatar-2: oklch(0.46 0.06 155);
+  --avatar-3: oklch(0.47 0.065 285);
+  --avatar-4: oklch(0.46 0.035 250);
+  --avatar-foreground: oklch(0.99 0 0);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.008 80);
+  --card-foreground: oklch(0.2 0 0);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.008 80);
+  --popover-foreground: oklch(0.2 0 0);
 
-  --primary: oklch(0.5 0.1 196); /* white text: 5.43:1 */
-  --primary-foreground: oklch(0.99 0.005 196);
+  --primary: oklch(0.2 0 0);
+  --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.968 0.003 80);
-  --secondary-foreground: oklch(0.22 0.008 80);
+  --secondary: oklch(0.955 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
 
-  --muted: oklch(0.968 0.003 80);
-  --muted-foreground: oklch(0.5 0.012 80); /* 6.00:1 on background, 5.47:1 on muted */
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.47 0 0);
 
-  --accent: oklch(0.968 0.003 80);
-  --accent-foreground: oklch(0.22 0.008 80);
+  --accent: oklch(0.945 0 0);
+  --accent-foreground: oklch(0.2 0 0);
 
   --destructive: oklch(0.52 0.19 27); /* white text: 5.89:1 */
   --destructive-foreground: oklch(0.99 0.005 27);
@@ -68,11 +68,9 @@
   --warning: oklch(0.68 0.14 75);
   --warning-foreground: oklch(0.22 0.008 80);
 
-  --border: oklch(0.915 0.004 80);
-  --input: oklch(0.915 0.004 80);
-  /* Slightly lighter than primary: a focus ring sits against the control edge
-     and needs to separate from it, not match it. 4.49:1 on background. */
-  --ring: oklch(0.55 0.11 196);
+  --border: oklch(0.89 0 0);
+  --input: oklch(0.86 0 0);
+  --ring: oklch(0.59 0.2 38);
 }
 
 /*
@@ -121,6 +119,17 @@
 /* Exposes the tokens above as Tailwind utilities: bg-primary, text-muted-foreground, … */
 @theme inline {
   --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-shell: var(--shell);
+  --color-nav-active: var(--nav-active);
+  --color-nav-hover: var(--nav-hover);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-avatar-1: var(--avatar-1);
+  --color-avatar-2: var(--avatar-2);
+  --color-avatar-3: var(--avatar-3);
+  --color-avatar-4: var(--avatar-4);
+  --color-avatar-foreground: var(--avatar-foreground);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -154,4 +163,15 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   background: var(--background);
   color: var(--foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
 }

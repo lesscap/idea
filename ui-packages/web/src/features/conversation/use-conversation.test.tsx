@@ -87,7 +87,7 @@ describe('a draft conversation', () => {
     vi.mocked(get).mockResolvedValue({ items: [WORKER] })
     vi.mocked(post).mockResolvedValue({ cid: 'abc123' })
     const created = vi.fn()
-    const { result } = renderHook(() => useConversation(5, 'new', created))
+    const { result } = renderHook(() => useConversation({ type: 'app', appId: 5 }, 'new', created))
 
     await waitFor(() => expect(result.current.selectedWorkerId).toBe(7))
     expect(result.current.modelConfiguration.efforts).toEqual({ 'glm-5.2': [] })
@@ -116,7 +116,9 @@ describe('a persisted conversation', () => {
       })
     vi.mocked(post).mockResolvedValue({ requested: true })
 
-    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+    const { result } = renderHook(() =>
+      useConversation({ type: 'app', appId: 5 }, 'conversation-1', vi.fn()),
+    )
 
     await waitFor(() => expect(result.current.activityLive).toBe(true))
     await act(() => result.current.stop())
@@ -157,7 +159,9 @@ describe('a persisted conversation', () => {
       })
     vi.mocked(post).mockResolvedValue({ requested: true })
 
-    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+    const { result } = renderHook(() =>
+      useConversation({ type: 'app', appId: 5 }, 'conversation-1', vi.fn()),
+    )
 
     await waitFor(() => expect(result.current.activityLive).toBe(true))
     act(() => TestEventSource.instances[0]?.open())
@@ -223,7 +227,9 @@ describe('a persisted conversation', () => {
         modelConfiguration: MODEL_CONFIGURATION,
       })
 
-    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+    const { result } = renderHook(() =>
+      useConversation({ type: 'app', appId: 5 }, 'conversation-1', vi.fn()),
+    )
 
     await waitFor(() => expect(result.current.pending).toHaveLength(2))
     await act(() => result.current.loadOlder())
@@ -260,7 +266,9 @@ describe('a persisted conversation', () => {
         modelConfiguration: MODEL_CONFIGURATION,
       })
 
-    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+    const { result } = renderHook(() =>
+      useConversation({ type: 'app', appId: 5 }, 'conversation-1', vi.fn()),
+    )
 
     await waitFor(() => expect(result.current.phase).toBe('queued'))
     expect(result.current.connection).toBe('connecting')
@@ -286,7 +294,9 @@ describe('a persisted conversation', () => {
         modelConfiguration: MODEL_CONFIGURATION,
       })
 
-    const { result } = renderHook(() => useConversation(5, 'conversation-1', vi.fn()))
+    const { result } = renderHook(() =>
+      useConversation({ type: 'app', appId: 5 }, 'conversation-1', vi.fn()),
+    )
 
     await waitFor(() => expect(result.current.connection).toBe('error'))
     act(() => result.current.retryConnection())
