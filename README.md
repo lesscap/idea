@@ -38,7 +38,7 @@ which workspace it may serve, because it cannot name its own — and the name of
 provider from the registry:
 
 ```bash
-pnpm --filter @idea/core seed:system      # built-in providers; safe in production
+pnpm --filter @idea/core seed:system      # providers and idempotent system backfills
 
 # Credentials go in web-packages/worker/.env, named by each provider's tokenEnv:
 #   IDEA_PROVIDER_GLM_TOKEN=…
@@ -56,8 +56,10 @@ pnpm --filter @idea/core seed:demo:requirements
 pnpm --filter @idea/server seed:demo:requirement-media
 ```
 
-`seed:providers` remains an alias for `seed:system` for compatibility. Demo
-commands refuse production-looking databases.
+`seed:system` is safe to rerun in production: besides built-in providers, it
+backfills workspace-owned internal Apps and converges legacy draft Apps to the
+current active default. `seed:providers` remains an alias for compatibility.
+Demo commands refuse production-looking databases.
 
 Without one, a message sits queued and nothing answers — which is what
 `scripts/conversation.mjs` says when it times out.
@@ -160,7 +162,10 @@ ui-packages/web/src/
 │   ├── workspace/   workspace picker, invite dialog
 │   ├── conversation/ the panel, its transcript reducer and stream hook
 │   └── app/         app list, create dialog
-├── shell/           routing, auth guards, layout, cross-feature composition
+├── shell/           routing, auth guards and cross-feature composition
+│   ├── components/  account, workspace and brand controls shared by both shells
+│   ├── workspace/   signed-in home, apps, workspace chat and management shell
+│   └── app-studio/  app chat, resource navigation, tabs and app-studio URL state
 ├── lib/             non-React utilities (fetch wrapper, cn)
 └── styles.css       Tailwind entry, design tokens, @theme bindings
 ```
@@ -178,6 +183,13 @@ Each layer answers one question about what belongs in it:
 | `parts/` | shared like `ui/`, but knows a domain type — so it cannot live there |
 | `features/` | consumes the layers above and declares nothing shared |
 | `shell/` | two features need composing, so they get composed here |
+
+`WorkspaceShell` and `AppStudioShell` are separate layout boundaries. They may
+both import `shell/components/`, but do not import one another. Workspace chat
+is persisted against an internal App referenced by `Workspace.systemAppId`;
+that App is resolved only by `/api/web/workspace/*` and is excluded from every
+public App list and mutation. Run `seed:system` after migrations to backfill the
+internal App for existing workspaces and converge legacy App defaults.
 
 The may-import graph is in `CLAUDE.md`, written once so it does not drift between
 two files.

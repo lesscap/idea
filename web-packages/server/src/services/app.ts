@@ -45,6 +45,7 @@ export type AppService = {
   listInWorkspace: (workspaceId: Id, query: PageQuery) => Promise<Paged<AppRecord>>
   getByIdInWorkspace: (workspaceId: Id, appId: Id) => Promise<AppRecord | null>
   getBySlugInWorkspace: (workspaceId: Id, slug: string) => Promise<AppRecord | null>
+  getSystemInWorkspace: (workspaceId: Id) => Promise<AppRecord | null>
   create: (input: AppCreate) => Promise<AppWriteResult>
   update: (workspaceId: Id, appId: Id, patch: AppPatch) => Promise<AppUpdateResult>
   remove: (workspaceId: Id, appId: Id) => Promise<AppDeleteResult>
@@ -115,23 +116,34 @@ export const createAppService: Service<AppService> = app => {
       const { offset, limit } = toOffset(query)
       const [rows, total] = await Promise.all([
         app.$prisma.app.findMany({
-          where: { workspaceId },
+          where: { workspaceId, systemForWorkspace: null },
           orderBy: { updatedAt: 'desc' },
           skip: offset,
           take: limit,
         }),
-        app.$prisma.app.count({ where: { workspaceId } }),
+        app.$prisma.app.count({ where: { workspaceId, systemForWorkspace: null } }),
       ])
       return paged(rows.map(toApp), total, query)
     },
 
     getBySlugInWorkspace: async (workspaceId, slug) => {
-      const row = await app.$prisma.app.findFirst({ where: { workspaceId, slug } })
+      const row = await app.$prisma.app.findFirst({
+        where: { workspaceId, slug, systemForWorkspace: null },
+      })
       return row ? toApp(row) : null
     },
 
     getByIdInWorkspace: async (workspaceId, appId) => {
-      const row = await app.$prisma.app.findFirst({ where: { workspaceId, id: appId } })
+      const row = await app.$prisma.app.findFirst({
+        where: { workspaceId, id: appId, systemForWorkspace: null },
+      })
+      return row ? toApp(row) : null
+    },
+
+    getSystemInWorkspace: async workspaceId => {
+      const row = await app.$prisma.app.findFirst({
+        where: { workspaceId, systemForWorkspace: { is: { id: workspaceId } } },
+      })
       return row ? toApp(row) : null
     },
 
@@ -149,7 +161,7 @@ export const createAppService: Service<AppService> = app => {
     update: async (workspaceId, appId, patch) => {
       try {
         const row = await app.$prisma.app.update({
-          where: { id: appId, workspaceId },
+          where: { id: appId, workspaceId, systemForWorkspace: null },
           data: patch,
         })
         return { kind: 'ok', app: toApp(row) }
@@ -158,7 +170,7 @@ export const createAppService: Service<AppService> = app => {
         if (!hasPrismaCode(error, 'P2002')) throw error
 
         const current = await app.$prisma.app.findFirst({
-          where: { id: appId, workspaceId },
+          where: { id: appId, workspaceId, systemForWorkspace: null },
           select: { id: true },
         })
         if (!current) return { kind: 'not_found' }
@@ -172,7 +184,7 @@ export const createAppService: Service<AppService> = app => {
     remove: (workspaceId, appId) =>
       app.$prisma.$transaction(async tx => {
         const found = await tx.app.findFirst({
-          where: { id: appId, workspaceId },
+          where: { id: appId, workspaceId, systemForWorkspace: null },
           select: { id: true },
         })
         if (!found) return { kind: 'not_found' }
@@ -185,7 +197,9 @@ export const createAppService: Service<AppService> = app => {
         })
         if (activeTurns > 0) return { kind: 'busy' }
 
-        const deleted = await tx.app.deleteMany({ where: { id: found.id, workspaceId } })
+        const deleted = await tx.app.deleteMany({
+          where: { id: found.id, workspaceId, systemForWorkspace: null },
+        })
         return deleted.count === 0 ? { kind: 'not_found' } : { kind: 'ok' }
       }),
   }

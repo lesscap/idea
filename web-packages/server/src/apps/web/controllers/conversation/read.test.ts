@@ -8,8 +8,8 @@ import type { ProviderService } from '../../../../services/provider.ts'
 import type { TurnService } from '../../../../services/turn.ts'
 import type { WorkerOption, WorkerService } from '../../../../services/worker.ts'
 import type { WorkspaceService } from '../../../../services/workspace.ts'
-import { json, mountController, okData } from '../../test-support.ts'
-import { ConversationsController } from './index.ts'
+import { failure, json, mountController, okData } from '../../test-support.ts'
+import { ConversationsController, WorkspaceConversationsController } from './index.ts'
 
 // Only the calls these two routes make are stubbed. A cast is unavoidable —
 // each service type is a whole interface — but going through Partial<T> keeps
@@ -315,5 +315,41 @@ describe('conversation app scoping', () => {
         effort: null,
       },
     })
+  })
+})
+
+describe('workspace conversation scoping', () => {
+  it('resolves the hidden workspace app before listing conversations', async () => {
+    const listForApp = vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 20 }))
+    const app = mountController(
+      WorkspaceConversationsController,
+      {
+        $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
+        $app: stub<AppService>({ getSystemInWorkspace: async () => currentApp }),
+        $conversation: stub<ConversationService>({ listForApp }),
+      },
+      { userId: 7, workspaceId: 11 },
+      { guarded: true, prefix: '/workspace/conversations' },
+    )
+
+    const response = await app.request('/workspace/conversations')
+    expect(response.status).toBe(200)
+    expect(listForApp).toHaveBeenCalledWith(currentApp.id, { page: 1, pageSize: 20 })
+  })
+
+  it('reports a missing system app as an observable server failure', async () => {
+    const app = mountController(
+      WorkspaceConversationsController,
+      {
+        $workspace: stub<WorkspaceService>({ roleOf: async () => 'member' }),
+        $app: stub<AppService>({ getSystemInWorkspace: async () => null }),
+      },
+      { userId: 7, workspaceId: 11 },
+      { guarded: true, prefix: '/workspace/conversations' },
+    )
+
+    const response = await app.request('/workspace/conversations')
+    expect(response.status).toBe(500)
+    expect((await failure(response)).code).toBe('workspace_app_missing')
   })
 })

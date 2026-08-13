@@ -16,8 +16,8 @@ export type SharedStateData = {
   user: CurrentUser | null
   workspaceId: Id | null
   role: Role | null
-  sideCollapsed: boolean
-  conversationCollapsed: boolean
+  workspaceSidebarCollapsed: boolean
+  studioChatCollapsed: boolean
 }
 
 const DEFAULTS: SharedStateData = {
@@ -25,8 +25,8 @@ const DEFAULTS: SharedStateData = {
   user: null,
   workspaceId: null,
   role: null,
-  sideCollapsed: false,
-  conversationCollapsed: false,
+  workspaceSidebarCollapsed: false,
+  studioChatCollapsed: false,
 }
 
 const buildStore = (initial: Partial<SharedStateData>) =>

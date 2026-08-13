@@ -1,7 +1,8 @@
-import type { ConversationSummary, Id, Paged } from '@idea/shared'
+import type { ConversationSummary } from '@idea/shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useLocaleControl } from '../../i18n'
-import { get } from '../../lib/request'
+import { listConversations } from './api'
+import type { ConversationScope } from './scope'
 
 // The conversations in this workspace.
 //
@@ -32,13 +33,15 @@ type PageInfo = { total: number; page: number; pageSize: number }
 const UNREAD: PageInfo = { total: 0, page: 0, pageSize: 0 }
 
 export const ConversationList = ({
-  appId,
+  scope,
   conversationId,
   onSelect,
+  showHeading = true,
 }: {
-  appId: Id
+  scope: ConversationScope
   conversationId: string | null
   onSelect: (id: string) => void
+  showHeading?: boolean
 }) => {
   const __ = useLocale()
   const { locale } = useLocaleControl()
@@ -47,18 +50,19 @@ export const ConversationList = ({
 
   const fetchPage = useCallback(
     (page: number) =>
-      get<Paged<ConversationSummary>>(`/apps/${appId}/conversations?page=${page}`)
+      listConversations(scope, page)
         .then(data => {
           // Page 1 is a re-read and replaces; anything beyond it is "load more"
           // and appends.
           setItems(prev => (page === 1 ? [...data.items] : mergeConversations(prev, data.items)))
           setInfo({ total: data.total, page: data.page, pageSize: data.pageSize })
         })
-        .catch(() => {
+        .catch(error => {
           // A list that failed to refresh is better left showing what it had
           // than emptied: the selection in the URL still resolves either way.
+          console.error('conversation list refresh failed', error)
         }),
-    [appId],
+    [scope],
   )
 
   // The first page, once. `fetchPage` is stable, so this does not re-run when
@@ -113,11 +117,13 @@ export const ConversationList = ({
       data-page={info.page}
       data-total={info.total}
     >
-      <div className="flex items-center pt-2 pl-2">
-        <span className="font-medium text-muted-foreground text-xs">
-          {__('resource.conversations')}
-        </span>
-      </div>
+      {showHeading && (
+        <div className="flex items-center pt-2 pl-2">
+          <span className="font-medium text-muted-foreground text-xs">
+            {__('resource.conversations')}
+          </span>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.map(item => (

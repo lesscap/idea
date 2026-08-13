@@ -2,27 +2,19 @@ import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { SharedStoreProvider } from '../store'
 import { readLayoutState } from './storage'
-import {
-  useConversationCollapsed,
-  useSetConversationCollapsed,
-  useSideCollapsed,
-  useToggleSide,
-} from './use-layout'
+import { useStudioChat, useWorkspaceSidebar } from './use-layout'
 
 const LayoutConsumer = () => {
-  const sideCollapsed = useSideCollapsed()
-  const conversationCollapsed = useConversationCollapsed()
-  const toggleSide = useToggleSide()
-  const setConversationCollapsed = useSetConversationCollapsed()
-
+  const [workspace, setWorkspace] = useWorkspaceSidebar()
+  const [chat, setChat] = useStudioChat()
   return (
     <>
-      <output data-testid="layout">{`${sideCollapsed}:${conversationCollapsed}`}</output>
-      <button type="button" onClick={toggleSide}>
-        side
+      <output data-testid="layout">{`${workspace}:${chat}`}</output>
+      <button type="button" onClick={() => setWorkspace(true)}>
+        workspace
       </button>
-      <button type="button" onClick={() => setConversationCollapsed(true)}>
-        conversation
+      <button type="button" onClick={() => setChat(true)}>
+        chat
       </button>
     </>
   )
@@ -38,23 +30,14 @@ const draw = () =>
 describe('layout state adapters', () => {
   beforeEach(() => localStorage.clear())
 
-  it('initializes from persisted preferences', () => {
-    localStorage.setItem('idea.shell.side-collapsed', '1')
+  it('keeps the workspace sidebar and studio chat independent', async () => {
     draw()
-
-    expect(screen.getByTestId('layout')).toHaveTextContent('true:false')
-  })
-
-  it('updates shared state and persists the preference', async () => {
-    draw()
-
     await act(async () => {
-      screen.getByRole('button', { name: 'side' }).click()
-      screen.getByRole('button', { name: 'conversation' }).click()
+      screen.getByRole('button', { name: 'workspace' }).click()
+      screen.getByRole('button', { name: 'chat' }).click()
     })
-
     expect(screen.getByTestId('layout')).toHaveTextContent('true:true')
-    expect(localStorage.getItem('idea.shell.side-collapsed')).toBe('1')
-    expect(localStorage.getItem('idea.shell.conversation-collapsed')).toBe('1')
+    expect(localStorage.getItem('idea.workspace.sidebar-collapsed')).toBe('1')
+    expect(localStorage.getItem('idea.studio.chat-collapsed')).toBe('1')
   })
 })

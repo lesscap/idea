@@ -138,14 +138,16 @@ model PlatformAdmin {
 
 // The tenant boundary. Every query for anything below it filters by membership.
 model Workspace {
-  id        Int      @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
+  systemAppId Int?     @unique
   // Not globally unique: two different customers may both have a "Design" team.
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   users       UserWorkspace[]
-  apps        App[]
+  apps        App[]             @relation("WorkspaceApps")
+  systemApp   App?              @relation("WorkspaceSystemApp", fields: [systemAppId], references: [id], onDelete: SetNull)
   invites     Invite[]
   preferredBy UserPreference[]
   workers     Worker[]
@@ -180,13 +182,14 @@ model App {
   slug                String
   name                String
   description         String?
-  status              AppStatus @default(draft)
+  status              AppStatus @default(active)
   requirementSequence Int       @default(0)
   createdById         Int
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace          Workspace      @relation("WorkspaceApps", fields: [workspaceId], references: [id], onDelete: Cascade)
+  systemForWorkspace Workspace?     @relation("WorkspaceSystemApp")
   createdBy     User           @relation(fields: [createdById], references: [id])
   conversations Conversation[]
   files         File[]

@@ -22,12 +22,10 @@ type Props = {
   onUpdated: (app: App) => void
 }
 
-export const EditAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => {
+export const RenameAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => {
   const __ = useLocale()
   const errorMessage = useErrorMessage()
   const [name, setName] = useState(app.name)
-  const [slug, setSlug] = useState(app.slug)
-  const [description, setDescription] = useState(app.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -39,8 +37,6 @@ export const EditAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => 
       onUpdated(
         await updateApp(app.id, {
           name,
-          slug,
-          description: description || null,
         }),
       )
       onOpenChange(false)
@@ -56,45 +52,21 @@ export const EditAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => 
       <DialogContent closeLabel={__('common.close')}>
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>{__('app.edit')}</DialogTitle>
-            <DialogDescription>{__('app.editDescription')}</DialogDescription>
+            <DialogTitle>{__('app.rename')}</DialogTitle>
+            <DialogDescription>{__('app.renameDescription')}</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-app-name">{__('app.name')}</Label>
+              <Label htmlFor="rename-app-name">{__('app.name')}</Label>
               <Input
-                id="edit-app-name"
-                data-testid="edit-app-name"
+                id="rename-app-name"
+                data-testid="rename-app-name"
                 value={name}
                 onChange={event => setName(event.target.value)}
                 placeholder={__('app.namePlaceholder')}
                 required
                 autoFocus
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-app-slug">{__('app.slug')}</Label>
-              <Input
-                id="edit-app-slug"
-                data-testid="edit-app-slug"
-                value={slug}
-                onChange={event => setSlug(event.target.value)}
-                placeholder={__('app.slugPlaceholder')}
-                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                minLength={2}
-                maxLength={48}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-app-description">{__('app.description')}</Label>
-              <Input
-                id="edit-app-description"
-                data-testid="edit-app-description"
-                value={description}
-                onChange={event => setDescription(event.target.value)}
-                placeholder={__('app.descriptionPlaceholder')}
               />
             </div>
             {error && (
@@ -113,8 +85,8 @@ export const EditAppDialog = ({ app, open, onOpenChange, onUpdated }: Props) => 
             >
               {__('common.cancel')}
             </Button>
-            <Button type="submit" disabled={busy} data-testid="edit-app-submit">
-              {busy ? __('app.saving') : __('app.save')}
+            <Button type="submit" disabled={busy} data-testid="rename-app-submit">
+              {busy ? __('app.saving') : __('app.rename')}
             </Button>
           </DialogFooter>
         </form>

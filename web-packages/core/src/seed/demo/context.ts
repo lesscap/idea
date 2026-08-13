@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { hashPassword } from '../../crypto.ts'
+import { ensureWorkspaceSystemApp } from '../../system-app.ts'
 
 export const DEMO = {
   workspace: '演示空间',
@@ -50,6 +51,8 @@ export const ensureDemoContext = async (
     })
     done.push('joined demo workspace as member')
   }
+
+  await ensureWorkspaceSystemApp(tx, workspace.id, member.id)
 
   const existingApp = await tx.app.findFirst({
     where: { workspaceId: workspace.id, slug: DEMO.app.slug },

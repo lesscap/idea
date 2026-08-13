@@ -1,4 +1,9 @@
 import type { Controller } from '../../../../types.ts'
+import {
+  type AppScopeResolver,
+  resolveProductAppScope,
+  resolveWorkspaceAppScope,
+} from '../../services/scope/app.ts'
 import { registerMessages } from './messages.ts'
 import { registerModelConfiguration } from './model.ts'
 import { registerRead } from './read.ts'
@@ -9,10 +14,15 @@ import { registerWorkerAssignment } from './worker.ts'
 // came to: reading the resource, watching it live, and putting something into
 // it. The live stream in particular is long enough that having it beside the
 // list endpoint made both harder to find.
-export const ConversationsController: Controller = app => {
-  registerRead(app)
-  registerStream(app)
-  registerMessages(app)
-  registerModelConfiguration(app)
-  registerWorkerAssignment(app)
-}
+const conversationsController =
+  (resolveApp: AppScopeResolver): Controller =>
+  app => {
+    registerRead(resolveApp)(app)
+    registerStream(resolveApp)(app)
+    registerMessages(resolveApp)(app)
+    registerModelConfiguration(resolveApp)(app)
+    registerWorkerAssignment(resolveApp)(app)
+  }
+
+export const ConversationsController = conversationsController(resolveProductAppScope)
+export const WorkspaceConversationsController = conversationsController(resolveWorkspaceAppScope)

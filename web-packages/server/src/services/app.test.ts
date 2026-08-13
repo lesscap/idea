@@ -1,3 +1,4 @@
+import { ensureWorkspaceSystemApp } from '@idea/core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createAppService } from './app.ts'
 import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
@@ -34,6 +35,22 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
     await expect(
       db.app.$app.update(db.workspaceId, second.app.id, { name: 'Test app' }),
     ).resolves.toEqual({ kind: 'name_taken' })
+  })
+
+  it('keeps the workspace system app outside every public app operation', async () => {
+    const systemApp = await db.prisma.$transaction(tx =>
+      ensureWorkspaceSystemApp(tx, db.workspaceId, db.userId),
+    )
+    const page = await db.app.$app.listInWorkspace(db.workspaceId, { page: 1, pageSize: 20 })
+
+    expect(page.items.map(item => item.id)).not.toContain(systemApp.id)
+    await expect(db.app.$app.getByIdInWorkspace(db.workspaceId, systemApp.id)).resolves.toBeNull()
+    await expect(db.app.$app.remove(db.workspaceId, systemApp.id)).resolves.toEqual({
+      kind: 'not_found',
+    })
+    await expect(db.app.$app.getSystemInWorkspace(db.workspaceId)).resolves.toMatchObject({
+      id: systemApp.id,
+    })
   })
 
   it('blocks active work and otherwise deletes the app data', async () => {

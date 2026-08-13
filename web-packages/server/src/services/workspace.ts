@@ -1,4 +1,10 @@
-import { hashPassword, type Prisma, randomToken, sha256 } from '@idea/core'
+import {
+  ensureWorkspaceSystemApp,
+  hashPassword,
+  type Prisma,
+  randomToken,
+  sha256,
+} from '@idea/core'
 import type {
   CreatedInvite,
   Id,
@@ -123,9 +129,13 @@ export const createWorkspaceService: Service<WorkspaceService> = app => {
     },
 
     create: async (name, ownerId) => {
-      const ws = await app.$prisma.workspace.create({
-        data: { name, users: { create: { userId: ownerId, role: 'admin' } } },
-        select: { id: true, name: true, createdAt: true },
+      const ws = await app.$prisma.$transaction(async tx => {
+        const created = await tx.workspace.create({
+          data: { name, users: { create: { userId: ownerId, role: 'admin' } } },
+          select: { id: true, name: true, createdAt: true },
+        })
+        await ensureWorkspaceSystemApp(tx, created.id, ownerId)
+        return created
       })
       return { ...ws, createdAt: ws.createdAt.toISOString(), role: 'admin' }
     },

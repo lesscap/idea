@@ -1,19 +1,24 @@
-import type { Attachment, Id } from '@idea/shared'
+import type { Attachment } from '@idea/shared'
 import { ChevronLeft } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useLocale } from '../../i18n'
-import { uploadAppFile } from '../../lib/file-upload'
 import { AppMarkdown } from '../../parts/app-markdown'
 import { Button } from '../../ui'
 import type { FileDescriptor } from '../file/api'
+import { uploadConversationFile } from '../file/upload'
 import { groupActivity, isActivityGroup, type StreamItem } from './activity'
 import { ActivityBlock, Step } from './activity-group'
 import { SentAttachments } from './attachment-view'
 import { Composer } from './composer'
 import { ConversationStatus } from './conversation-status'
+import type { ConversationScope } from './scope'
 import { filesInBubbles } from './transcript'
 import { useConversation } from './use-conversation'
-import { NewConversationWorker, RecoveryWorker } from './worker-picker'
+import {
+  NewConversationWorker,
+  NewConversationWorkerControl,
+  RecoveryWorker,
+} from './worker-picker'
 
 // Where the requirement actually gets worked out.
 //
@@ -119,16 +124,20 @@ const Drawn = ({
 }
 
 export const ConversationPanel = ({
-  appId,
+  scope,
   conversationId,
   hidden,
+  presentation = 'column',
+  showHeader = true,
   onConversationCreated,
   onCollapse,
   onOpenFile,
 }: {
-  appId: Id
+  scope: ConversationScope
   conversationId: string | null
   hidden: boolean
+  presentation?: 'column' | 'launcher'
+  showHeader?: boolean
   onConversationCreated: (id: string) => void
   onCollapse: () => void
   onOpenFile: (file: FileDescriptor) => void
@@ -161,8 +170,7 @@ export const ConversationPanel = ({
     loadOlder,
     send,
     withdraw,
-  } = useConversation(appId, conversationId, onConversationCreated)
-  const bottom = useRef<HTMLDivElement>(null)
+  } = useConversation(scope, conversationId, onConversationCreated)
   const scroller = useRef<HTMLDivElement>(null)
   // The scroll height recorded just before a "load earlier" read, consumed by
   // the effect below once the events land.
@@ -181,9 +189,8 @@ export const ConversationPanel = ({
   const isNew = conversationId === 'new'
   const needsRecovery =
     !isNew && assignment !== null && (assignment.worker === null || !assignment.worker.online)
-  const composerDisabled = isNew
-    ? workersStatus !== 'ready' || selectedWorkerId === null
-    : assignment?.worker === null || assignment === null
+  const composerDisabled = !isNew && (assignment?.worker === null || assignment === null)
+  const composerSendBlocked = isNew && (workersStatus !== 'ready' || selectedWorkerId === null)
 
   const showOlder = () => {
     anchor.current = scroller.current?.scrollHeight ?? 0
@@ -209,14 +216,16 @@ export const ConversationPanel = ({
       return
     }
     // Anything else is the conversation growing at the bottom. Follow it.
-    bottom.current?.scrollIntoView({ behavior: 'smooth' })
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [stream.length, phase, connection])
 
   return (
     <div
-      className={`flex min-h-0 min-w-0 flex-1 flex-col border-border border-r bg-background ${
-        hidden ? 'invisible' : ''
-      }`}
+      className={`flex min-w-0 flex-col ${
+        presentation === 'column'
+          ? 'min-h-0 flex-1 border-border border-r bg-background'
+          : 'bg-transparent'
+      } ${hidden ? 'invisible' : ''}`}
       inert={hidden}
       aria-hidden={hidden}
       data-testid="conversation-column"
@@ -225,21 +234,29 @@ export const ConversationPanel = ({
       data-status={connection}
       data-phase={phase}
     >
-      <div className="flex h-10 shrink-0 items-center justify-between border-border border-b px-3">
-        <span className="truncate font-medium text-sm">
-          {conversationId === 'new' ? __('shell.newConversation') : __('resource.conversations')}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="px-2"
-          data-testid="conversation-collapse"
-          aria-label={__('shell.collapseConversation')}
-          onClick={onCollapse}
+      {showHeader && (
+        <div
+          className={`flex h-10 shrink-0 items-center justify-between px-3 ${
+            presentation === 'column' ? 'border-border border-b' : ''
+          }`}
         >
-          <ChevronLeft />
-        </Button>
-      </div>
+          <span className="truncate font-medium text-sm">
+            {conversationId === 'new' ? __('shell.newConversation') : __('resource.conversations')}
+          </span>
+          {presentation === 'column' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2"
+              data-testid="conversation-collapse"
+              aria-label={__('shell.collapseConversation')}
+              onClick={onCollapse}
+            >
+              <ChevronLeft />
+            </Button>
+          )}
+        </div>
+      )}
 
       {conversationId === null ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center text-muted-foreground text-sm">
@@ -247,46 +264,48 @@ export const ConversationPanel = ({
         </div>
       ) : (
         <>
-          <div
-            ref={scroller}
-            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
-            data-testid="transcript"
-            data-has-older={hasOlder}
-          >
-            {/* Opening reads a window of the most recent events. This is the way
-                back through a long conversation. */}
-            {hasOlder && (
-              <button
-                type="button"
-                className="shrink-0 self-center rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-muted disabled:opacity-60"
-                data-testid="conversation-load-earlier"
-                disabled={loadingOlder}
-                onClick={showOlder}
-              >
-                {__('shell.loadEarlier')}
-              </button>
-            )}
-            {isNew && (
-              <div className="flex min-h-52 flex-1 items-center justify-center px-4 py-8">
-                <NewConversationWorker
-                  workers={workers}
-                  status={workersStatus}
-                  selectedId={selectedWorkerId}
-                  onSelect={selectWorker}
-                  onRefresh={() => void refreshWorkers()}
-                />
-              </div>
-            )}
-            {stream.map(item => (
-              <Drawn key={item.key} item={item} files={files} onOpenFile={onOpenFile} />
-            ))}
-            <ConversationStatus
-              connection={connection}
-              phase={statusPhase}
-              onRetry={retryConnection}
-            />
-            <div ref={bottom} />
-          </div>
+          {presentation === 'column' && (
+            <div
+              ref={scroller}
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
+              data-testid="transcript"
+              data-has-older={hasOlder}
+            >
+              {/* Opening reads a window of the most recent events. This is the way
+                  back through a long conversation. */}
+              {hasOlder && (
+                <button
+                  type="button"
+                  className="shrink-0 self-center rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-muted disabled:opacity-60"
+                  data-testid="conversation-load-earlier"
+                  disabled={loadingOlder}
+                  onClick={showOlder}
+                >
+                  {__('shell.loadEarlier')}
+                </button>
+              )}
+              {isNew && (
+                <div className="flex min-h-52 flex-1 items-center justify-center px-4 py-8">
+                  <NewConversationWorker
+                    workers={workers}
+                    status={workersStatus}
+                    selectedId={selectedWorkerId}
+                    onSelect={selectWorker}
+                    onRefresh={() => void refreshWorkers()}
+                  />
+                </div>
+              )}
+              {stream.map(item => (
+                <Drawn key={item.key} item={item} files={files} onOpenFile={onOpenFile} />
+              ))}
+              <ConversationStatus
+                connection={connection}
+                phase={statusPhase}
+                onRetry={retryConnection}
+              />
+              <div />
+            </div>
+          )}
 
           {needsRecovery && assignment && (
             <RecoveryWorker
@@ -295,7 +314,11 @@ export const ConversationPanel = ({
               status={workersStatus}
               busy={assigningWorker || working}
               failed={workerAssignmentFailed}
-              onAssign={workerId => void assignWorker(workerId).catch(() => {})}
+              onAssign={workerId =>
+                void assignWorker(workerId).catch(error => {
+                  console.error('Failed to assign conversation worker', error)
+                })
+              }
               onRefresh={() => void refreshWorkers()}
             />
           )}
@@ -304,7 +327,7 @@ export const ConversationPanel = ({
             key={conversationId}
             pending={pending}
             onSend={send}
-            onUpload={file => uploadAppFile(appId, file)}
+            onUpload={file => uploadConversationFile(scope, file)}
             onOpenFile={onOpenFile}
             onWithdraw={withdraw}
             running={activityLive}
@@ -313,6 +336,19 @@ export const ConversationPanel = ({
             onStop={stop}
             exclusiveSubmit={conversationId === 'new'}
             disabled={composerDisabled}
+            sendBlocked={composerSendBlocked}
+            layout={presentation === 'launcher' ? 'launcher' : 'panel'}
+            workerControl={
+              presentation === 'launcher' && isNew ? (
+                <NewConversationWorkerControl
+                  workers={workers}
+                  status={workersStatus}
+                  selectedId={selectedWorkerId}
+                  onSelect={selectWorker}
+                  onRefresh={() => void refreshWorkers()}
+                />
+              ) : undefined
+            }
             modelConfiguration={modelConfiguration}
             onConfigureModel={configureModel}
           />

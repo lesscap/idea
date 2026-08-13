@@ -3,7 +3,11 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../../i18n'
 import type { WorkerOption } from './use-conversation'
-import { NewConversationWorker, RecoveryWorker } from './worker-picker'
+import {
+  NewConversationWorker,
+  NewConversationWorkerControl,
+  RecoveryWorker,
+} from './worker-picker'
 
 const workers: WorkerOption[] = [
   {
@@ -67,5 +71,59 @@ describe('worker selection', () => {
 
     expect(onAssign).toHaveBeenCalledWith(1)
     expect(screen.queryByRole('option', { name: 'Mac mini' })).not.toBeInTheDocument()
+  })
+})
+
+describe('compact worker control', () => {
+  it('shows a loading state', () => {
+    locale(
+      <NewConversationWorkerControl
+        workers={[]}
+        status="loading"
+        selectedId={null}
+        onSelect={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTestId('worker-control-loading')).toBeDisabled()
+  })
+
+  it('changes the selected worker', () => {
+    const onSelect = vi.fn()
+    locale(
+      <NewConversationWorkerControl
+        workers={workers}
+        status="ready"
+        selectedId={1}
+        onSelect={onSelect}
+        onRefresh={vi.fn()}
+      />,
+    )
+
+    fireEvent.change(screen.getByTestId('worker-control'), { target: { value: '2' } })
+
+    expect(onSelect).toHaveBeenCalledWith(2)
+  })
+
+  it.each([
+    ['ready' as const, '当前没有在线工作站。'],
+    ['error' as const, '无法加载工作站。'],
+  ])('offers retry for the %s state', (status, label) => {
+    const onRefresh = vi.fn()
+    locale(
+      <NewConversationWorkerControl
+        workers={[]}
+        status={status}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onRefresh={onRefresh}
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('worker-control-retry'))
+
+    expect(screen.getByText(label)).toBeInTheDocument()
+    expect(onRefresh).toHaveBeenCalledOnce()
   })
 })

@@ -1,6 +1,6 @@
 import type { AgentEffort, UploadedFile } from '@idea/shared'
 import { ArrowUp, Clock3, Square, X } from 'lucide-react'
-import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { useLocale } from '../../i18n'
 import { Button } from '../../ui'
 import {
@@ -70,6 +70,9 @@ export const Composer = ({
   onStop,
   exclusiveSubmit,
   disabled,
+  sendBlocked = false,
+  layout = 'panel',
+  workerControl,
   modelConfiguration,
   onConfigureModel,
 }: {
@@ -84,6 +87,9 @@ export const Composer = ({
   onStop: () => Promise<void>
   exclusiveSubmit: boolean
   disabled: boolean
+  sendBlocked?: boolean
+  layout?: 'panel' | 'launcher'
+  workerControl?: ReactNode
   modelConfiguration: ModelConfiguration
   onConfigureModel: (model: string | null, effort: AgentEffort | null) => Promise<unknown>
 }) => {
@@ -127,7 +133,10 @@ export const Composer = ({
   )
 
   const canSend =
-    !disabled && !attachments.unsettled && (draft.trim() !== '' || attachments.ready.length > 0)
+    !disabled &&
+    !sendBlocked &&
+    !attachments.unsettled &&
+    (draft.trim() !== '' || attachments.ready.length > 0)
 
   const submit = () => {
     const text = draft.trim()
@@ -171,7 +180,10 @@ export const Composer = ({
   }
 
   return (
-    <div className="shrink-0 border-border border-t px-3 py-2.5">
+    <div
+      className={layout === 'launcher' ? 'shrink-0' : 'shrink-0 border-border border-t px-3 py-2.5'}
+      data-composer-layout={layout}
+    >
       {pending.length > 0 && (
         <section
           className="mb-2 rounded-lg bg-muted/50 p-2"
@@ -317,6 +329,7 @@ export const Composer = ({
         <div className="flex items-center justify-between gap-2 px-2 pb-2">
           <div className="flex min-w-0 items-center gap-1">
             <ComposerAttachmentButton state={attachments} />
+            {workerControl}
             <ModelControl
               configuration={modelConfiguration}
               disabled={disabled || submitting}

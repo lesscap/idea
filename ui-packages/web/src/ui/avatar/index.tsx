@@ -7,18 +7,9 @@ import { cn } from '../../lib/cn'
 // stored. When image upload arrives this stays as the fallback for everyone who
 // has not set one.
 
-// Fixed palette rather than a random hue: hand-picked values stay legible
-// against white text, whereas an arbitrary hue lands on yellows that do not.
-const COLOURS = [
-  'bg-teal-600',
-  'bg-sky-600',
-  'bg-indigo-600',
-  'bg-violet-600',
-  'bg-rose-600',
-  'bg-orange-600',
-  'bg-emerald-600',
-  'bg-cyan-700',
-] as const
+// Fixed semantic palette rather than Tailwind's saturated colour ramp: identity
+// remains stable without competing with the product's orange brand accent.
+const COLOURS = ['bg-avatar-1', 'bg-avatar-2', 'bg-avatar-3', 'bg-avatar-4'] as const
 
 // Deterministic and stable across reloads and machines — the point is that a
 // colleague is recognisable by colour, which only works if it never changes.
@@ -46,7 +37,7 @@ export const Avatar = ({ name, seed, className }: Props) => (
     aria-hidden
     className={cn(
       'inline-flex size-7 shrink-0 select-none items-center justify-center rounded-full',
-      'text-xs font-medium text-white',
+      'text-avatar-foreground text-xs font-medium',
       pick(seed),
       className,
     )}

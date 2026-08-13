@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ServiceApplication } from '../types.ts'
+import { databaseUrl, setupTestDb, type TestDb } from './test-support.ts'
 import { createWorkspaceService } from './workspace.ts'
 
 // resolveEntryWorkspace decides where every sign-in lands, and its two failure
@@ -70,5 +71,28 @@ describe('resolveEntryWorkspace', () => {
     const { svc } = service({ remembered: 7, stillMember: false, firstWorkspace: null })
 
     expect(await svc.resolveEntryWorkspace(1)).toBeNull()
+  })
+})
+
+describe.skipIf(!databaseUrl)('workspace creation', () => {
+  let db: TestDb
+
+  beforeAll(async () => {
+    db = await setupTestDb(app => ({ $workspace: createWorkspaceService(app) }))
+  }, 60_000)
+
+  afterAll(async () => db?.close())
+
+  it('creates the owner and internal app in one workspace transaction', async () => {
+    const created = await db.app.$workspace.create('New workspace', db.userId)
+    const workspace = await db.prisma.workspace.findUnique({
+      where: { id: created.id },
+      include: { users: true, systemApp: true },
+    })
+
+    expect(workspace?.users).toContainEqual(
+      expect.objectContaining({ userId: db.userId, role: 'admin' }),
+    )
+    expect(workspace?.systemApp).toMatchObject({ workspaceId: created.id, createdById: db.userId })
   })
 })

@@ -26,6 +26,7 @@ const services = (
     listInWorkspace: async (_ws, q) => paged([anApp], 1, q),
     getByIdInWorkspace: async () => anApp,
     getBySlugInWorkspace: async () => anApp,
+    getSystemInWorkspace: async () => null,
     create: async () => ({ kind: 'ok', app: anApp }),
     update: async () => ({ kind: 'ok', app: anApp }),
     remove: async () => ({ kind: 'ok' }),

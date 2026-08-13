@@ -15,3 +15,4 @@ export type {
 export { hashPassword, needsRehash, randomToken, sha256, verifyPassword } from './crypto.ts'
 export { createPrisma } from './db.ts'
 export { createScope, type Dispose, type Resource, type Scope } from './scope.ts'
+export { ensureWorkspaceSystemApp, type SystemAppIdentity } from './system-app.ts'
