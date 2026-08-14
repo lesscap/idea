@@ -15,7 +15,7 @@
     "db:reset": "prisma migrate reset --force",
     "seed:admin": "tsx src/seed/admin.ts",
     "seed:demo": "tsx src/seed/demo/index.ts",
-    "seed:demo:requirements": "tsx src/seed/demo/requirements.ts",
+    "seed:demo:issues": "tsx src/seed/demo/issues.ts",
     "seed:providers": "tsx src/seed/system/providers.ts",
     "seed:system": "tsx src/seed/system/index.ts"
   },

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildAppStudioUrl, closeTab, openTab, parseAppStudioUrl } from './app-studio-url'
+import {
+  buildAppStudioUrl,
+  closeTab,
+  openTab,
+  parseAppStudioUrl,
+  replaceTab,
+} from './app-studio-url'
 
 describe('app studio url', () => {
   it('treats Overview as a regular Dashboard resource', () => {
@@ -18,31 +24,41 @@ describe('app studio url', () => {
       pathname: '/apps/payroll/dashboard/overview',
       search: '?cid=cid-1',
     })
-    const withRequirements = openTab(initial, 'requirements')
-    const withDetail = openTab(withRequirements, 'requirements/R-1')
+    const withIssues = openTab(initial, 'issues')
+    const withDetail = openTab(withIssues, 'issues/1')
 
     expect(buildAppStudioUrl(withDetail)).toBe(
-      '/apps/payroll/dashboard/requirements/R-1?cid=cid-1&tab=overview&tab=requirements&tab=requirements/R-1',
+      '/apps/payroll/dashboard/issues/1?cid=cid-1&tab=overview&tab=issues&tab=issues/1',
     )
-    expect(closeTab(withDetail, 'requirements/R-1')).toMatchObject({
-      active: 'requirements',
-      tabs: ['overview', 'requirements'],
+    expect(closeTab(withDetail, 'issues/1')).toMatchObject({
+      active: 'issues',
+      tabs: ['overview', 'issues'],
       conversationId: 'cid-1',
     })
   })
 
   it('falls back to Overview after closing the last resource', () => {
-    const requirements = parseAppStudioUrl({
-      pathname: '/apps/payroll/dashboard/requirements',
+    const issues = parseAppStudioUrl({
+      pathname: '/apps/payroll/dashboard/issues',
       search: '',
     })
 
-    expect(closeTab(requirements, 'requirements')).toMatchObject({
+    expect(closeTab(issues, 'issues')).toMatchObject({
       active: 'overview',
       tabs: ['overview'],
     })
-    expect(buildAppStudioUrl(closeTab(requirements, 'requirements'))).toBe(
-      '/apps/payroll/dashboard/overview',
-    )
+    expect(buildAppStudioUrl(closeTab(issues, 'issues'))).toBe('/apps/payroll/dashboard/overview')
+  })
+
+  it('replaces a transient create tab with the created issue', () => {
+    const creating = parseAppStudioUrl({
+      pathname: '/apps/payroll/dashboard/issues/new',
+      search: '?tab=overview&tab=issues/new',
+    })
+
+    expect(replaceTab(creating, 'issues/42')).toMatchObject({
+      active: 'issues/42',
+      tabs: ['overview', 'issues/42'],
+    })
   })
 })

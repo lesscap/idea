@@ -34,7 +34,7 @@ export const AppMarkdown = ({
     if (!file) {
       return (
         <span role="img" aria-label={alt ?? ''} data-markdown-image-unavailable="true">
-          {__('requirement.imageUnavailable')}
+          {__('issue.imageUnavailable')}
         </span>
       )
     }
@@ -53,7 +53,7 @@ export const AppMarkdown = ({
       <button
         type="button"
         className="block max-w-full cursor-zoom-in text-left"
-        aria-label={__('requirement.openImage', file.filename)}
+        aria-label={__('issue.openImage', file.filename)}
         onClick={() => onOpenFile(file)}
       >
         {image}

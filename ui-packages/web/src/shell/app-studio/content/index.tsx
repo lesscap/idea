@@ -27,6 +27,7 @@ export const ContentColumn = ({ workspace, app }: { workspace: AppStudioWorkspac
                   app={app}
                   appId={app.id}
                   openResource={workspace.open}
+                  replaceResource={workspace.replace}
                   openFile={file => workspace.open(fileResourceRef(file))}
                   showConversation={workspace.showConversation}
                 />

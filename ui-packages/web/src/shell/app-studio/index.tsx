@@ -138,42 +138,46 @@ export const AppStudioShell = () => {
       className="flex h-dvh overflow-hidden bg-background text-foreground"
       data-testid="app-studio-shell"
     >
-      {mobile ? (
-        chatCollapsed ? (
-          content
-        ) : (
-          chat
-        )
-      ) : (
-        <Group
-          id={STUDIO_LAYOUT_ID}
-          orientation="horizontal"
-          defaultLayout={defaultLayout}
-          onLayoutChanged={onLayoutChanged}
-          className="min-h-0 min-w-0 flex-1"
+      <Group
+        id={STUDIO_LAYOUT_ID}
+        orientation="horizontal"
+        defaultLayout={defaultLayout}
+        onLayoutChanged={onLayoutChanged}
+        className="min-h-0 min-w-0 flex-1"
+      >
+        <Panel
+          id="studio-chat"
+          defaultSize="30"
+          minSize={mobile ? 0 : 320}
+          collapsible
+          collapsedSize={0}
+          panelRef={chatRef}
+          inert={chatCollapsed}
+          aria-hidden={chatCollapsed}
+          className={
+            mobile && chatCollapsed ? 'hidden' : 'flex min-h-0 min-w-0 flex-col'
+          }
+          onResize={(size, _, previous) =>
+            previous !== undefined && setChatCollapsed(size.inPixels < 1)
+          }
         >
-          <Panel
-            id="studio-chat"
-            defaultSize="30"
-            minSize={320}
-            collapsible
-            collapsedSize={0}
-            panelRef={chatRef}
-            inert={chatCollapsed}
-            aria-hidden={chatCollapsed}
-            className="flex min-h-0 min-w-0 flex-col"
-            onResize={(size, _, previous) =>
-              previous !== undefined && setChatCollapsed(size.inPixels < 1)
-            }
-          >
-            {chat}
-          </Panel>
-          <Separator className={chatCollapsed ? 'w-0' : 'w-px bg-border hover:bg-brand'} />
-          <Panel id="studio-content" minSize={360} className="flex min-h-0 min-w-0 flex-col">
-            {content}
-          </Panel>
-        </Group>
-      )}
+          {chat}
+        </Panel>
+        <Separator
+          className={mobile || chatCollapsed ? 'hidden' : 'w-px bg-border hover:bg-brand'}
+        />
+        <Panel
+          id="studio-content"
+          minSize={mobile ? 0 : 360}
+          inert={mobile && !chatCollapsed}
+          aria-hidden={mobile && !chatCollapsed}
+          className={
+            mobile && !chatCollapsed ? 'hidden' : 'flex min-h-0 min-w-0 flex-col'
+          }
+        >
+          {content}
+        </Panel>
+      </Group>
     </div>
   )
 }

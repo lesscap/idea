@@ -26,14 +26,6 @@ enum AppStatus {
   @@map("app_status")
 }
 
-enum RequirementStatus {
-  draft
-  active
-  archived
-
-  @@map("requirement_status")
-}
-
 enum FileStatus {
   pending
   ready
@@ -41,11 +33,42 @@ enum FileStatus {
   @@map("file_status")
 }
 
-enum RequirementFileRole {
+enum IssueState {
+  open
+  closed
+
+  @@map("issue_state")
+}
+
+enum IssueCloseReason {
+  completed
+  not_planned
+
+  @@map("issue_close_reason")
+}
+
+enum IssueType {
+  bug
+  feature
+  task
+
+  @@map("issue_type")
+}
+
+enum IssueFileRole {
   image
   attachment
 
-  @@map("requirement_file_role")
+  @@map("issue_file_role")
+}
+
+enum IssueActivityKind {
+  state_changed
+  type_changed
+  label_added
+  label_removed
+
+  @@map("issue_activity_kind")
 }
 
 enum TurnStatus {
@@ -78,18 +101,20 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  workspaces                    UserWorkspace[]
-  platformAdmin                 PlatformAdmin?
-  preference                    UserPreference?
-  invitesSent                   Invite[]              @relation("InvitedBy")
-  invitesAccepted               Invite[]              @relation("AcceptedBy")
-  appsCreated                   App[]
-  conversations                 Conversation[]
-  filesUploaded                 File[]
-  enrolments                    WorkerEnrolment[]
-  requirementsCreated           Requirement[]         @relation("RequirementCreatedBy")
-  requirementDraftsUpdated      RequirementDraft[]    @relation("RequirementDraftUpdatedBy")
-  requirementRevisionsConfirmed RequirementRevision[] @relation("RequirementRevisionConfirmedBy")
+  workspaces           UserWorkspace[]
+  platformAdmin        PlatformAdmin?
+  preference           UserPreference?
+  invitesSent          Invite[]          @relation("InvitedBy")
+  invitesAccepted      Invite[]          @relation("AcceptedBy")
+  appsCreated          App[]
+  conversations        Conversation[]
+  filesUploaded        File[]
+  enrolments           WorkerEnrolment[]
+  issuesCreated        Issue[]           @relation("IssueCreatedBy")
+  issuesUpdated        Issue[]           @relation("IssueUpdatedBy")
+  issuesClosed         Issue[]           @relation("IssueClosedBy")
+  issueRevisionsEdited IssueRevision[]   @relation("IssueRevisionEditedBy")
+  issueActivities      IssueActivity[]   @relation("IssueActivityActor")
 
   @@map("users")
 }
@@ -141,9 +166,9 @@ model Workspace {
   id          Int      @id @default(autoincrement())
   systemAppId Int?     @unique
   // Not globally unique: two different customers may both have a "Design" team.
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   users       UserWorkspace[]
   apps        App[]             @relation("WorkspaceApps")
@@ -175,25 +200,26 @@ model UserWorkspace {
   @@map("user_workspaces")
 }
 
-// A piece of software being created. Requirement numbering is local to it.
+// A piece of software being created. Issue numbering is local to it.
 model App {
-  id                  Int       @id @default(autoincrement())
-  workspaceId         Int
-  slug                String
-  name                String
-  description         String?
-  status              AppStatus @default(active)
-  requirementSequence Int       @default(0)
-  createdById         Int
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  slug          String
+  name          String
+  description   String?
+  status        AppStatus @default(active)
+  issueSequence Int       @default(0)
+  createdById   Int
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   workspace          Workspace      @relation("WorkspaceApps", fields: [workspaceId], references: [id], onDelete: Cascade)
   systemForWorkspace Workspace?     @relation("WorkspaceSystemApp")
-  createdBy     User           @relation(fields: [createdById], references: [id])
-  conversations Conversation[]
-  files         File[]
-  requirements  Requirement[]
+  createdBy          User           @relation(fields: [createdById], references: [id])
+  conversations      Conversation[]
+  files              File[]
+  issues             Issue[]
+  labels             Label[]
 
   @@unique([workspaceId, slug])
   @@unique([workspaceId, name])
@@ -216,17 +242,17 @@ model File {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  app                  App                       @relation(fields: [appId], references: [id], onDelete: Cascade)
-  uploadedBy           User                      @relation(fields: [uploadedById], references: [id])
-  requirementDrafts    RequirementDraftFile[]
-  requirementRevisions RequirementRevisionFile[]
+  app                App                 @relation(fields: [appId], references: [id], onDelete: Cascade)
+  uploadedBy         User                @relation(fields: [uploadedById], references: [id])
+  issueFiles         IssueFile[]
+  issueRevisionFiles IssueRevisionFile[]
 
   @@index([appId, createdAt])
   @@map("files")
 }
 
 // A conversation with the agent. It belongs to one app; associations with
-// requirements and other resources stay separate until their semantics exist.
+// issues and other resources stay separate until their semantics exist.
 model Conversation {
   id                Int      @id @default(autoincrement())
   cid               String   @unique
@@ -253,119 +279,151 @@ model Conversation {
   // activity and a long conversation as idle. This is the honest "last spoke".
   lastActiveAt      DateTime @default(now())
 
-  app                           App                   @relation(fields: [appId], references: [id], onDelete: Cascade)
-  createdBy                     User                  @relation(fields: [createdById], references: [id])
-  provider                      Provider              @relation(fields: [providerId], references: [id], onDelete: Restrict)
-  worker                        Worker?               @relation(fields: [workerId], references: [id], onDelete: SetNull)
-  events                        ConversationEvent[]
-  pending                       PendingInput[]
-  turns                         Turn[]
-  requirementDraftsUpdated      RequirementDraft[]    @relation("RequirementDraftUpdatedInConversation")
-  requirementRevisionsConfirmed RequirementRevision[] @relation("RequirementRevisionConfirmedInConversation")
+  app       App                 @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdBy User                @relation(fields: [createdById], references: [id])
+  provider  Provider            @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  worker    Worker?             @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  events    ConversationEvent[]
+  pending   PendingInput[]
+  turns     Turn[]
 
   @@index([appId, lastActiveAt])
   @@map("conversations")
 }
 
-// Stable identity for a requirement. Its mutable text lives in a Draft; text
-// that has been confirmed lives in immutable Revisions.
-model Requirement {
-  id                Int               @id @default(autoincrement())
-  appId             Int
-  number            Int
-  status            RequirementStatus @default(draft)
-  revisionSequence  Int               @default(0)
-  currentRevisionId Int?              @unique
-  createdById       Int
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+model Issue {
+  id               Int               @id @default(autoincrement())
+  appId            Int
+  number           Int
+  title            String
+  body             String
+  state            IssueState        @default(open)
+  type             IssueType?
+  closeReason      IssueCloseReason?
+  revisionSequence Int               @default(1)
+  createdById      Int
+  updatedById      Int
+  closedById       Int?
+  closedAt         DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  app             App                   @relation(fields: [appId], references: [id], onDelete: Cascade)
-  createdBy       User                  @relation("RequirementCreatedBy", fields: [createdById], references: [id])
-  draft           RequirementDraft?
-  revisions       RequirementRevision[] @relation("RequirementRevisions")
-  currentRevision RequirementRevision?  @relation("CurrentRequirementRevision", fields: [currentRevisionId], references: [id], onDelete: SetNull)
+  app        App             @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdBy  User            @relation("IssueCreatedBy", fields: [createdById], references: [id])
+  updatedBy  User            @relation("IssueUpdatedBy", fields: [updatedById], references: [id])
+  closedBy   User?           @relation("IssueClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  labels     IssueLabel[]
+  files      IssueFile[]
+  revisions  IssueRevision[]
+  activities IssueActivity[]
 
   @@unique([appId, number])
-  @@index([appId, status])
-  @@map("requirements")
+  @@index([appId, state, updatedAt])
+  @@index([appId, type])
+  @@map("issues")
 }
 
-// The one mutable copy. Saving replaces its complete content and advances the
-// version used to protect confirmation from a stale browser dialog.
-model RequirementDraft {
-  requirementId           Int      @id
-  title                   String
-  summary                 String
-  body                    String
-  version                 Int      @default(1)
-  updatedById             Int
-  updatedInConversationId Int?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+model Label {
+  id             Int      @id @default(autoincrement())
+  appId          Int
+  name           String   @db.VarChar(50)
+  normalizedName String   @db.VarChar(50)
+  description    String?  @db.VarChar(100)
+  color          String   @db.VarChar(6)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  requirement           Requirement            @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  updatedBy             User                   @relation("RequirementDraftUpdatedBy", fields: [updatedById], references: [id])
-  updatedInConversation Conversation?          @relation("RequirementDraftUpdatedInConversation", fields: [updatedInConversationId], references: [id], onDelete: SetNull)
-  files                 RequirementDraftFile[]
+  app        App             @relation(fields: [appId], references: [id], onDelete: Cascade)
+  issues     IssueLabel[]
+  activities IssueActivity[]
 
-  @@index([updatedInConversationId])
-  @@map("requirement_drafts")
+  @@unique([appId, normalizedName])
+  @@index([appId, name])
+  @@map("labels")
 }
 
-// A complete snapshot created only by confirmation. There is intentionally no
-// updatedAt: the application exposes no mutation for a Revision.
-model RequirementRevision {
-  id                        Int      @id @default(autoincrement())
-  requirementId             Int
-  number                    Int
-  title                     String
-  summary                   String
-  body                      String
-  confirmedById             Int
-  confirmedInConversationId Int?
-  confirmedAt               DateTime @default(now())
+model IssueLabel {
+  issueId Int
+  labelId Int
 
-  requirement             Requirement               @relation("RequirementRevisions", fields: [requirementId], references: [id], onDelete: Cascade)
-  confirmedBy             User                      @relation("RequirementRevisionConfirmedBy", fields: [confirmedById], references: [id])
-  confirmedInConversation Conversation?             @relation("RequirementRevisionConfirmedInConversation", fields: [confirmedInConversationId], references: [id], onDelete: SetNull)
-  currentFor              Requirement?              @relation("CurrentRequirementRevision")
-  files                   RequirementRevisionFile[]
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
-  @@unique([requirementId, number])
-  @@index([requirementId, confirmedAt])
-  @@index([confirmedInConversationId])
-  @@map("requirement_revisions")
+  @@id([issueId, labelId])
+  @@index([labelId])
+  @@map("issue_labels")
 }
 
-model RequirementDraftFile {
-  requirementId Int
-  fileId        Int
-  role          RequirementFileRole
-  position      Int
+model IssueRevision {
+  id         Int      @id @default(autoincrement())
+  issueId    Int
+  number     Int
+  title      String
+  body       String
+  editedById Int
+  createdAt  DateTime @default(now())
 
-  requirement RequirementDraft @relation(fields: [requirementId], references: [requirementId], onDelete: Cascade)
-  file        File             @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  issue    Issue               @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  editedBy User                @relation("IssueRevisionEditedBy", fields: [editedById], references: [id])
+  files    IssueRevisionFile[]
 
-  @@id([requirementId, fileId])
-  @@unique([requirementId, role, position])
+  @@unique([issueId, number])
+  @@index([issueId, createdAt])
+  @@map("issue_revisions")
+}
+
+model IssueFile {
+  issueId  Int
+  fileId   Int
+  role     IssueFileRole
+  position Int
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  file  File  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, fileId])
+  @@unique([issueId, role, position])
   @@index([fileId])
-  @@map("requirement_draft_files")
+  @@map("issue_files")
 }
 
-model RequirementRevisionFile {
+model IssueRevisionFile {
   revisionId Int
   fileId     Int
-  role       RequirementFileRole
+  role       IssueFileRole
   position   Int
 
-  revision RequirementRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
-  file     File                @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  revision IssueRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  file     File          @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@id([revisionId, fileId])
   @@unique([revisionId, role, position])
   @@index([fileId])
-  @@map("requirement_revision_files")
+  @@map("issue_revision_files")
+}
+
+model IssueActivity {
+  id          Int               @id @default(autoincrement())
+  issueId     Int
+  kind        IssueActivityKind
+  actorId     Int
+  fromState   IssueState?
+  toState     IssueState?
+  closeReason IssueCloseReason?
+  fromType    IssueType?
+  toType      IssueType?
+  labelId     Int?
+  labelName   String?           @db.VarChar(50)
+  labelColor  String?           @db.VarChar(6)
+  createdAt   DateTime          @default(now())
+
+  issue Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actor User   @relation("IssueActivityActor", fields: [actorId], references: [id])
+  label Label? @relation(fields: [labelId], references: [id], onDelete: SetNull)
+
+  @@index([issueId, createdAt])
+  @@index([labelId])
+  @@map("issue_activities")
 }
 
 // The append-only transcript, and the only account of what happened. `sequence`

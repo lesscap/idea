@@ -9,7 +9,7 @@ import { createFileService } from './services/file.ts'
 import { createHealthService } from './services/health.ts'
 import { createPendingInputService } from './services/pending-input.ts'
 import { createProviderService } from './services/provider.ts'
-import { createRequirementService } from './services/requirement/index.ts'
+import { createIssueService } from './services/issue/index.ts'
 import { createStorageService } from './services/storage.ts'
 import { createTurnService } from './services/turn.ts'
 import { createUserService } from './services/user.ts'
@@ -40,7 +40,7 @@ export const createContext = (config: Config): [ServiceApplication, Dispose] => 
     $conversation: createConversationService(app),
     $pendingInput: createPendingInputService(app),
     $provider: createProviderService(app),
-    $requirement: createRequirementService(app),
+    $issue: createIssueService(app),
     $turn: createTurnService(app),
     $worker: createWorkerService(app),
     // Not a resource: it holds only live subscriptions, which end with their

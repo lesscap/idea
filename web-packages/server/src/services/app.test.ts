@@ -105,17 +105,21 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
         },
       }),
     ])
-    const requirement = await db.prisma.requirement.create({
+    const issue = await db.prisma.issue.create({
       data: {
         appId: app.id,
         number: 1,
         createdById: db.userId,
-        draft: {
+        updatedById: db.userId,
+        title: 'Delete with files',
+        body: '',
+        files: { create: { fileId: file.id, role: 'attachment', position: 0 } },
+        revisions: {
           create: {
+            number: 1,
             title: 'Delete with files',
-            summary: '',
             body: '',
-            updatedById: db.userId,
+            editedById: db.userId,
             files: { create: { fileId: file.id, role: 'attachment', position: 0 } },
           },
         },
@@ -136,21 +140,21 @@ describe.skipIf(!databaseUrl)('app uniqueness', () => {
       kind: 'ok',
     })
 
-    const [apps, conversations, turns, files, requirements, draftFiles] = await Promise.all([
+    const [apps, conversations, turns, files, issues, issueFiles] = await Promise.all([
       db.prisma.app.count({ where: { id: app.id } }),
       db.prisma.conversation.count({ where: { id: conversation.id } }),
       db.prisma.turn.count({ where: { conversationId: conversation.id } }),
       db.prisma.file.count({ where: { appId: app.id } }),
-      db.prisma.requirement.count({ where: { id: requirement.id } }),
-      db.prisma.requirementDraftFile.count({ where: { requirementId: requirement.id } }),
+      db.prisma.issue.count({ where: { id: issue.id } }),
+      db.prisma.issueFile.count({ where: { issueId: issue.id } }),
     ])
-    expect({ apps, conversations, turns, files, requirements, draftFiles }).toEqual({
+    expect({ apps, conversations, turns, files, issues, issueFiles }).toEqual({
       apps: 0,
       conversations: 0,
       turns: 0,
       files: 0,
-      requirements: 0,
-      draftFiles: 0,
+      issues: 0,
+      issueFiles: 0,
     })
   })
 })

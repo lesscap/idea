@@ -42,6 +42,9 @@ export const post = <T>(path: string, body?: unknown): Promise<T> =>
 export const patch = <T>(path: string, body: unknown): Promise<T> =>
   send<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 
+export const put = <T>(path: string, body: unknown): Promise<T> =>
+  send<T>(path, { method: 'PUT', body: JSON.stringify(body) })
+
 export const del = <T>(path: string): Promise<T> => send<T>(path, { method: 'DELETE' })
 
 // An expired session is the normal way a long-open tab discovers it is logged
