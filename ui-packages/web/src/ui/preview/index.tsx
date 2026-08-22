@@ -22,6 +22,7 @@ import {
 import { Input } from '../input'
 import { Label } from '../label'
 import { Markdown } from '../markdown'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select'
 
 // A gallery of every primitive in its full state matrix. Running the real app
 // only ever shows the states that application happens to use, so a broken
@@ -153,6 +154,7 @@ const Section = ({
 
 export const UiPreview = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectValue, setSelectValue] = useState('feature')
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-10 p-8">
@@ -213,6 +215,46 @@ export const UiPreview = () => {
             <Label htmlFor="p-disabled">禁用</Label>
             <Input id="p-disabled" disabled defaultValue="改不了" />
           </div>
+        </div>
+      </Section>
+
+      <Section title="Select" note="normal, selected, invalid, disabled；方向键导航，Esc 关闭">
+        <div className="grid max-w-md gap-4 sm:grid-cols-2">
+          <Select value={selectValue} onValueChange={setSelectValue}>
+            <SelectTrigger aria-label="类型">
+              <SelectValue placeholder="请选择类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bug">Bug</SelectItem>
+              <SelectItem value="feature">Feature</SelectItem>
+              <SelectItem value="task">Task</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select>
+            <SelectTrigger aria-label="未选择类型">
+              <SelectValue placeholder="请选择类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bug">Bug</SelectItem>
+              <SelectItem value="feature">Feature</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select defaultValue="bug">
+            <SelectTrigger aria-label="错误状态" aria-invalid="true">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bug">Bug</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select defaultValue="task" disabled>
+            <SelectTrigger aria-label="禁用状态">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="task">Task</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </Section>
 

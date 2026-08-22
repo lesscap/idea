@@ -1,11 +1,11 @@
-import { FileText, House } from 'lucide-react'
+import { CircleDot, House } from 'lucide-react'
 import { useLocale } from '../../i18n'
 import type { AppStudioWorkspace } from './url/use-app-studio-url'
 
 export const ResourceNav = ({ workspace }: { workspace: AppStudioWorkspace }) => {
   const __ = useLocale()
   const overviewActive = workspace.url.active === 'overview'
-  const requirementsActive = workspace.url.active.startsWith('requirements')
+  const issuesActive = workspace.url.active.startsWith('issues')
   return (
     <aside
       className="hidden w-[220px] shrink-0 flex-col border-border border-r bg-shell min-[1100px]:flex"
@@ -22,11 +22,11 @@ export const ResourceNav = ({ workspace }: { workspace: AppStudioWorkspace }) =>
         </button>
         <button
           type="button"
-          className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm ${requirementsActive ? 'bg-nav-active font-medium' : 'text-foreground/75 hover:bg-nav-hover'}`}
-          onClick={() => workspace.open('requirements')}
+          className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm ${issuesActive ? 'bg-nav-active font-medium' : 'text-foreground/75 hover:bg-nav-hover'}`}
+          onClick={() => workspace.open('issues')}
         >
-          <FileText className="size-4 shrink-0" />
-          {__('resource.requirements')}
+          <CircleDot className="size-4 shrink-0" />
+          {__('resource.issues')}
         </button>
       </nav>
     </aside>

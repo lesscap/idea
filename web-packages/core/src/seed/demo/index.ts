@@ -7,7 +7,7 @@ import { ensureDemoContext } from './context.ts'
 import { requireDemoDatabaseUrl } from './guard.ts'
 
 // Development-only demonstration workspace, member, app and conversations.
-// Requirement fixtures are deliberately separate: seed:demo:requirements.
+// Issue fixtures are deliberately separate: seed:demo:issues.
 //
 //   pnpm --filter @idea/core seed:demo
 

@@ -1,12 +1,14 @@
 import type { App, Id } from '@idea/shared'
-import { File, FileText, House, type LucideIcon } from 'lucide-react'
+import { CircleDot, File, House, Plus, Tag, type LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { matchPath } from 'react-router-dom'
 import { AppOverview } from '../../features/app/app-overview'
 import type { FileDescriptor } from '../../features/file/api'
 import { FileResource } from '../../features/file/file-resource'
-import { RequirementDetail } from '../../features/requirement/detail'
-import { RequirementList } from '../../features/requirement/requirement-list'
+import { IssueDetail } from '../../features/issue/issue-detail'
+import { IssueList } from '../../features/issue/issue-list'
+import { LabelManager } from '../../features/issue/label-manager'
+import { NewIssue } from '../../features/issue/new-issue'
 import type { Translate } from '../../i18n'
 
 export type ResourceParams = Record<string, string | undefined>
@@ -15,6 +17,7 @@ export type ResourceContentProps = {
   app: App
   appId: Id
   openResource: (ref: string) => void
+  replaceResource: (ref: string) => void
   openFile: (file: FileDescriptor) => void
   showConversation: (cid: string) => void
 }
@@ -32,17 +35,29 @@ export const RESOURCES = {
     title: __ => __('resource.overview'),
     Content: AppOverview,
   },
-  requirements: {
-    path: '/requirements',
-    icon: FileText,
-    title: __ => __('resource.requirements'),
-    Content: RequirementList,
+  issues: {
+    path: '/issues',
+    icon: CircleDot,
+    title: __ => __('resource.issues'),
+    Content: IssueList,
   },
-  requirement: {
-    path: '/requirements/:code',
-    icon: FileText,
-    title: (_, params) => params.code ?? '',
-    Content: RequirementDetail,
+  newIssue: {
+    path: '/issues/new',
+    icon: Plus,
+    title: __ => __('issue.new'),
+    Content: NewIssue,
+  },
+  labels: {
+    path: '/issues/labels',
+    icon: Tag,
+    title: __ => __('issue.manageLabels'),
+    Content: LabelManager,
+  },
+  issue: {
+    path: '/issues/:number',
+    icon: CircleDot,
+    title: (_, params) => (params.number ? `#${params.number}` : ''),
+    Content: IssueDetail,
   },
   file: {
     path: '/files/:fid/*',

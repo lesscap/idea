@@ -6,6 +6,7 @@ import {
   closeTab,
   openTab,
   parseAppStudioUrl,
+  replaceTab,
   showConversation,
 } from './app-studio-url'
 
@@ -22,6 +23,7 @@ export const useAppStudioUrl = () => {
     () => ({
       url,
       open: (ref: string) => go(openTab(url, ref)),
+      replace: (ref: string) => go(replaceTab(url, ref), true),
       close: (ref: string) => go(closeTab(url, ref)),
       showConversation: (id: string) => go(showConversation(url, id)),
       replaceConversation: (id: string) => go(showConversation(url, id), true),

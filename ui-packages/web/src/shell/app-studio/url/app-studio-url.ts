@@ -52,6 +52,14 @@ export const openTab = (url: AppStudioUrl, ref: string): AppStudioUrl => ({
   tabs: url.tabs.includes(ref) ? url.tabs : [...url.tabs, ref],
 })
 
+export const replaceTab = (url: AppStudioUrl, ref: string): AppStudioUrl => ({
+  ...url,
+  active: ref,
+  tabs: url.tabs
+    .map(open => (open === url.active ? ref : open))
+    .filter((open, index, tabs) => tabs.indexOf(open) === index),
+})
+
 export const closeTab = (url: AppStudioUrl, ref: string): AppStudioUrl => {
   const index = url.tabs.indexOf(ref)
   if (index < 0) return url

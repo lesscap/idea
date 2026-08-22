@@ -52,8 +52,8 @@ can be applied independently:
 
 ```bash
 pnpm --filter @idea/core seed:demo
-pnpm --filter @idea/core seed:demo:requirements
-pnpm --filter @idea/server seed:demo:requirement-media
+pnpm --filter @idea/core seed:demo:issues
+pnpm --filter @idea/server seed:demo:issue-media
 ```
 
 `seed:system` is safe to rerun in production: besides built-in providers, it
@@ -551,7 +551,7 @@ under `upivot-s2/idea/files/*`; do not grant `oss:PutObjectAcl`.
   together
 - **Skills** — what the agent asks about, and in what order. Installed per
   workspace, which is why they wait for the container
-- Requirement entity, and turning a conversation into structured requirements
+- Turning a conversation into structured Issues
 - The Codex adapter. It differs from Claude in a way that matters: no
   `SessionStore` hook, so its transcript has to be materialised into
   `$CODEX_HOME/sessions` before a turn and read back after

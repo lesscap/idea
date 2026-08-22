@@ -53,6 +53,7 @@ const createWorkspace = (): AppStudioWorkspace => ({
     extra: [],
   },
   open: vi.fn(),
+  replace: vi.fn(),
   close: vi.fn(),
   showConversation: vi.fn(),
   replaceConversation: vi.fn(),

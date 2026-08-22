@@ -30,6 +30,7 @@ export {
 } from './dialog'
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuItemIndicator,
@@ -46,4 +47,5 @@ export { Input } from './input'
 export { Label } from './label'
 export { Markdown } from './markdown'
 export { Pagination, type PaginationProps } from './pagination'
+export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
 export { DataTable, type DataTableColumn, type DataTableProps } from './table'

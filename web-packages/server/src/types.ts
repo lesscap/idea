@@ -10,7 +10,7 @@ import type { FileService } from './services/file.ts'
 import type { HealthService } from './services/health.ts'
 import type { PendingInputService } from './services/pending-input.ts'
 import type { ProviderService } from './services/provider.ts'
-import type { RequirementService } from './services/requirement/index.ts'
+import type { IssueService } from './services/issue/index.ts'
 import type { StorageService } from './services/storage.ts'
 import type { TurnService } from './services/turn.ts'
 import type { UserService } from './services/user.ts'
@@ -37,7 +37,7 @@ export type ServiceApplication = {
   readonly $conversation: ConversationService
   readonly $pendingInput: PendingInputService
   readonly $provider: ProviderService
-  readonly $requirement: RequirementService
+  readonly $issue: IssueService
   readonly $turn: TurnService
   readonly $worker: WorkerService
   readonly $commands: CommandBus

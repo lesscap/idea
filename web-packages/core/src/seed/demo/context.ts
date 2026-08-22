@@ -16,7 +16,7 @@ export type DemoContext = {
   readonly workspaceId: number
   readonly userId: number
   readonly appId: number
-  readonly requirementSequence: number
+  readonly issueSequence: number
 }
 
 export const ensureDemoContext = async (
@@ -74,6 +74,6 @@ export const ensureDemoContext = async (
     workspaceId: workspace.id,
     userId: member.id,
     appId: app.id,
-    requirementSequence: app.requirementSequence,
+    issueSequence: app.issueSequence,
   }
 }

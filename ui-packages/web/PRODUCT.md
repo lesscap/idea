@@ -30,7 +30,7 @@ when something is unavailable or fails.
 ## Design Principles
 
 - Tell the truth about system state and the next action, especially while work is queued or running.
-- Keep the requirement and the agent's answer primary; fold implementation activity without hiding failure.
+- Keep the issue and the agent's answer primary; fold implementation activity without hiding failure.
 - Preserve user input across recoverable errors and avoid asking people to repeat work.
 - Use familiar product controls and reserve emphasis for active selection, progress, warning, and failure.
 
